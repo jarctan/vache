@@ -1,115 +1,19 @@
 #![feature(box_patterns)]
 
-use std::sync::atomic::AtomicU64;
+mod block;
+mod expr;
+mod fun;
+mod stmt;
+mod stratum;
+mod var;
 
-use rug::Integer;
+use block::Block;
+use fun::Fun;
+use stratum::Stratum;
+use var::VarDef;
+use stmt::Stmt;
 
-pub static COUNTER: AtomicU64 = AtomicU64::new(0);
-
-#[derive(Clone, Copy)]
-pub struct Stratum(u64);
-impl Stratum {
-    pub fn new() -> Self {
-        Self(COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
-    }
-}
-
-pub struct Var(String);
-
-impl<T: ToString> From<T> for Var {
-    fn from(v: T) -> Self {
-        Self(v.to_string())
-    }
-}
-
-pub struct VarDef {
-    /// Name
-    name: String,
-    /// Stratum
-    stratum: Stratum,
-}
-impl VarDef {
-    fn from(name: impl ToString, stratum: Stratum) -> Self {
-        let name = name.to_string();
-        Self {
-            name,
-            stratum,
-        }
-    }
-}
-
-pub enum Op {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Less,
-    Mod,
-}
-
-pub struct Block {
-    stmts: Vec<Stmt>,
-    ret: Expr,
-}
-impl Block {
-    pub fn expr(expr: Expr) -> Self {
-        Block {
-            stmts: vec![],
-            ret: expr,
-        }
-    }
-
-    pub fn stmts(stmts: impl IntoIterator<Item=Stmt>) -> Self {
-        Block {
-            stmts: stmts.into_iter().collect(),
-            ret: Expr::Unit,
-        }
-    }
-}
-
-pub enum Expr {
-    Unit,
-    Integer(Integer),
-    Var(Var),
-    BinOp(Op, Box<Expr>, Box<Expr>),
-    Call(String, Vec<Expr>),
-}
-
-impl Expr {
-    pub fn var(v: impl ToString) -> Self {
-        Expr::Var(v.into())
-    }
-    pub fn int(value: impl Into<Integer>) -> Self {
-        Expr::Integer(value.into())
-    }
-    pub fn call(name: impl ToString, stmts: impl IntoIterator<Item=Expr>) -> Self {
-        Expr::Call(name.to_string(), stmts.into_iter().collect())
-    }
-}
-
-impl From<u64> for Expr {
-    fn from(value: u64) -> Self {
-        Expr::Integer(Integer::from(value))
-    }
-}
-
-impl From<Var> for Expr {
-    fn from(v: Var) -> Self {
-        Expr::Var(v)
-    }
-}
-
-pub enum Stmt {
-    Assign(VarDef, Expr),
-    If(Expr, Block, Block)
-}
-
-pub struct Fun {
-    name: String,
-    quantifiers: Vec<Stratum>,
-    args: Vec<VarDef>,
-    body: Block,
-}
+use crate::expr::{Expr, Op};
 
 fn fibo_fibo() {
     let s = Stratum::new();
