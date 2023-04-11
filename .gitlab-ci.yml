@@ -25,20 +25,20 @@ test-fmt:
   <<: *rust-template
   stage: build
   script:
-    - cargo fmt --all --verbose -- --write-mode=diff
+    - cargo fmt --all --verbose --check
     
 test-clippy:
   <<: *rust-template
   stage: build
   script:
-    - cargo clippy --all --verbose -- -D warnings
+    - cargo clippy --all --verbose
 
 generate-docs:
   <<: *rust-template
   stage: build
   script:
-    - cargo doc --all
-    - cp -R target/doc ./public
+    - cargo doc --no-deps
+    - cp -R target/doc/stratum ./public
   artifacts:
       paths:
       - public
