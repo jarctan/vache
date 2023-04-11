@@ -1,10 +1,14 @@
-use crate::{stmt::Stmt, expr::Expr};
+use super::{Stmt, Expr};
 
+/// A block in the parser AST.
+/// 
+/// A block is a list of ordered statements, followed by a final expression.
 pub struct Block {
     pub stmts: Vec<Stmt>,
     pub ret: Expr,
 }
 impl Block {
+    /// Creates a block only made of an expression.
     pub fn expr(expr: Expr) -> Self {
         Block {
             stmts: vec![],
@@ -12,6 +16,10 @@ impl Block {
         }
     }
 
+    /// Creates a block only made of a list of statements, with no
+    /// terminating expression.
+    /// 
+    /// The final expression is then chosen to be the unit, no-op expr.
     pub fn stmts(stmts: impl IntoIterator<Item=Stmt>) -> Self {
         Block {
             stmts: stmts.into_iter().collect(),

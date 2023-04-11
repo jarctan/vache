@@ -1,5 +1,6 @@
-use crate::stratum::Stratum;
+use super::Stratum;
 
+/// A variable in the code.
 pub struct Var(String);
 
 impl<T: ToString> From<T> for Var {
@@ -8,13 +9,18 @@ impl<T: ToString> From<T> for Var {
     }
 }
 
+/// A variable definition.
+/// 
+/// The definition is accompanied by some additional
+/// metadata, like the stratum it is tied to.
 pub struct VarDef {
-    /// Name
+    /// Variable name.
     name: String,
-    /// Stratum
+    /// Stratum.
     stratum: Stratum,
 }
 impl VarDef {
+    /// 
     pub fn from(name: impl ToString, stratum: Stratum) -> Self {
         let name = name.to_string();
         Self {
