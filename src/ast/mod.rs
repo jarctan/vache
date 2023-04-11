@@ -1,3 +1,7 @@
+//! Abstract Syntax Tree module for the language.
+//! 
+//! Each node in the tree = one file.
+
 mod block;
 mod expr;
 mod fun;

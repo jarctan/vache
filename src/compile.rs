@@ -1,3 +1,5 @@
+//! Compiler code.
+
 /// A compilable item.
 pub trait Compilable {
     /// Compile the item.
