@@ -6,16 +6,19 @@ mod fun;
 mod stmt;
 mod stratum;
 mod var;
+mod compile;
+mod program;
 
 use block::Block;
 use fun::Fun;
 use stratum::Stratum;
 use var::VarDef;
 use stmt::Stmt;
+use program::Program;
 
 use crate::expr::{Expr, Op};
 
-fn fibo_fibo() {
+fn fibo_fibo() -> Program {
     let s = Stratum::new();
     let f = Fun {
         name: "fibo_fibo".to_string(),
@@ -35,11 +38,12 @@ fn fibo_fibo() {
             ]
         }),
     };
+    vec![f]
 }
 
-fn th_fn() {
+fn th_fn() -> Program {
     let s1 = Stratum::new();
-    let f = Fun {
+    let f1 = Fun {
         name: "is_this_even_qm".to_string(),
         quantifiers: vec![s1],
         args: vec![VarDef::from("ivar_1", s1)],
@@ -54,7 +58,7 @@ fn th_fn() {
     };
 
     let s2 = Stratum::new();
-    let f = Fun {
+    let f2 = Fun {
         name: "th_fn".to_string(),
         quantifiers: vec![s2],
         args: vec![VarDef::from("n", s2)],
@@ -72,8 +76,34 @@ fn th_fn() {
             ]
         }),
     };
+
+    vec![f1, f2]
+}
+
+pub trait Compilable {
+    fn compile(self, c: &mut Compiler) -> String;
+}
+
+pub struct Compiler {
+
+}
+impl Compiler {
+    fn new() -> Self {
+        Self {
+
+        }
+    }
+    fn compile(&mut self, c: impl Compilable) -> String {
+        c.compile(self)
+    }
 }
 
 fn main() {
+    let p1 = fibo_fibo();
+    let p2 = th_fn();
+
+    let compiler = Compiler::new();
+    println!(compiler.compile(p1));
+
     println!("Hello, world!");
 }
