@@ -1,4 +1,3 @@
-
 use std::sync::atomic::AtomicU64;
 
 /// Global counter for fresh stratum ids.

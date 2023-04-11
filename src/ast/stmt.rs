@@ -1,4 +1,4 @@
-use super::{VarDef, Expr, Block};
+use super::{Block, Expr, VarDef};
 
 /// A statement.
 pub enum Stmt {
@@ -7,5 +7,5 @@ pub enum Stmt {
     /// defined in the 1st argument.
     Assign(VarDef, Expr),
     /// An if expression.
-    If(Expr, Block, Block)
+    If(Expr, Block, Block),
 }

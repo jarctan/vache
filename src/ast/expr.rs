@@ -10,13 +10,13 @@ pub enum Expr {
     Integer(Integer),
     // A variable.
     Var(Var),
-    /// A function call. 
+    /// A function call.
     Call {
         /// Name/identifier of the function.
         name: String,
         /// Arguments to that function.
-        args: Vec<Expr>
-    }
+        args: Vec<Expr>,
+    },
 }
 
 impl Expr {
@@ -31,10 +31,10 @@ impl Expr {
     }
 
     /// Shortcut to create a call `Expr`.
-    pub fn call(name: impl ToString, stmts: impl IntoIterator<Item=Expr>) -> Self {
+    pub fn call(name: impl ToString, stmts: impl IntoIterator<Item = Expr>) -> Self {
         Expr::Call {
             name: name.to_string(),
-            args: stmts.into_iter().collect()
+            args: stmts.into_iter().collect(),
         }
     }
 }

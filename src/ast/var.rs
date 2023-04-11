@@ -10,7 +10,7 @@ impl<T: ToString> From<T> for Var {
 }
 
 /// A variable definition.
-/// 
+///
 /// The definition is accompanied by some additional
 /// metadata, like the stratum it is tied to.
 pub struct VarDef {
@@ -20,12 +20,9 @@ pub struct VarDef {
     stratum: Stratum,
 }
 impl VarDef {
-    /// 
+    ///
     pub fn from(name: impl ToString, stratum: Stratum) -> Self {
         let name = name.to_string();
-        Self {
-            name,
-            stratum,
-        }
+        Self { name, stratum }
     }
 }

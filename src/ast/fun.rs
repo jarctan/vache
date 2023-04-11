@@ -1,4 +1,4 @@
-use super::{VarDef, Block};
+use super::{Block, VarDef};
 
 use super::stratum::Stratum;
 

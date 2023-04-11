@@ -6,15 +6,11 @@ pub trait Compilable {
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
-pub struct Compiler {
-
-}
+pub struct Compiler {}
 impl Compiler {
     /// Creates a new compiler.
     pub fn new() -> Self {
-        Self {
-
-        }
+        Self {}
     }
 
     /// Compiles a compilable item into an executable source code.
