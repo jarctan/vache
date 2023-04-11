@@ -1,0 +1,47 @@
+stages:
+  - build
+
+image: rustlang/rust:nightly
+
+.rust-template: &rust-template
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+    CARGO_HOME: $CI_PROJECT_DIR/cargo
+  before_script:
+    - rustc --version && cargo --version
+  cache:
+    paths:
+    - target/
+    - $CARGO_HOME
+
+test-compile:
+  <<: *rust-template
+  stage: build
+  script:
+    - cargo build --verbose --all
+    - cargo test --verbose --all
+
+test-fmt:
+  <<: *rust-template
+  stage: build
+  script:
+    - cargo fmt --all --verbose -- --write-mode=diff
+    
+test-clippy:
+  <<: *rust-template
+  stage: build
+  script:
+    - cargo clippy --all --verbose -- -D warnings
+
+generate-docs:
+  <<: *rust-template
+  stage: build
+  script:
+    - cargo doc --all
+    - cp -R target/doc ./public
+  artifacts:
+      paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
