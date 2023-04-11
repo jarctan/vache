@@ -15,14 +15,27 @@ fn fibo_fibo() -> Program {
         body: Block::stmts({
             vec![
                 Stmt::Assign(VarDef::from("d", s), Expr::int(2)),
-                Stmt::Assign(VarDef::from("c", s), Expr::call("<", vec![Expr::var("n"), Expr::var("d")])),
-                Stmt::If(Expr::var("c"), Block::expr(Expr::var("n")), Block {
-                    stmts: vec![
-                        Stmt::Assign(VarDef::from("a", s), Expr::call("-", vec![Expr::var("n"), Expr::int(1)])),
-                        Stmt::Assign(VarDef::from("a", s), Expr::call("-", vec![Expr::var("n"), Expr::int(2)])),
-                    ],
-                    ret: Expr::call("fibo_fibo", vec![Expr::var("a"), Expr::var("b")]),
-                }),
+                Stmt::Assign(
+                    VarDef::from("c", s),
+                    Expr::call("<", vec![Expr::var("n"), Expr::var("d")]),
+                ),
+                Stmt::If(
+                    Expr::var("c"),
+                    Block::expr(Expr::var("n")),
+                    Block {
+                        stmts: vec![
+                            Stmt::Assign(
+                                VarDef::from("a", s),
+                                Expr::call("-", vec![Expr::var("n"), Expr::int(1)]),
+                            ),
+                            Stmt::Assign(
+                                VarDef::from("a", s),
+                                Expr::call("-", vec![Expr::var("n"), Expr::int(2)]),
+                            ),
+                        ],
+                        ret: Expr::call("fibo_fibo", vec![Expr::var("a"), Expr::var("b")]),
+                    },
+                ),
             ]
         }),
     };
@@ -38,10 +51,13 @@ fn th_fn() -> Program {
         body: Block {
             stmts: vec![
                 Stmt::Assign(VarDef::from("ivar_5", s1), Expr::int(2)),
-                Stmt::Assign(VarDef::from("ivar_2", s1), Expr::call("%", vec![Expr::var("ivar_1"), Expr::var("ivar_5")])),
+                Stmt::Assign(
+                    VarDef::from("ivar_2", s1),
+                    Expr::call("%", vec![Expr::var("ivar_1"), Expr::var("ivar_5")]),
+                ),
                 Stmt::Assign(VarDef::from("ivar_3", s1), Expr::int(0)),
             ],
-            ret: Expr::call("%", vec![Expr::var("ivar_2"), Expr::var("ivar_3")])
+            ret: Expr::call("%", vec![Expr::var("ivar_2"), Expr::var("ivar_3")]),
         },
     };
 
@@ -53,14 +69,27 @@ fn th_fn() -> Program {
         body: Block::stmts({
             vec![
                 Stmt::Assign(VarDef::from("d", s2), Expr::int(2)),
-                Stmt::Assign(VarDef::from("c", s2), Expr::call("<", vec![Expr::var("n"), Expr::var("d")])),
-                Stmt::If(Expr::var("c"), Block::expr(Expr::var("n")), Block {
-                    stmts: vec![
-                        Stmt::Assign(VarDef::from("a", s2), Expr::call("-", vec![Expr::var("n"), Expr::int(1)])),
-                        Stmt::Assign(VarDef::from("a", s2), Expr::call("-", vec![Expr::var("n"), Expr::int(2)])),
-                    ],
-                    ret: Expr::call("fibo_fibo", vec![Expr::var("a"), Expr::var("b")]),
-                }),
+                Stmt::Assign(
+                    VarDef::from("c", s2),
+                    Expr::call("<", vec![Expr::var("n"), Expr::var("d")]),
+                ),
+                Stmt::If(
+                    Expr::var("c"),
+                    Block::expr(Expr::var("n")),
+                    Block {
+                        stmts: vec![
+                            Stmt::Assign(
+                                VarDef::from("a", s2),
+                                Expr::call("-", vec![Expr::var("n"), Expr::int(1)]),
+                            ),
+                            Stmt::Assign(
+                                VarDef::from("a", s2),
+                                Expr::call("-", vec![Expr::var("n"), Expr::int(2)]),
+                            ),
+                        ],
+                        ret: Expr::call("fibo_fibo", vec![Expr::var("a"), Expr::var("b")]),
+                    },
+                ),
             ]
         }),
     };
