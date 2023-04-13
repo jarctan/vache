@@ -3,6 +3,7 @@ use rug::Integer;
 use super::{Var, Block};
 
 /// An expression in the parser AST.
+#[derive(Debug, Clone)]
 pub enum Expr {
     /// Unit expression, that does nothing.
     Unit,
@@ -24,7 +25,7 @@ pub enum Expr {
 impl Expr {
     /// Shortcut to create an `Expr` which is just a variable, based on its name.
     pub fn var(v: impl ToString) -> Self {
-        Expr::Var(v.into())
+        Expr::Var(v.to_string().into())
     }
 
     /// Shortcut to create a constant integer `Expr` based on some integer value.

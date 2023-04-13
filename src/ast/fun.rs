@@ -3,6 +3,7 @@ use super::{Block, VarDef};
 use super::stratum::Stratum;
 
 /// A function in the parser AST.
+#[derive(Debug, Clone)]
 pub struct Fun {
     /// Name of that function.
     pub name: String,

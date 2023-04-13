@@ -2,7 +2,7 @@
 
 use proc_macro2::TokenStream;
 
-use crate::ast::{Visitor, Program, Expr, Stmt};
+use crate::ast::{SelfVisitor, Program, Expr, Block, Fun, Stmt};
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
@@ -21,10 +21,10 @@ impl Compiler {
     }
 }
 
-impl Visitor for Compiler {
+impl SelfVisitor for Compiler {
     type Output = TokenStream;
 
-    fn visit_expr(&mut self, e: crate::ast::Expr) -> TokenStream {
+    fn visit_expr(&mut self, e: Expr) -> TokenStream {
         match e {
             Expr::Unit => quote!(()),
             Expr::Integer(i) => {
@@ -67,7 +67,7 @@ impl Visitor for Compiler {
         }
     }
 
-    fn visit_block(&mut self, b: crate::ast::Block) -> TokenStream {
+    fn visit_block(&mut self, b: Block) -> TokenStream {
         let stmts: Vec<TokenStream> = b.stmts.into_iter().map(|s| self.visit_stmt(s)).collect();
         let ret = self.visit_expr(b.ret);
         quote! {
@@ -78,7 +78,7 @@ impl Visitor for Compiler {
         }
     }
 
-    fn visit_fun(&mut self, f: crate::ast::Fun) -> TokenStream {
+    fn visit_fun(&mut self, f: Fun) -> TokenStream {
         let name = format_ident!("{}", f.name);
         let body = self.visit_block(f.body);
         quote! {
@@ -86,15 +86,7 @@ impl Visitor for Compiler {
         }
     }
 
-    fn visit_stmt(&mut self, s: crate::ast::Stmt) -> TokenStream {
-        match s {
-            Stmt::Assign(lhs, rhs) => {
-                let lhs = format_ident!("{}", lhs.name);
-                let rhs = self.visit_expr(rhs);
-                quote! {
-                    let #lhs = #rhs;
-                }
-            }
-        }
+    fn visit_stmt(&mut self, s: Stmt) -> TokenStream {
+        todo!()
     }
 }

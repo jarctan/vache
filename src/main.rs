@@ -8,19 +8,15 @@
 mod ast;
 mod compile;
 mod examples;
+mod typing;
 
 #[macro_use]
 extern crate quote;
 
-use compile::Compiler;
+use crate::typing::Typer;
 
 fn main() {
     let p1 = examples::simple();
-    let p2 = examples::fibo_fibo();
-    let p3 = examples::th_fn();
-
-    let mut compiler = Compiler::new();
-    println!("{}", compiler.compile(p1));
-    println!("{}", compiler.compile(p2));
-    println!("{}", compiler.compile(p3));
+    let mut typer = Typer::new();
+    typer.check(&p1);
 }

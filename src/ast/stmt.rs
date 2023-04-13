@@ -1,9 +1,19 @@
-use super::{Block, Expr, VarDef};
+use super::{Expr, Block, Var, VarDef};
 
 /// A statement.
+#[derive(Debug, Clone)]
 pub enum Stmt {
-    /// An assignment. We assign the computation
+    /// A declaration. We assign the computation
     /// of the 2nd argument to the newly created variable
     /// defined in the 1st argument.
-    Assign(VarDef, Expr),
+    Declare(VarDef, Expr),
+    /// An assignment. The variable must already exist.
+    Assign(Var, Expr),
+    /// A while statement.
+    While {
+        /// Condition.
+        cond: Expr,
+        /// While body.
+        block: Block,
+    }
 }
