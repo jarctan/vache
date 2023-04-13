@@ -1,0 +1,3 @@
+//! Typing tests.
+
+mod typing;
