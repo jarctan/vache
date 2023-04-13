@@ -10,23 +10,21 @@ pub struct Block {
     /// Final return expression.
     pub ret: Expr,
 }
-impl Block {
-    /// Creates a block only made of an expression.
-    pub fn expr(expr: Expr) -> Self {
-        Block {
-            stmts: vec![],
-            ret: expr,
-        }
+/// Creates a block only made of an expression.
+pub fn expr(expr: Expr) -> Block {
+    Block {
+        stmts: vec![],
+        ret: expr,
     }
+}
 
-    /// Creates a block only made of a list of statements, with no
-    /// terminating expression.
-    ///
-    /// The final expression is then chosen to be the unit, no-op expr.
-    pub fn stmts(stmts: impl IntoIterator<Item = Stmt>) -> Self {
-        Block {
-            stmts: stmts.into_iter().collect(),
-            ret: Expr::Unit,
-        }
+/// Creates a block only made of a list of statements, with no
+/// terminating expression.
+///
+/// The final expression is then chosen to be the unit, no-op expr.
+pub fn stmts(stmts: impl IntoIterator<Item = Stmt>) -> Block {
+    Block {
+        stmts: stmts.into_iter().collect(),
+        ret: Expr::Unit,
     }
 }

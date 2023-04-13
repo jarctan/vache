@@ -17,6 +17,10 @@ use crate::typing::Typer;
 
 fn main() {
     let p1 = examples::simple();
+    let p2 = examples::fibo_fibo();
+    let p3 = examples::ceil_mod_2();
     let mut typer = Typer::new();
     typer.check(&p1);
+    typer.check(&p2);
+    typer.check(&p3);
 }

@@ -2,6 +2,11 @@
 
 use crate::ast::*;
 use Ty::*;
+use Stmt::*;
+use Expr::*;
+use crate::ast::block::*;
+use crate::ast::expr::*;
+use crate::ast::var::*;
 
 /// Simple example.
 pub(crate) fn simple() -> Program {
@@ -9,11 +14,12 @@ pub(crate) fn simple() -> Program {
     let f = Fun {
         name: "simple".to_string(),
         quantifiers: vec![s],
-        args: vec![VarDef::from("n", s, IntT)],
-        body: Block::stmts({
+        args: vec![vardef("n", s, IntT)],
+        ret_ty: UnitT,
+        body: stmts({
             vec![
-                Stmt::Declare(VarDef::from("d", s, IntT), Expr::int(2)),
-                Stmt::Declare(VarDef::from("e", s, BoolT), Expr::var("n")),
+                Declare(vardef("d", s, IntT), int(2)),
+                Declare(vardef("e", s, IntT), var("n")),
             ]
         }),
     };
@@ -26,119 +32,72 @@ pub(crate) fn fibo_fibo() -> Program {
     let f = Fun {
         name: "fibo_fibo".to_string(),
         quantifiers: vec![s],
-        args: vec![VarDef::from("n", s, IntT)],
+        args: vec![vardef("n", s, IntT)],
+        ret_ty: IntT,
         body: Block {
             stmts: vec![
-                Stmt::Declare(VarDef::from("d", s, IntT), Expr::int(2)),
-                Stmt::Declare(
-                    VarDef::from("c", s, IntT),
-                    Expr::call("<", vec![Expr::var("n"), Expr::var("d")]),
+                Declare(vardef("d", s, IntT), int(2)),
+                Declare(
+                    vardef("c", s, IntT),
+                    binop(var("n"), "<", var("d")),
                 ),
             ],
-            ret: Expr::If(
-                Box::new(Expr::var("c")),
-                Box::new(Block::expr(Expr::var("n"))),
-                Box::new(Block {
+            ret: If(
+                boxed(var("c")),
+                boxed(expr(var("n"))),
+                boxed(Block {
                     stmts: vec![
-                        Stmt::Declare(
-                            VarDef::from("a", s, IntT),
-                            Expr::call("-", vec![Expr::var("n"), Expr::int(1)]),
+                        Declare(
+                            vardef("a", s, IntT),
+                            binop(var("n"), "-", int(1)),
                         ),
-                        Stmt::Declare(
-                            VarDef::from("a", s, IntT),
-                            Expr::call("-", vec![Expr::var("n"), Expr::int(2)]),
+                        Declare(
+                            vardef("a", s, IntT),
+                            binop(var("n"), "-", int(2)),
                         ),
                     ],
-                    ret: Expr::call("fibo_fibo", vec![Expr::var("a"), Expr::var("b")]),
+                    ret: call("fibo_fibo", vec![var("a"), var("b")]),
                 }),
             ),
         },
     };
-    let f2 = Fun {
-        name: "fibo_fibo".to_string(),
-        quantifiers: vec![s],
-        args: vec![VarDef::from("n", s, IntT)],
-        body: Block {
-            stmts: vec![
-                Stmt::Declare(VarDef::from("d", s, IntT), Expr::int(2)),
-                Stmt::Declare(
-                    VarDef::from("c", s, IntT),
-                    Expr::call("<", vec![Expr::var("n"), Expr::var("d")]),
-                ),
-            ],
-            ret: Expr::If(
-                Box::new(Expr::var("c")),
-                Box::new(Block::expr(Expr::var("n"))),
-                Box::new(Block {
-                    stmts: vec![
-                        Stmt::Declare(
-                            VarDef::from("a", s, IntT),
-                            Expr::call("-", vec![Expr::var("n"), Expr::int(1)]),
-                        ),
-                        Stmt::Declare(
-                            VarDef::from("a", s, IntT),
-                            Expr::call("-", vec![Expr::var("n"), Expr::int(2)]),
-                        ),
-                    ],
-                    ret: Expr::call("fibo_fibo", vec![Expr::var("a"), Expr::var("b")]),
-                }),
-            ),
-        },
-    };
-    vec![f, f2]
+    vec![f]
 }
 
-/// Another two-function example.
-pub(crate) fn th_fn() -> Program {
+/// Ceil modulo 2.
+pub(crate) fn ceil_mod_2() -> Program {
     let s1 = Stratum::new();
     let f1 = Fun {
-        name: "is_this_even_qm".to_string(),
+        name: "is_even".to_string(),
         quantifiers: vec![s1],
-        args: vec![VarDef::from("ivar_1", s1, IntT)],
+        args: vec![vardef("ivar_1", s1, IntT)],
+        ret_ty: BoolT,
         body: Block {
             stmts: vec![
-                Stmt::Declare(VarDef::from("ivar_5", s1, IntT), Expr::int(2)),
-                Stmt::Declare(
-                    VarDef::from("ivar_2", s1, IntT),
-                    Expr::call("%", vec![Expr::var("ivar_1"), Expr::var("ivar_5")]),
+                Declare(vardef("ivar_5", s1, IntT), int(2)),
+                Declare(
+                    vardef("ivar_2", s1, IntT),
+                    binop(var("ivar_1"), "%", var("ivar_5")),
                 ),
-                Stmt::Declare(VarDef::from("ivar_3", s1, IntT), Expr::int(0)),
+                Declare(vardef("ivar_3", s1, IntT), int(0)),
             ],
-            ret: Expr::call("%", vec![Expr::var("ivar_2"), Expr::var("ivar_3")]),
+            ret: binop(binop(var("ivar_2"), "%", var("ivar_3")), "==", int(1)),
         },
     };
 
     let s2 = Stratum::new();
     let f2 = Fun {
-        name: "th_fn".to_string(),
+        name: "ceil_mod_2".to_string(),
         quantifiers: vec![s2],
-        args: vec![VarDef::from("n", s2, IntT)],
-        body: Block {
-            stmts: vec![
-                Stmt::Declare(VarDef::from("d", s2, IntT), Expr::int(2)),
-                Stmt::Declare(
-                    VarDef::from("c", s2, IntT),
-                    Expr::call("<", vec![Expr::var("n"), Expr::var("d")]),
-                ),
-            ],
-            ret: Expr::If(
-                Box::new(Expr::var("c")),
-                Box::new(Block::expr(Expr::var("n"))),
-                Box::new(Block {
-                    stmts: vec![
-                        Stmt::Declare(
-                            VarDef::from("a", s2, IntT),
-                            Expr::call("-", vec![Expr::var("n"), Expr::int(1)]),
-                        ),
-                        Stmt::Declare(
-                            VarDef::from("a", s2, IntT),
-                            Expr::call("-", vec![Expr::var("n"), Expr::int(2)]),
-                        ),
-                    ],
-                    ret: Expr::call("fibo_fibo", vec![Expr::var("a"), Expr::var("b")]),
-                }),
-            ),
-        },
+        args: vec![vardef("n", s2, IntT)],
+        ret_ty: IntT,
+        body: expr(
+            If(
+                boxed(call("is_even", vec![var("n")])),
+                boxed(expr(var("n"))),
+                boxed(expr(binop(var("n"), "+", int(1))))
+            )
+        ),
     };
 
     vec![f1, f2]

@@ -1,4 +1,4 @@
-use super::{Block, VarDef};
+use super::{Block, VarDef, Ty};
 
 use super::stratum::Stratum;
 
@@ -12,6 +12,8 @@ pub struct Fun {
     /// Arguments to that function, with their types
     /// and stratum.
     pub args: Vec<VarDef>,
+    /// Return type.
+    pub ret_ty: Ty,
     /// Body of the function: a list of statements and
     /// a final expression.
     pub body: Block,

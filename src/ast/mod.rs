@@ -2,16 +2,22 @@
 //! 
 //! Each node in the tree = one file.
 
-mod block;
-mod expr;
-mod fun;
-mod program;
-mod stmt;
-mod stratum;
-mod ty;
-mod var;
-mod visitor;
-mod selfvisitor;
+pub mod block;
+pub mod expr;
+pub mod fun;
+pub mod program;
+pub mod stmt;
+pub mod stratum;
+pub mod ty;
+pub mod var;
+pub mod visitor;
+pub mod selfvisitor;
+
+/// Alias for `Box::new()` to make it shorter and easier
+/// to use in manually-created ASTs.
+pub fn boxed<T>(t: T) -> Box<T> {
+    Box::new(t)
+}
 
 pub use block::Block;
 pub use expr::Expr;

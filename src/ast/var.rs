@@ -20,7 +20,7 @@ impl From<Var> for String {
 
 impl From<String> for Var {
     fn from(v: String) -> Self {
-        Self(v.to_string())
+        Self(v)
     }
 }
 
@@ -43,10 +43,8 @@ pub struct VarDef {
     /// Type of the variable.
     pub(crate) ty: Ty,
 }
-impl VarDef {
-    /// Creates a new variable definition.
-    pub fn from(name: impl ToString, stratum: Stratum, ty: Ty) -> Self {
-        let name = name.to_string().into();
-        Self { name, stratum, ty }
-    }
+/// Creates a new variable definition.
+pub fn vardef(name: impl ToString, stratum: Stratum, ty: Ty) -> VarDef {
+    let name = name.to_string().into();
+    VarDef { name, stratum, ty }
 }
