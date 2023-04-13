@@ -6,6 +6,4 @@ pub enum Stmt {
     /// of the 2nd argument to the newly created variable
     /// defined in the 1st argument.
     Assign(VarDef, Expr),
-    /// An if expression.
-    If(Expr, Block, Block),
 }

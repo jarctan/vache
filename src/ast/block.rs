@@ -4,7 +4,9 @@ use super::{Expr, Stmt};
 ///
 /// A block is a list of ordered statements, followed by a final expression.
 pub struct Block {
+    /// List of consecutive statements.
     pub stmts: Vec<Stmt>,
+    /// Final return expression.
     pub ret: Expr,
 }
 impl Block {

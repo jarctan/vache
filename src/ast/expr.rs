@@ -1,6 +1,6 @@
 use rug::Integer;
 
-use super::Var;
+use super::{Var, Block};
 
 /// An expression in the parser AST.
 pub enum Expr {
@@ -8,7 +8,7 @@ pub enum Expr {
     Unit,
     /// An unbounded integer.
     Integer(Integer),
-    // A variable.
+    /// A variable.
     Var(Var),
     /// A function call.
     Call {
@@ -17,6 +17,8 @@ pub enum Expr {
         /// Arguments to that function.
         args: Vec<Expr>,
     },
+    /// An if expression.
+    If(Box<Expr>, Box<Block>, Box<Block>),
 }
 
 impl Expr {

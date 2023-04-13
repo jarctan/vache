@@ -8,7 +8,9 @@ mod fun;
 mod program;
 mod stmt;
 mod stratum;
+mod ty;
 mod var;
+mod visitor;
 
 pub use block::Block;
 pub use expr::Expr;
@@ -16,4 +18,6 @@ pub use fun::Fun;
 pub use program::Program;
 pub use stmt::Stmt;
 pub use stratum::Stratum;
+pub use ty::Ty;
 pub use var::{Var, VarDef};
+pub use visitor::Visitor;
