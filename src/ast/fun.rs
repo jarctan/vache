@@ -13,9 +13,9 @@ pub struct Fun {
     pub name: String,
     /// List of stratum variables.
     pub quantifiers: Vec<Stratum>,
-    /// Arguments to that function, with their types
+    /// Parameters to that function, with their types
     /// and stratum.
-    pub args: Vec<VarDef>,
+    pub params: Vec<VarDef>,
     /// Return type.
     pub ret_ty: Ty,
     /// Body of the function: a list of statements and
@@ -32,7 +32,7 @@ impl Fun {
         FunSig {
             name: self.name.clone(),
             quantifiers: self.quantifiers.clone(),
-            args: self.args.clone(),
+            params: self.params.clone(),
             ret_ty: self.ret_ty.clone()
         }
     }
@@ -45,9 +45,9 @@ pub struct FunSig {
     pub name: String,
     /// List of stratum variables.
     pub quantifiers: Vec<Stratum>,
-    /// Arguments to that function, with their types
+    /// Parameters to that function, with their types
     /// and stratum.
-    pub args: Vec<VarDef>,
+    pub params: Vec<VarDef>,
     /// Return type.
     pub ret_ty: Ty,
 }
@@ -57,7 +57,7 @@ impl From<Fun> for FunSig {
         FunSig {
             name: f.name,
             quantifiers: f.quantifiers,
-            args: f.args,
+            params: f.params,
             ret_ty: f.ret_ty
         }
     }
@@ -71,7 +71,7 @@ pub fn binop_int_sig(op: impl ToString, ret_ty: Ty) -> FunSig {
     FunSig {
         name: op.to_string(),
         quantifiers: vec![s],
-        args: vec![
+        params: vec![
             vardef("n1", s, IntT),
             vardef("n2", s, IntT),
         ],

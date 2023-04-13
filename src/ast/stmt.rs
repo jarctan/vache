@@ -14,6 +14,6 @@ pub enum Stmt {
         /// Condition.
         cond: Expr,
         /// While body.
-        block: Block,
+        body: Block,
     }
 }

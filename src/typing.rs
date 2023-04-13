@@ -75,7 +75,12 @@ impl Visitor for Typer {
             Expr::Integer(_) => IntT,
             Expr::Var(v) => self.get_var(v).unwrap_or_else(|| panic!("{v} does not exist in this context")).ty.clone(),
             Expr::Call { name, args } => {
+                let args: Vec<Ty> = args.iter().map(|arg| self.visit_expr(arg)).collect();
                 let fun = self.get_fun(name).unwrap_or_else(|| panic!("Function {name} does not exist in this scope"));
+                assert_eq!(args.len(), fun.params.len(), "Expected {} arguments to function {name}, found {}", fun.params.len(), args.len());
+                for (i, (arg_ty, VarDef { ty: param_ty, .. })) in args.iter().zip(fun.params.iter()).enumerate() {
+                    assert_eq!(arg_ty, param_ty, "type of {i}th argument should be {param_ty}, not {arg_ty}");
+                }
                 fun.ret_ty.clone()
             }
             Expr::If(box cond, box iftrue, box iffalse) => {
@@ -97,7 +102,7 @@ impl Visitor for Typer {
     }
 
     fn visit_fun(&mut self, f: &Fun) -> Ty {
-        for arg in &f.args {
+        for arg in &f.params {
             self.add_var(arg.clone());
         }
 
@@ -117,8 +122,18 @@ impl Visitor for Typer {
                 let expr_ty = self.visit_expr(expr);
                 assert_eq!(vardef.ty, expr_ty, "expression type ({expr_ty}) of {expr:?} should match type annotation ({})", vardef.ty);
             },
-            Stmt::Assign(_, _) => todo!(),
-            Stmt::While { cond, block } => todo!(),
+            Stmt::Assign(var, expr) => {
+                let expr_ty = self.visit_expr(expr);
+                let vardef = self
+                    .get_var(var)
+                    .unwrap_or_else(|| panic!("Assigning to an undeclared variable {var}"));
+                assert_eq!(vardef.ty, expr_ty, "expression type ({expr_ty}) of {expr:?} should match the type of variable {var} ({})", vardef.ty);
+            }
+            Stmt::While { cond, body } => {
+                let cond_ty = self.visit_expr(cond);
+                assert_eq!(cond_ty, BoolT, "condition {cond:?} should compute to a boolean value");
+                self.visit_block(body);
+            },
         }
         UnitT
     }

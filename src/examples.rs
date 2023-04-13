@@ -14,7 +14,7 @@ pub(crate) fn simple() -> Program {
     let f = Fun {
         name: "simple".to_string(),
         quantifiers: vec![s],
-        args: vec![vardef("n", s, IntT)],
+        params: vec![vardef("n", s, IntT)],
         ret_ty: UnitT,
         body: stmts({
             vec![
@@ -32,7 +32,7 @@ pub(crate) fn fibo_fibo() -> Program {
     let f = Fun {
         name: "fibo_fibo".to_string(),
         quantifiers: vec![s],
-        args: vec![vardef("n", s, IntT)],
+        params: vec![vardef("n", s, IntT)],
         ret_ty: IntT,
         body: Block {
             stmts: vec![
@@ -52,11 +52,11 @@ pub(crate) fn fibo_fibo() -> Program {
                             binop(var("n"), "-", int(1)),
                         ),
                         Declare(
-                            vardef("a", s, IntT),
+                            vardef("b", s, IntT),
                             binop(var("n"), "-", int(2)),
                         ),
                     ],
-                    ret: call("fibo_fibo", vec![var("a"), var("b")]),
+                    ret: binop(call("fibo_fibo", vec![var("a")]), "+", call("fibo_fibo", vec![var("b")])),
                 }),
             ),
         },
@@ -70,7 +70,7 @@ pub(crate) fn ceil_mod_2() -> Program {
     let f1 = Fun {
         name: "is_even".to_string(),
         quantifiers: vec![s1],
-        args: vec![vardef("ivar_1", s1, IntT)],
+        params: vec![vardef("ivar_1", s1, IntT)],
         ret_ty: BoolT,
         body: Block {
             stmts: vec![
@@ -89,7 +89,7 @@ pub(crate) fn ceil_mod_2() -> Program {
     let f2 = Fun {
         name: "ceil_mod_2".to_string(),
         quantifiers: vec![s2],
-        args: vec![vardef("n", s2, IntT)],
+        params: vec![vardef("n", s2, IntT)],
         ret_ty: IntT,
         body: expr(
             If(
