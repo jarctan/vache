@@ -26,8 +26,8 @@ impl SelfVisitor for Compiler {
 
     fn visit_expr(&mut self, e: Expr) -> TokenStream {
         match e {
-            Expr::Unit => quote!(()),
-            Expr::Integer(i) => {
+            Expr::UnitE => quote!(()),
+            Expr::IntegerE(i) => {
                 if let Some(bounded) = i.to_u64() {
                     quote!(::rug::Integer::from_u64(#bounded))
                 } else {
@@ -35,11 +35,11 @@ impl SelfVisitor for Compiler {
                     quote!(::rug::Integer::from_string_radix(#digits, 10)) // Room for optimization here
                 }
             },
-            Expr::Var(v) => {
+            Expr::VarE(v) => {
                 let varname = format_ident!("{}", String::from(v));
                 quote!(__clone(&#varname))
             }
-            Expr::Call { name, args } => {
+            Expr::CallE { name, args } => {
                 let args = args.into_iter()
                     .map(|arg| self.visit_expr(arg));
                 let name = match &*name {
@@ -56,7 +56,7 @@ impl SelfVisitor for Compiler {
                 let name = format_ident!("{name}");
                 quote!(#name(#(#args),*))
             }
-            Expr::If(box cond, box iftrue, box iffalse) => {
+            Expr::IfE(box cond, box iftrue, box iffalse) => {
                 let cond = self.visit_expr(cond);
                 let iftrue = self.visit_block(iftrue);
                 let iffalse = self.visit_block(iffalse);
@@ -64,6 +64,7 @@ impl SelfVisitor for Compiler {
                     if #cond #iftrue else #iffalse
                 }
             }
+            Expr::BlockE(box e) => self.visit_block(e),
         }
     }
 

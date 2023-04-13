@@ -70,11 +70,12 @@ impl Visitor for Typer {
     type Output = Ty;
 
     fn visit_expr(&mut self, e: &Expr) -> Ty {
+        use Expr::*;
         match e {
-            Expr::Unit => UnitT,
-            Expr::Integer(_) => IntT,
-            Expr::Var(v) => self.get_var(v).unwrap_or_else(|| panic!("{v} does not exist in this context")).ty.clone(),
-            Expr::Call { name, args } => {
+            UnitE => UnitT,
+            IntegerE(_) => IntT,
+            VarE(v) => self.get_var(v).unwrap_or_else(|| panic!("{v} does not exist in this context")).ty.clone(),
+            CallE { name, args } => {
                 let args: Vec<Ty> = args.iter().map(|arg| self.visit_expr(arg)).collect();
                 let fun = self.get_fun(name).unwrap_or_else(|| panic!("Function {name} does not exist in this scope"));
                 assert_eq!(args.len(), fun.params.len(), "Expected {} arguments to function {name}, found {}", fun.params.len(), args.len());
@@ -83,7 +84,7 @@ impl Visitor for Typer {
                 }
                 fun.ret_ty.clone()
             }
-            Expr::If(box cond, box iftrue, box iffalse) => {
+            IfE(box cond, box iftrue, box iffalse) => {
                 let cond_ty = self.visit_expr(cond);
                 let iftrue_ty = self.visit_block(iftrue);
                 let iffalse_ty = self.visit_block(iffalse);
@@ -91,6 +92,7 @@ impl Visitor for Typer {
                 assert_eq!(iftrue_ty, iffalse_ty, "if and else branches should have the same type");
                 iftrue_ty
             }
+            BlockE(e) => self.visit_block(e),
         }
     }
 

@@ -9,7 +9,7 @@ fn simple_fun() {
             quantifiers: vec![s],
             params: vec![vardef("n", s, IntT)],
             ret_ty: UnitT,
-            body: stmts({
+            body: stmts(|_| {
                 vec![
                     Declare(vardef("d", s, IntT), int(2)),
                     Declare(vardef("e", s, IntT), var("n")),

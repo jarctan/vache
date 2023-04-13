@@ -11,6 +11,7 @@ fn ceil_mod_2() {
             params: vec![vardef("ivar_1", s1, IntT)],
             ret_ty: BoolT,
             body: Block {
+                stratum: Stratum::new(),
                 stmts: vec![
                     Declare(vardef("ivar_5", s1, IntT), int(2)),
                     Declare(
@@ -30,7 +31,7 @@ fn ceil_mod_2() {
             params: vec![vardef("n", s2, IntT)],
             ret_ty: IntT,
             body: expr(
-                If(
+                IfE(
                     boxed(call("is_even", vec![var("n")])),
                     boxed(expr(var("n"))),
                     boxed(expr(binop(var("n"), "+", int(1))))

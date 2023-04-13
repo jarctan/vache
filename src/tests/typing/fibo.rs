@@ -11,6 +11,7 @@ fn fibo() {
             params: vec![vardef("n", s, IntT)],
             ret_ty: IntT,
             body: Block {
+                stratum: Stratum::new(),
                 stmts: vec![
                     Declare(vardef("d", s, IntT), int(2)),
                     Declare(
@@ -18,10 +19,11 @@ fn fibo() {
                         binop(var("n"), "<", var("d")),
                     ),
                 ],
-                ret: If(
+                ret: IfE(
                     boxed(var("c")),
                     boxed(expr(var("n"))),
                     boxed(Block {
+                        stratum: Stratum::new(),
                         stmts: vec![
                             Declare(
                                 vardef("a", s, IntT),

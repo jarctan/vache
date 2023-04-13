@@ -18,6 +18,12 @@ impl From<Var> for String {
     }
 }
 
+impl From<&str> for Var {
+    fn from(v: &str) -> Self {
+        Self(v.to_owned())
+    }
+}
+
 impl From<String> for Var {
     fn from(v: String) -> Self {
         Self(v)
@@ -43,6 +49,7 @@ pub struct VarDef {
     /// Type of the variable.
     pub(crate) ty: Ty,
 }
+
 /// Creates a new variable definition.
 pub fn vardef(name: impl ToString, stratum: Stratum, ty: Ty) -> VarDef {
     let name = name.to_string().into();

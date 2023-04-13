@@ -10,6 +10,7 @@ use crate::typing::Typer;
 mod simple;
 mod fibo;
 mod ceil_mod2;
+mod basic_lifetime;
 
 /// Checks a given program.
 /// 
