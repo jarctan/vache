@@ -38,7 +38,7 @@ pub(crate) fn fibo_fibo() -> Program {
             stmts: vec![
                 Declare(vardef("d", s, IntT), int(2)),
                 Declare(
-                    vardef("c", s, IntT),
+                    vardef("c", s, BoolT),
                     binop(var("n"), "<", var("d")),
                 ),
             ],
