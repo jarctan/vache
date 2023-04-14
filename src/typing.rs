@@ -2,24 +2,74 @@
 
 use std::collections::HashMap;
 
-use crate::ast::{Visitor, Program, Var, VarDef, Expr, Block, Fun, Stmt, Ty, fun::{FunSig, binop_int_sig}};
+use crate::ast::{Visitor, Program, Var, VarDef, Expr, Block, Fun, Stmt, Ty, FunSig, Stratum};
+use crate::ast::fun::binop_int_sig;
 use Ty::*;
 
-/// A typer that will type-check some program by
-/// visiting it.
-pub struct Typer {
+/// A typing environment.
+/// 
+/// A typing environment is characterized by its stratum identifier.
+/// It contains variable and function definitions.
+struct Env {
+    /// Stratum id for this environment.
+    stratum: Stratum,
     /// Map between vars and their definitions.
     var_env: HashMap<Var, VarDef>,
     /// Map between function names and their definitions.
     fun_env: HashMap<String, FunSig>,
 }
 
+impl Env {
+    /// Creates a new, empty environment.
+    fn new(stratum: Stratum) -> Self {
+        Self {
+            stratum,
+            var_env: HashMap::new(),
+            fun_env: HashMap::new(),
+        }
+    }
+
+    /// Gets the definition of a variable.
+    fn get_var(&self, v: impl AsRef<Var>) -> Option<&VarDef> {
+        self.var_env.get(v.as_ref())
+    }
+
+    /// Declares a new variable in the context.
+    fn add_var(&mut self, vardef: impl Into<VarDef>) {
+        let vardef = vardef.into();
+        self.var_env.insert(vardef.name.to_owned(), vardef);
+    }
+
+    /// Gets the definition of a function.
+    fn get_fun(&self, f: impl AsRef<str>) -> Option<&FunSig> {
+        self.fun_env.get(f.as_ref())
+    }
+
+    /// Declares a new function in the context.
+    fn add_fun(&mut self, fundef: impl Into<FunSig>) {
+        let fundef = fundef.into();
+        self.fun_env.insert(fundef.name.to_owned(), fundef);
+    }
+}
+
+impl Default for Env {
+    fn default() -> Self {
+        Self::new(Stratum::new())
+    }
+}
+
+/// A typer that will type-check some program by
+/// visiting it.
+pub struct Typer {
+    /// The typing environment.
+    env: Vec<Env>,
+}
+
 impl Typer {
     /// Creates a new typer.
     pub fn new() -> Self {
         let mut typer = Self {
-            var_env: HashMap::new(),
-            fun_env: HashMap::new(),
+            env: vec![Env::default()]
         };
 
         // Add builtin function signatures.
@@ -43,26 +93,44 @@ impl Typer {
         self.visit_program(p);
     }
 
+    /// Defines a new stratum in the context, on top of our current strata.
+    fn push_stratum(&mut self, stratum: Stratum) {
+        self.env.push(Env::new(stratum));
+    }
+
+    /// Removes the stratum on top of our current context strata.
+    fn pop_stratum(&mut self) -> Option<Stratum> {
+        self.env.pop().map(|env| env.stratum)
+    }
+
     /// Gets the definition of a variable.
     fn get_var(&self, v: impl AsRef<Var>) -> Option<&VarDef> {
-        self.var_env.get(v.as_ref())
+        // Iterate over environments in reverse (last declared first processed)
+        // order
+        // Returns the first environment that has that variable declared
+        let v = v.as_ref();
+        self.env.iter().rev().find_map(|env| env.get_var(v))
     }
 
     /// Declares a new variable in the context.
     fn add_var(&mut self, vardef: impl Into<VarDef>) {
-        let vardef = vardef.into();
-        self.var_env.insert(vardef.name.to_owned(), vardef);
+        // Variable is declared in the current environment, ie the last in our list
+        self.env.last_mut()
+            .expect("No environment to insert variable in")
+            .add_var(vardef);
     }
 
     /// Gets the definition of a function.
     fn get_fun(&self, f: impl AsRef<str>) -> Option<&FunSig> {
-        self.fun_env.get(f.as_ref())
+        let f = f.as_ref();
+        self.env.iter().rev().find_map(|env| env.get_fun(f))
     }
 
     /// Declares a new function in the context.
     fn add_fun(&mut self, fundef: impl Into<FunSig>) {
-        let fundef = fundef.into();
-        self.fun_env.insert(fundef.name.to_owned(), fundef);
+        self.env.last_mut()
+            .expect("No environment to insert variable in")
+            .add_fun(fundef);
     }
 }
 
@@ -97,10 +165,13 @@ impl Visitor for Typer {
     }
 
     fn visit_block(&mut self, b: &Block) -> Ty {
+        self.push_stratum(b.stratum);
         for s in &b.stmts {
             self.visit_stmt(s);
         }
-        self.visit_expr(&b.ret)
+        let final_ty = self.visit_expr(&b.ret);
+        assert_eq!(self.pop_stratum(), Some(b.stratum));
+        final_ty
     }
 
     fn visit_fun(&mut self, f: &Fun) -> Ty {

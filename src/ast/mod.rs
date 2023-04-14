@@ -21,7 +21,7 @@ pub fn boxed<T>(t: T) -> Box<T> {
 
 pub use block::Block;
 pub use expr::Expr;
-pub use fun::Fun;
+pub use fun::{Fun, FunSig};
 pub use program::Program;
 pub use stmt::Stmt;
 pub use stratum::Stratum;
