@@ -2,7 +2,7 @@
 
 use proc_macro2::TokenStream;
 
-use crate::ast::{SelfVisitor, Program, Expr, Block, Fun, Stmt};
+use crate::ast::{Block, Expr, Fun, Program, SelfVisitor, Stmt};
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
@@ -34,14 +34,13 @@ impl SelfVisitor for Compiler {
                     let digits = i.to_string_radix(10);
                     quote!(::rug::Integer::from_string_radix(#digits, 10)) // Room for optimization here
                 }
-            },
+            }
             Expr::VarE(v) => {
                 let varname = format_ident!("{}", String::from(v));
                 quote!(__clone(&#varname))
             }
             Expr::CallE { name, args } => {
-                let args = args.into_iter()
-                    .map(|arg| self.visit_expr(arg));
+                let args = args.into_iter().map(|arg| self.visit_expr(arg));
                 let name = match &*name {
                     "+" => "__add".to_string(),
                     "-" => "__sub".to_string(),

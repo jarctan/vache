@@ -2,12 +2,12 @@
 
 use std::collections::HashMap;
 
-use crate::ast::{Visitor, Program, Var, VarDef, Expr, Block, Fun, Stmt, Ty, FunSig, Stratum};
 use crate::ast::fun::binop_int_sig;
+use crate::ast::{Block, Expr, Fun, FunSig, Program, Stmt, Stratum, Ty, Var, VarDef, Visitor};
 use Ty::*;
 
 /// A typing environment.
-/// 
+///
 /// A typing environment is characterized by its stratum identifier.
 /// It contains variable and function definitions.
 struct Env {
@@ -69,7 +69,7 @@ impl Typer {
     /// Creates a new typer.
     pub fn new() -> Self {
         let mut typer = Self {
-            env: vec![Env::default()]
+            env: vec![Env::default()],
         };
 
         // Add builtin function signatures.
@@ -115,7 +115,8 @@ impl Typer {
     /// Declares a new variable in the context.
     fn add_var(&mut self, vardef: impl Into<VarDef>) {
         // Variable is declared in the current environment, ie the last in our list
-        self.env.last_mut()
+        self.env
+            .last_mut()
             .expect("No environment to insert variable in")
             .add_var(vardef);
     }
@@ -128,7 +129,8 @@ impl Typer {
 
     /// Declares a new function in the context.
     fn add_fun(&mut self, fundef: impl Into<FunSig>) {
-        self.env.last_mut()
+        self.env
+            .last_mut()
             .expect("No environment to insert variable in")
             .add_fun(fundef);
     }
@@ -142,13 +144,30 @@ impl Visitor for Typer {
         match e {
             UnitE => UnitT,
             IntegerE(_) => IntT,
-            VarE(v) => self.get_var(v).unwrap_or_else(|| panic!("{v} does not exist in this context")).ty.clone(),
+            VarE(v) => self
+                .get_var(v)
+                .unwrap_or_else(|| panic!("{v} does not exist in this context"))
+                .ty
+                .clone(),
             CallE { name, args } => {
                 let args: Vec<Ty> = args.iter().map(|arg| self.visit_expr(arg)).collect();
-                let fun = self.get_fun(name).unwrap_or_else(|| panic!("Function {name} does not exist in this scope"));
-                assert_eq!(args.len(), fun.params.len(), "Expected {} arguments to function {name}, found {}", fun.params.len(), args.len());
-                for (i, (arg_ty, VarDef { ty: param_ty, .. })) in args.iter().zip(fun.params.iter()).enumerate() {
-                    assert_eq!(arg_ty, param_ty, "type of {i}th argument should be {param_ty}, not {arg_ty}");
+                let fun = self
+                    .get_fun(name)
+                    .unwrap_or_else(|| panic!("Function {name} does not exist in this scope"));
+                assert_eq!(
+                    args.len(),
+                    fun.params.len(),
+                    "Expected {} arguments to function {name}, found {}",
+                    fun.params.len(),
+                    args.len()
+                );
+                for (i, (arg_ty, VarDef { ty: param_ty, .. })) in
+                    args.iter().zip(fun.params.iter()).enumerate()
+                {
+                    assert_eq!(
+                        arg_ty, param_ty,
+                        "type of {i}th argument should be {param_ty}, not {arg_ty}"
+                    );
                 }
                 fun.ret_ty.clone()
             }
@@ -156,8 +175,14 @@ impl Visitor for Typer {
                 let cond_ty = self.visit_expr(cond);
                 let iftrue_ty = self.visit_block(iftrue);
                 let iffalse_ty = self.visit_block(iffalse);
-                assert_eq!(cond_ty, BoolT, "condition {cond:?} should compute to a boolean value");
-                assert_eq!(iftrue_ty, iffalse_ty, "if and else branches should have the same type");
+                assert_eq!(
+                    cond_ty, BoolT,
+                    "condition {cond:?} should compute to a boolean value"
+                );
+                assert_eq!(
+                    iftrue_ty, iffalse_ty,
+                    "if and else branches should have the same type"
+                );
                 iftrue_ty
             }
             BlockE(e) => self.visit_block(e),
@@ -184,7 +209,11 @@ impl Visitor for Typer {
         self.add_fun(f.signature());
 
         let body_ty = self.visit_block(&f.body);
-        assert_eq!(body_ty, f.ret_ty, "the body should return a value of type {}, got {body_ty} instead", f.ret_ty);
+        assert_eq!(
+            body_ty, f.ret_ty,
+            "the body should return a value of type {}, got {body_ty} instead",
+            f.ret_ty
+        );
         UnitT
     }
 
@@ -193,8 +222,12 @@ impl Visitor for Typer {
             Stmt::Declare(vardef, expr) => {
                 self.add_var(vardef.clone());
                 let expr_ty = self.visit_expr(expr);
-                assert_eq!(vardef.ty, expr_ty, "expression type ({expr_ty}) of {expr:?} should match type annotation ({})", vardef.ty);
-            },
+                assert_eq!(
+                    vardef.ty, expr_ty,
+                    "expression type ({expr_ty}) of {expr:?} should match type annotation ({})",
+                    vardef.ty
+                );
+            }
             Stmt::Assign(var, expr) => {
                 let expr_ty = self.visit_expr(expr);
                 let vardef = self
@@ -204,9 +237,12 @@ impl Visitor for Typer {
             }
             Stmt::While { cond, body } => {
                 let cond_ty = self.visit_expr(cond);
-                assert_eq!(cond_ty, BoolT, "condition {cond:?} should compute to a boolean value");
+                assert_eq!(
+                    cond_ty, BoolT,
+                    "condition {cond:?} should compute to a boolean value"
+                );
                 self.visit_block(body);
-            },
+            }
         }
         UnitT
     }

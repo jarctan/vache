@@ -1,5 +1,5 @@
-use std::sync::atomic::AtomicU64;
 use std::fmt;
+use std::sync::atomic::AtomicU64;
 
 /// Global counter for fresh stratum ids.
 static COUNTER: AtomicU64 = AtomicU64::new(0);

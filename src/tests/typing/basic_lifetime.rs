@@ -13,17 +13,15 @@ fn basic_lifetime() {
             ret_ty: UnitT,
             body: Block {
                 stratum: a,
-                stmts: vec![
-                    Declare(vardef("x", a, IntT), int(5)),
-                ],
+                stmts: vec![Declare(vardef("x", a, IntT), int(5))],
                 ret: BlockE(boxed(Block {
                     stratum: b,
                     stmts: vec![
                         Declare(vardef("y", b, IntT), int(6)),
-                        Assign(Var::from("y"), var("x"))
+                        Assign(Var::from("y"), var("x")),
                     ],
                     ret: UnitE,
-                }))
+                })),
             },
         };
         vec![f]

@@ -30,13 +30,11 @@ fn ceil_mod_2() {
             quantifiers: vec![s2],
             params: vec![vardef("n", s2, IntT)],
             ret_ty: IntT,
-            body: expr(
-                IfE(
-                    boxed(call("is_even", vec![var("n")])),
-                    boxed(expr(var("n"))),
-                    boxed(expr(binop(var("n"), "+", int(1))))
-                )
-            ),
+            body: expr(IfE(
+                boxed(call("is_even", vec![var("n")])),
+                boxed(expr(var("n"))),
+                boxed(expr(binop(var("n"), "+", int(1)))),
+            )),
         };
 
         vec![f1, f2]

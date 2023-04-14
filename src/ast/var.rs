@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::{Stratum, ty::Ty};
+use super::{ty::Ty, Stratum};
 
 /// A variable in the code.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

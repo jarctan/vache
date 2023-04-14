@@ -1,4 +1,4 @@
-use super::{Expr, Block, Var, VarDef};
+use super::{Block, Expr, Var, VarDef};
 
 /// A statement.
 #[derive(Debug, Clone)]
@@ -15,5 +15,5 @@ pub enum Stmt {
         cond: Expr,
         /// While body.
         body: Block,
-    }
+    },
 }

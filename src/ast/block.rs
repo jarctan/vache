@@ -6,7 +6,7 @@ use super::{Expr, Stmt, Stratum};
 #[derive(Debug, Clone)]
 pub struct Block {
     /// Stratum for this block.
-    /// 
+    ///
     /// This will declare (and possibly override) a new stratum that
     /// exists for the duration of this block.
     pub stratum: Stratum,
@@ -26,10 +26,10 @@ pub fn expr(expr: Expr) -> Block {
 
 /// Creates a block only made of a list of statements, with no
 /// terminating expression.
-/// 
+///
 /// The argument to this function must be a closure that takes a fresh
 /// stratum for that block as an argument, and returns a list of statements.
-/// 
+///
 /// The final expression is then chosen to be the unit, no-op expr.
 pub fn stmts<R: IntoIterator<Item = Stmt>>(stmts: impl Fn(Stratum) -> R) -> Block {
     let stratum = Stratum::new();

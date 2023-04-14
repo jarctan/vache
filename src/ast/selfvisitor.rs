@@ -1,14 +1,14 @@
 //! Visiting the AST.
 
-use super::{Block, Stmt, Program, Fun, Expr};
+use super::{Block, Expr, Fun, Program, Stmt};
 
 /// Visitor of the AST.
-/// 
+///
 /// By default, all functions for non-terminal nodes will just explore their children recursively.
 /// Override any method definition to change that behavior for any given node in the AST.
 pub trait SelfVisitor {
     /// Output of the visitor.
-    /// 
+    ///
     /// The output must have a monoidal structure, ie we can add two together
     /// to produce a new one, and have a default one. This is witnessed by the
     /// `Default` and `Extend` trait requirements.

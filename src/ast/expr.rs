@@ -1,9 +1,9 @@
 use rug::Integer;
 
-use super::{Var, Block};
+use super::{Block, Var};
 
 /// An expression in the parser AST.
-/// 
+///
 /// Rule: all variants end with a capital `E`.
 #[derive(Debug, Clone)]
 pub enum Expr {

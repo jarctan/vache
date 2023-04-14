@@ -7,9 +7,9 @@
 
 mod ast;
 mod compile;
-mod typing;
 #[cfg(test)]
 mod tests;
+mod typing;
 
 #[macro_use]
 extern crate quote;
