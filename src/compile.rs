@@ -6,7 +6,7 @@ use crate::ast::{Block, Expr, Fun, Program, SelfVisitor, Stmt};
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
-pub struct Compiler {}
+pub(crate) struct Compiler {}
 impl Compiler {
     /// Creates a new compiler.
     pub fn new() -> Self {

@@ -1,9 +1,16 @@
 [package]
 name = "stratum"
+authors=["Jonathan ARNOULT <jonathan.arnoult@polytechnique.edu>"]
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "stratum_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "stratum"
+path = "src/main.rs"
 
 [dependencies]
 prettyplease = "0.2.4"

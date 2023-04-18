@@ -62,7 +62,7 @@ impl Default for Env {
 
 /// A typer that will type-check some program by
 /// visiting it.
-pub struct Typer {
+pub(crate) struct Typer {
     /// The typing environment.
     env: Vec<Env>,
 }
