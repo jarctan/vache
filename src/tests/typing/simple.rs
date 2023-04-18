@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn simple_fun() {
-    check({
+    check(|_| {
         let stm_v = StratumVar::new();
         let s = Stratum::from(stm_v);
         let f = Fun {

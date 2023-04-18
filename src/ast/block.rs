@@ -31,7 +31,7 @@ pub fn expr(expr: Expr) -> Block {
 /// stratum for that block as an argument, and returns a list of statements.
 ///
 /// The final expression is then chosen to be the unit, no-op expr.
-pub fn stmts<R: IntoIterator<Item = Stmt>>(stmts: impl Fn(Stratum) -> R) -> Block {
+pub fn stmts<R: IntoIterator<Item = Stmt>>(mut stmts: impl FnMut(Stratum) -> R) -> Block {
     let stratum = Stratum::new_concrete();
     Block {
         stratum,

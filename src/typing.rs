@@ -145,7 +145,7 @@ impl Typer {
     }
 
     /// Returns a static stratum.
-    fn static_stratum(&self) -> Stratum {
+    pub fn static_stratum(&self) -> Stratum {
         self.env[0].stratum
     }
 
@@ -359,6 +359,7 @@ impl Visitor for Typer {
                 );
                 self.visit_block(body);
             }
+            Stmt::ExprS(e) => self.visit_expr(e).into(),
         }
     }
 }

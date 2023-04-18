@@ -3,7 +3,7 @@ use super::*;
 /// Ceil modulo 2.
 #[test]
 fn ceil_mod_2() {
-    check({
+    check(|_| {
         let s1_v = StratumVar::new();
         let s1 = Stratum::from(s1_v);
         let f1 = Fun {

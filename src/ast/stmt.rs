@@ -9,6 +9,8 @@ pub enum Stmt {
     Declare(VarDef, Expr),
     /// An assignment. The variable must already exist.
     Assign(Var, Expr),
+    /// An expression, whose final value is discarded.
+    ExprS(Expr),
     /// A while statement.
     While {
         /// Condition.

@@ -3,7 +3,7 @@ use super::*;
 /// Fibonacci example.
 #[test]
 fn basic_lifetime() {
-    check({
+    check(|_| {
         let a = Stratum::new_concrete();
         let b = Stratum::new_concrete();
         let f = Fun {

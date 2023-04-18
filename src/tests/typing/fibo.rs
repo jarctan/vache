@@ -3,7 +3,7 @@ use super::*;
 /// Fibonacci example.
 #[test]
 fn fibo() {
-    check({
+    check(|_| {
         let stm_v = StratumVar::new();
         let stm = Stratum::from(stm_v);
         let f = Fun {

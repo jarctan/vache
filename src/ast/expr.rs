@@ -55,6 +55,11 @@ pub fn call(
     }
 }
 
+/// Shortcut to create a block `Expr`.
+pub fn block(value: impl Into<Block>) -> Expr {
+    Expr::BlockE(Box::new(value.into()))
+}
+
 /// Shortcut to create a binary operation `Expr`.
 pub fn binop(lhs: Expr, op: impl ToString, rhs: Expr, stratum: Stratum, ret_stm: Stratum) -> Expr {
     call(op, vec![stratum], vec![lhs, rhs], ret_stm)
