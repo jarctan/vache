@@ -12,5 +12,6 @@
         "selfvisitor",
         "typer",
         "unparse"
-    ]
+    ],
+    "rust-analyzer.showUnlinkedFileNotification": false
 }
