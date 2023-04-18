@@ -37,8 +37,14 @@ impl Env {
     }
 
     /// Declares a new variable in the context.
+    ///
+    /// # Panics
+    /// Panics if the var is not stated as declared in that stratum/environment.
+    /// You should only add a var definition in the stratum in which it is
+    /// tied to.
     fn add_var(&mut self, vardef: impl Into<VarDef>) {
         let vardef = vardef.into();
+        assert!(vardef.stratum == self.stratum);
         self.var_env.insert(vardef.name.to_owned(), vardef);
     }
 
@@ -63,15 +69,23 @@ impl Default for Env {
 /// A typer that will type-check some program by
 /// visiting it.
 pub(crate) struct Typer {
+    /// The typing stack.
+    ///
+    /// The typing stack is the ordered list of stratums.
+    ///
+    /// Invariant: `set{self.stack}==self.env.keys()`
+    stack: Vec<Stratum>,
     /// The typing environment.
-    env: Vec<Env>,
+    env: HashMap<Stratum, Env>,
 }
 
 impl Typer {
     /// Creates a new typer.
     pub fn new() -> Self {
+        let env = Env::default();
         let mut typer = Self {
-            env: vec![Env::default()],
+            stack: vec![env.stratum],
+            env: std::iter::once((env.stratum, env)).collect(),
         };
 
         // Add builtin function signatures.
@@ -95,18 +109,21 @@ impl Typer {
         self.visit_program(p);
     }
 
-    /// Defines a new stratum in the context, on top of our current strata.
+    /// Defines a new stratum in the context, on top of our current strata context.
     fn push_stratum(&mut self, stratum: Stratum) {
-        self.env.push(Env::new(stratum));
+        self.stack.push(stratum);
+        self.env.insert(stratum, Env::new(stratum));
     }
 
-    /// Removes the stratum on top of our current context strata.
+    /// Removes the stratum on top of our current strata context.
     ///
     /// Note: you can't remove the default, static stratum.
     fn pop_stratum(&mut self) -> Option<Stratum> {
         // Refuse the pop if only one stratum left (which must be the static stratum then)
-        if self.env.len() >= 2 {
-            self.env.pop().map(|env| env.stratum)
+        if self.stack.len() >= 2 {
+            let s = self.stack.pop()?;
+            self.env.remove(&s);
+            Some(s)
         } else {
             None
         }
@@ -118,42 +135,54 @@ impl Typer {
         // order
         // Returns the first environment that has that variable declared
         let v = v.as_ref();
-        self.env.iter().rev().find_map(|env| env.get_var(v))
+        self.stack.iter().rev().find_map(|s| self.env[s].get_var(v))
     }
 
     /// Declares a new variable in the context.
     fn add_var(&mut self, vardef: impl Into<VarDef>) {
-        // Variable is declared in the current environment, ie the last in our list
+        let vardef = vardef.into();
+        // Variable is declared in the scope it belongs to
         self.env
-            .last_mut()
-            .expect("No environment to insert variable in")
+            .get_mut(&vardef.stratum)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Adding variable `{}` to undefined stratum {}",
+                    vardef.name, vardef.stratum
+                )
+            })
             .add_var(vardef);
     }
 
     /// Gets the definition of a function.
     fn get_fun(&self, f: impl AsRef<str>) -> Option<&GenericFunSig> {
         let f = f.as_ref();
-        self.env.iter().rev().find_map(|env| env.get_fun(f))
+        self.stack.iter().rev().find_map(|s| self.env[s].get_fun(f))
     }
 
     /// Declares a new function in the context.
     fn add_fun(&mut self, fun_def: impl Into<GenericFunSig>) {
+        // Functions are always inserted in the topmost scope
         self.env
-            .last_mut()
-            .expect("No environment to insert variable in")
+            .get_mut(
+                self.stack
+                    .last()
+                    .expect("No environment to insert variable in"),
+            )
+            .unwrap()
             .add_fun(fun_def);
     }
 
     /// Returns a static stratum.
     pub fn static_stratum(&self) -> Stratum {
-        self.env[0].stratum
+        self.stack[0]
     }
 
     /// Is the stratum `s1` alive for at least the stratum `s2`
     fn is_stratum_included(&self, s1: Stratum, s2: Stratum) -> bool {
         s2 == self.static_stratum() || s1 == s2 || {
             let mut found_s1 = false;
-            for env in self.env.iter().rev() {
+            for s in self.stack.iter().rev() {
+                let env = &self.env[s];
                 found_s1 |= env.stratum == s1;
                 if env.stratum == s2 {
                     return found_s1;
@@ -167,7 +196,7 @@ impl Typer {
     ///
     /// TODO: remove or revamp this function.
     fn stratum_list(&self) -> Vec<Stratum> {
-        self.env.iter().map(|env| env.stratum).collect()
+        self.stack.to_vec()
     }
 }
 
@@ -307,13 +336,19 @@ impl Visitor for Typer {
     }
 
     fn visit_fun(&mut self, f: &Fun) {
+        // Add the function signature to the context before visiting the body
+        // to allow for recursion
+        self.add_fun(f.signature());
+
+        // Introduce the generic, abstract stratums
+        for &q in &f.quantifiers {
+            self.push_stratum(q.into());
+        }
+
+        // Introduce arguments in the typing context
         for arg in &f.params {
             self.add_var(arg.clone());
         }
-
-        // Add the function signature to the context before visiting the body
-        // to permit recursion
-        self.add_fun(f.signature());
 
         let body_ty = self.visit_block(&f.body).ty;
         assert_eq!(
@@ -321,6 +356,11 @@ impl Visitor for Typer {
             "the body should return a value of type {}, got {body_ty} instead",
             f.ret_ty.ty,
         );
+
+        // Remove the abstract stratums at the end
+        for _ in &f.quantifiers {
+            self.pop_stratum();
+        }
     }
 
     fn visit_stmt(&mut self, s: &Stmt) {
