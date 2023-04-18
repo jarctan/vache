@@ -1,5 +1,6 @@
 use crate::ast::block::*;
 use crate::ast::expr::*;
+use crate::ast::ty::*;
 use crate::ast::var::*;
 use crate::ast::*;
 use crate::typing::Typer;

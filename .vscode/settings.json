@@ -1,0 +1,16 @@
+{
+    "editor.formatOnSave": true,
+    "cSpell.words": [
+        "binop",
+        "fibo",
+        "iffalse",
+        "iftrue",
+        "ivar",
+        "monoidal",
+        "prettyplease",
+        "repr",
+        "selfvisitor",
+        "typer",
+        "unparse"
+    ]
+}

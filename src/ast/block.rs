@@ -18,7 +18,7 @@ pub struct Block {
 /// Creates a block only made of an expression.
 pub fn expr(expr: Expr) -> Block {
     Block {
-        stratum: Stratum::new(),
+        stratum: Stratum::new_concrete(),
         stmts: vec![],
         ret: expr,
     }
@@ -32,7 +32,7 @@ pub fn expr(expr: Expr) -> Block {
 ///
 /// The final expression is then chosen to be the unit, no-op expr.
 pub fn stmts<R: IntoIterator<Item = Stmt>>(stmts: impl Fn(Stratum) -> R) -> Block {
-    let stratum = Stratum::new();
+    let stratum = Stratum::new_concrete();
     Block {
         stratum,
         stmts: stmts(stratum).into_iter().collect(),

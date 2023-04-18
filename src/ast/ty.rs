@@ -40,3 +40,52 @@ impl fmt::Display for Ty {
         }
     }
 }
+
+/// Type+stratum information.
+///
+/// Used within the TyAndStratum value.
+#[derive(Debug, Clone)]
+pub struct TyAndStratum {
+    /// Type.
+    pub ty: Ty,
+    /// Stratum.
+    pub stm: Stratum,
+}
+
+impl TyAndStratum {
+    /// Substitutes a stratum variable with a concrete stratum in the
+    /// in oneself.
+    pub fn subst_var(self, v: Stratum, with: Stratum) -> Self {
+        let Self { ty, stm } = self;
+        Self {
+            ty,
+            stm: if stm == v { with } else { stm },
+        }
+    }
+}
+
+/// Shortcut to construct a return type with type and stratum of the returned value.
+pub fn ret_ty(ty: Ty, stm: Stratum) -> TyAndStratum {
+    TyAndStratum { ty, stm }
+}
+
+impl Extend<()> for TyAndStratum {
+    fn extend<T: IntoIterator<Item = ()>>(&mut self, _iter: T) {}
+}
+
+// Currently required by the trait bounds on associated types on the Visitor trait
+impl From<TyAndStratum> for () {
+    fn from(_: TyAndStratum) -> Self {}
+}
+
+impl From<TyAndStratum> for (Ty, Stratum) {
+    fn from(value: TyAndStratum) -> Self {
+        (value.ty, value.stm)
+    }
+}
+
+impl From<(Ty, Stratum)> for TyAndStratum {
+    fn from((ty, stm): (Ty, Stratum)) -> Self {
+        Self { ty, stm }
+    }
+}

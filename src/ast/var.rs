@@ -50,6 +50,18 @@ pub struct VarDef {
     pub(crate) ty: Ty,
 }
 
+impl VarDef {
+    /// Substitutes a stratum variable with a concrete stratum in the var definition.
+    pub fn subst_var(self, v: Stratum, with: Stratum) -> Self {
+        let Self { name, stratum, ty } = self;
+        VarDef {
+            name,
+            stratum: if stratum == v { with } else { stratum },
+            ty,
+        }
+    }
+}
+
 /// Creates a new variable definition.
 pub fn vardef(name: impl ToString, stratum: Stratum, ty: Ty) -> VarDef {
     let name = name.to_string().into();

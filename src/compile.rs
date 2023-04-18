@@ -39,7 +39,12 @@ impl SelfVisitor for Compiler {
                 let varname = format_ident!("{}", String::from(v));
                 quote!(__clone(&#varname))
             }
-            Expr::CallE { name, args } => {
+            Expr::CallE {
+                name,
+                strata: _,
+                ret_stm: _,
+                args,
+            } => {
                 let args = args.into_iter().map(|arg| self.visit_expr(arg));
                 let name = match &*name {
                     "+" => "__add".to_string(),
@@ -86,7 +91,7 @@ impl SelfVisitor for Compiler {
         }
     }
 
-    fn visit_stmt(&mut self, s: Stmt) -> TokenStream {
+    fn visit_stmt(&mut self, _s: Stmt) -> TokenStream {
         todo!()
     }
 }

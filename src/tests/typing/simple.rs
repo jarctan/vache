@@ -3,12 +3,13 @@ use super::*;
 #[test]
 fn simple_fun() {
     check({
-        let s = Stratum::new();
+        let stm_v = StratumVar::new();
+        let s = Stratum::from(stm_v);
         let f = Fun {
             name: "simple".to_string(),
-            quantifiers: vec![s],
+            quantifiers: vec![stm_v],
             params: vec![vardef("n", s, IntT)],
-            ret_ty: UnitT,
+            ret_ty: ret_ty(UnitT, s),
             body: stmts(|_| {
                 vec![
                     Declare(vardef("d", s, IntT), int(2)),

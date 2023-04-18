@@ -1,6 +1,6 @@
 use rug::Integer;
 
-use super::{Block, Var};
+use super::{Block, Stratum, Var};
 
 /// An expression in the parser AST.
 ///
@@ -17,8 +17,12 @@ pub enum Expr {
     CallE {
         /// Name/identifier of the function.
         name: String,
+        /// Stratum instantiations.
+        strata: Vec<Stratum>,
         /// Arguments to that function.
         args: Vec<Expr>,
+        /// Return stratum.
+        ret_stm: Stratum,
     },
     /// An if expression.
     IfE(Box<Expr>, Box<Block>, Box<Block>),
@@ -37,16 +41,23 @@ pub fn int(value: impl Into<Integer>) -> Expr {
 }
 
 /// Shortcut to create a call `Expr`.
-pub fn call(name: impl ToString, stmts: impl IntoIterator<Item = Expr>) -> Expr {
+pub fn call(
+    name: impl ToString,
+    strata: impl IntoIterator<Item = Stratum>,
+    stmts: impl IntoIterator<Item = Expr>,
+    ret_stm: impl Into<Stratum>,
+) -> Expr {
     Expr::CallE {
         name: name.to_string(),
+        strata: strata.into_iter().collect(),
+        ret_stm: ret_stm.into(),
         args: stmts.into_iter().collect(),
     }
 }
 
 /// Shortcut to create a binary operation `Expr`.
-pub fn binop(lhs: Expr, op: impl ToString, rhs: Expr) -> Expr {
-    call(op, vec![lhs, rhs])
+pub fn binop(lhs: Expr, op: impl ToString, rhs: Expr, stratum: Stratum, ret_stm: Stratum) -> Expr {
+    call(op, vec![stratum], vec![lhs, rhs], ret_stm)
 }
 
 impl From<u64> for Expr {

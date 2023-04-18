@@ -4,31 +4,43 @@ use super::*;
 #[test]
 fn fibo() {
     check({
-        let s = Stratum::new();
+        let stm_v = StratumVar::new();
+        let stm = Stratum::from(stm_v);
         let f = Fun {
             name: "fibo".to_string(),
-            quantifiers: vec![s],
-            params: vec![vardef("n", s, IntT)],
-            ret_ty: IntT,
+            quantifiers: vec![stm_v],
+            params: vec![vardef("n", stm, IntT)],
+            ret_ty: ret_ty(IntT, stm),
             body: Block {
-                stratum: Stratum::new(),
+                stratum: Stratum::new_concrete(),
                 stmts: vec![
-                    Declare(vardef("d", s, IntT), int(2)),
-                    Declare(vardef("c", s, BoolT), binop(var("n"), "<", var("d"))),
+                    Declare(vardef("d", stm, IntT), int(2)),
+                    Declare(
+                        vardef("c", stm, BoolT),
+                        binop(var("n"), "<", var("d"), stm, stm),
+                    ),
                 ],
                 ret: IfE(
                     boxed(var("c")),
                     boxed(expr(var("n"))),
                     boxed(Block {
-                        stratum: Stratum::new(),
+                        stratum: Stratum::new_concrete(),
                         stmts: vec![
-                            Declare(vardef("a", s, IntT), binop(var("n"), "-", int(1))),
-                            Declare(vardef("b", s, IntT), binop(var("n"), "-", int(2))),
+                            Declare(
+                                vardef("a", stm, IntT),
+                                binop(var("n"), "-", int(1), stm, stm),
+                            ),
+                            Declare(
+                                vardef("b", stm, IntT),
+                                binop(var("n"), "-", int(2), stm, stm),
+                            ),
                         ],
                         ret: binop(
-                            call("fibo", vec![var("a")]),
+                            call("fibo", vec![stm], vec![var("a")], stm),
                             "+",
-                            call("fibo", vec![var("b")]),
+                            call("fibo", vec![stm], vec![var("b")], stm),
+                            stm,
+                            stm,
                         ),
                     }),
                 ),

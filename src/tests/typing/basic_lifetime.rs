@@ -4,13 +4,13 @@ use super::*;
 #[test]
 fn basic_lifetime() {
     check({
-        let a = Stratum::new();
-        let b = Stratum::new();
+        let a = Stratum::new_concrete();
+        let b = Stratum::new_concrete();
         let f = Fun {
             name: "main".to_string(),
             quantifiers: vec![],
             params: vec![],
-            ret_ty: UnitT,
+            ret_ty: ret_ty(UnitT, Stratum::new_concrete()),
             body: Block {
                 stratum: a,
                 stmts: vec![Declare(vardef("x", a, IntT), int(5))],

@@ -21,11 +21,11 @@ pub fn boxed<T>(t: T) -> Box<T> {
 
 pub use block::Block;
 pub use expr::Expr;
-pub use fun::{Fun, FunSig};
+pub use fun::{Fun, FunSig, GenericFunSig};
 pub use program::Program;
 pub use selfvisitor::SelfVisitor;
 pub use stmt::Stmt;
-pub use stratum::Stratum;
-pub use ty::Ty;
+pub use stratum::{Stratum, StratumVar};
+pub use ty::{Ty, TyAndStratum};
 pub use var::{Var, VarDef};
 pub use visitor::Visitor;
