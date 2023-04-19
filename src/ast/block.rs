@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::{Expr, Stmt, Stratum};
 
 /// A block in the parser AST.
@@ -15,6 +17,21 @@ pub struct Block {
     /// Final return expression.
     pub ret: Expr,
 }
+
+impl Block {
+    pub(super) fn subst_stm(self, x: Stratum, with: Stratum) -> Self {
+        Self {
+            stratum: self.stratum.subst_stm(x, with),
+            stmts: self
+                .stmts
+                .into_iter()
+                .map(|stmt| Cow::Owned::<Stmt>(stmt).subst_stm(x, with))
+                .collect(),
+            ret: self.ret.subst_stm(x, with),
+        }
+    }
+}
+
 /// Creates a block only made of an expression.
 pub fn expr(expr: Expr) -> Block {
     Block {
@@ -39,3 +56,21 @@ pub fn stmts<R: IntoIterator<Item = Stmt>>(mut stmts: impl FnMut(Stratum) -> R) 
         ret: Expr::UnitE,
     }
 }
+
+impl PartialEq for Block {
+    fn eq(&self, other: &Self) -> bool {
+        // We deconstruct the block here to automatically trigger an error if we were to
+        // add a new field and forget to take it into account in the partial equality test.
+        let Block {
+            stratum: _,
+            stmts: other_stmts,
+            ret: other_ret,
+        } = other.clone().subst_stm(other.stratum, self.stratum);
+
+        self.stmts.len() == other_stmts.len()
+            && self.stmts.iter().zip(&other_stmts).all(|(s1, s2)| s1 == s2)
+            && self.ret == other_ret
+    }
+}
+
+impl Eq for Block {}

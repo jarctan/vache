@@ -58,8 +58,7 @@ pub struct FunSig {
 
 impl FunSig {
     /// Applies a single stratum variable substitution in the function signature.
-    pub fn subst_var(self, v: StratumVar, with: Stratum) -> Self {
-        let v = Stratum::from(v);
+    pub fn subst_stm(self, v: Stratum, with: Stratum) -> Self {
         let Self {
             name,
             params,
@@ -69,7 +68,7 @@ impl FunSig {
             name,
             params: params
                 .into_iter()
-                .map(|param| param.subst_var(v, with))
+                .map(|param| param.subst_stm(v, with))
                 .collect(),
             ret_ty: ret_ty.subst_var(v, with),
         }
@@ -79,7 +78,7 @@ impl FunSig {
     pub fn subst(self, subst: Subst) -> Self {
         subst
             .into_iter()
-            .fold(self, |s, (v, with)| s.subst_var(v, with))
+            .fold(self, |s, (v, with)| s.subst_stm(Stratum::from(v), with))
     }
 }
 

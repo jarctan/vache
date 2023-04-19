@@ -1,10 +1,20 @@
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 use super::{ty::Ty, Stratum};
 
 /// A variable in the code.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Var(String);
+
+impl Var {
+    pub(super) fn subst_var(self, x: impl AsRef<Var>, with: Cow<Var>) -> Self {
+        if x.as_ref() == &self {
+            with.into_owned()
+        } else {
+            self
+        }
+    }
+}
 
 impl AsRef<Var> for Var {
     fn as_ref(&self) -> &Var {
@@ -40,7 +50,7 @@ impl fmt::Display for Var {
 ///
 /// The definition is accompanied by some additional
 /// metadata, like the stratum it is tied to.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarDef {
     /// Variable name.
     pub(crate) name: Var,
@@ -52,13 +62,19 @@ pub struct VarDef {
 
 impl VarDef {
     /// Substitutes a stratum variable with a concrete stratum in the var definition.
-    pub fn subst_var(self, v: Stratum, with: Stratum) -> Self {
+    pub fn subst_stm(self, x: Stratum, with: Stratum) -> Self {
         let Self { name, stratum, ty } = self;
         VarDef {
             name,
-            stratum: if stratum == v { with } else { stratum },
+            stratum: stratum.subst_stm(x, with),
             ty,
         }
+    }
+}
+
+impl AsRef<Var> for VarDef {
+    fn as_ref(&self) -> &Var {
+        &self.name
     }
 }
 

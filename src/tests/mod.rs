@@ -1,3 +1,3 @@
 //! Typing tests.
 
-mod typing;
+pub(crate) mod typing;

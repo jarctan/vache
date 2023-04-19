@@ -53,6 +53,14 @@ impl Stratum {
         // TODO: uniqueness broken in case of overflow!
         Self::Concrete(CONCRETE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
     }
+
+    pub(super) fn subst_stm(self: Cow<Self>, x: Stratum, with: Stratum) -> Self {
+        if x == *self {
+            with
+        } else {
+            *self
+        }
+    }
 }
 
 impl From<StratumVar> for Stratum {
