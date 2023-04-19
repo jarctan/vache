@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use super::{Block, Expr, Stratum, Var, VarDef};
 
 /// A statement.
@@ -25,28 +23,14 @@ pub enum Stmt {
 use Stmt::*;
 
 impl Stmt {
-    pub(super) fn subst_stm<'a>(self: Cow<'a, Self>, x: Stratum, with: Stratum) -> Cow<'a, Self> {
+    pub(super) fn subst_stm(self, x: Stratum, with: Stratum) -> Self {
         match self {
-            Cow::Borrowed(stmt) => match stmt {
-                Declare(v, e) => Cow::Owned(Declare(
-                    v.clone().subst_stm(x, with),
-                    e.clone().subst_stm(x, with),
-                )),
-                Assign(v, e) => Cow::Owned(Assign(v.clone(), e.subst_stm(x, with))),
-                ExprS(e) => Cow::Owned(ExprS(e.subst_stm(x, with))),
-                While { cond, body } => Cow::Owned(While {
-                    cond: cond.subst_stm(x, with),
-                    body: body.subst_stm(x, with),
-                }),
-            },
-            Cow::Owned(stmt) => match stmt {
-                Declare(v, e) => Cow::Owned(Declare(v.subst_stm(x, with), e.subst_stm(x, with))),
-                Assign(v, e) => Cow::Owned(Assign(v, e.subst_stm(x, with))),
-                ExprS(e) => Cow::Owned(ExprS(e.subst_stm(x, with))),
-                While { cond, body } => Cow::Owned(While {
-                    cond: cond.subst_stm(x, with),
-                    body: body.subst_stm(x, with),
-                }),
+            Declare(v, e) => Declare(v.subst_stm(x, with), e.subst_stm(x, with)),
+            Assign(v, e) => Assign(v, e.subst_stm(x, with)),
+            ExprS(e) => ExprS(e.subst_stm(x, with)),
+            While { cond, body } => While {
+                cond: cond.subst_stm(x, with),
+                body: body.subst_stm(x, with),
             },
         }
     }
@@ -60,8 +44,8 @@ impl PartialEq for Stmt {
                 if v1 == v2 {
                     e1 == e2
                 } else {
-                    let other = Cow::Borrowed(other).subst_stm(v2.stratum, v1.stratum);
-                    self == &*other
+                    let other = other.clone().subst_stm(v2.stratum, v1.stratum);
+                    self == &other
                 }
             }
             (Assign(v1, e1), Assign(v2, e2)) => v1 == v2 && e1 == e2,

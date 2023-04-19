@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use rug::Integer;
 
 use super::{boxed, Block, Stratum, Var};

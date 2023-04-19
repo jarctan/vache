@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use super::{Expr, Stmt, Stratum};
 
 /// A block in the parser AST.
@@ -25,7 +23,7 @@ impl Block {
             stmts: self
                 .stmts
                 .into_iter()
-                .map(|stmt| Cow::Owned::<Stmt>(stmt).subst_stm(x, with))
+                .map(|stmt| stmt.subst_stm(x, with))
                 .collect(),
             ret: self.ret.subst_stm(x, with),
         }
