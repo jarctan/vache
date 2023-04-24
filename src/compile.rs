@@ -39,12 +39,7 @@ impl SelfVisitor for Compiler {
                 let varname = format_ident!("{}", String::from(v));
                 quote!(__clone(&#varname))
             }
-            Expr::CallE {
-                name,
-                strata: _,
-                ret_stm: _,
-                args,
-            } => {
+            Expr::CallE { name, args } => {
                 let args = args.into_iter().map(|arg| self.visit_expr(arg));
                 let name = match &*name {
                     "+" => "__add".to_string(),

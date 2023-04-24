@@ -1,15 +1,15 @@
 [package]
-name = "stratum"
+name = "vache"
 authors=["Jonathan ARNOULT <jonathan.arnoult@polytechnique.edu>"]
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "stratum_lib"
+name = "vache_lib"
 path = "src/lib.rs"
 
 [[bin]]
-name = "stratum"
+name = "vache"
 path = "src/main.rs"
 
 [dependencies]

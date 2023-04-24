@@ -8,7 +8,6 @@ pub mod fun;
 pub mod program;
 pub mod selfvisitor;
 pub mod stmt;
-pub mod stratum;
 pub mod ty;
 pub mod var;
 pub mod visitor;
@@ -21,11 +20,10 @@ pub fn boxed<T>(t: T) -> Box<T> {
 
 pub use block::Block;
 pub use expr::Expr;
-pub use fun::{Fun, FunSig, GenericFunSig};
+pub use fun::{Fun, FunSig};
 pub use program::Program;
 pub use selfvisitor::SelfVisitor;
 pub use stmt::Stmt;
-pub use stratum::{Stratum, StratumVar};
-pub use ty::{Ty, TyAndStratum};
+pub use ty::Ty;
 pub use var::{Var, VarDef};
 pub use visitor::Visitor;
