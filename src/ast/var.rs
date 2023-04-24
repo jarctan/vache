@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::ty::Ty;
+use super::Ty;
 
 /// A variable in the code.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

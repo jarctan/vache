@@ -1,6 +1,7 @@
 {
     "editor.formatOnSave": true,
     "cSpell.words": [
+        "tast",
         "binop",
         "fibo",
         "iffalse",

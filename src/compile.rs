@@ -2,7 +2,7 @@
 
 use proc_macro2::TokenStream;
 
-use crate::ast::{Block, Expr, Fun, Program, SelfVisitor, Stmt};
+use crate::tast::{Block, Expr, Fun, Program, SelfVisitor, Stmt};
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
@@ -64,6 +64,8 @@ impl SelfVisitor for Compiler {
                 }
             }
             Expr::BlockE(box e) => self.visit_block(e),
+            Expr::Copy(_) => todo!(),
+            Expr::Own(_) => todo!(),
         }
     }
 

@@ -2,8 +2,10 @@
 
 use std::collections::HashMap;
 
+use crate::ast;
 use crate::ast::fun::binop_int_sig;
-use crate::ast::{Block, Expr, Fun, FunSig, Program, Stmt, Ty, Var, VarDef, Visitor};
+use crate::ast::SelfVisitor;
+use crate::tast::*;
 use Ty::*;
 
 /// A typing environment.
@@ -11,9 +13,9 @@ use Ty::*;
 /// Contains definitions for variables and functions.
 struct Env {
     /// Map between vars and their definitions.
-    var_env: HashMap<Var, VarDef>,
+    var_env: HashMap<ast::Var, ast::VarDef>,
     /// Map between function names and their definitions.
-    fun_env: HashMap<String, FunSig>,
+    fun_env: HashMap<String, ast::FunSig>,
 }
 
 impl Env {
@@ -26,7 +28,7 @@ impl Env {
     }
 
     /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<Var>) -> Option<&VarDef> {
+    fn get_var(&self, v: impl AsRef<ast::Var>) -> Option<&ast::VarDef> {
         self.var_env.get(v.as_ref())
     }
 
@@ -36,18 +38,18 @@ impl Env {
     /// Panics if the var is not stated as declared in that stratum/environment.
     /// You should only add a var definition in the stratum in which it is
     /// tied to.
-    fn add_var(&mut self, vardef: impl Into<VarDef>) {
+    fn add_var(&mut self, vardef: impl Into<ast::VarDef>) {
         let vardef = vardef.into();
         self.var_env.insert(vardef.name.to_owned(), vardef);
     }
 
     /// Gets the definition of a function.
-    fn get_fun(&self, f: impl AsRef<str>) -> Option<&FunSig> {
+    fn get_fun(&self, f: impl AsRef<str>) -> Option<&ast::FunSig> {
         self.fun_env.get(f.as_ref())
     }
 
     /// Declares a new function in the context.
-    fn add_fun(&mut self, fun_def: impl Into<FunSig>) {
+    fn add_fun(&mut self, fun_def: impl Into<ast::FunSig>) {
         let fun_def = fun_def.into();
         self.fun_env.insert(fun_def.name.to_owned(), fun_def);
     }
@@ -89,8 +91,8 @@ impl Typer {
     }
 
     /// Type-checks a piece of code.
-    pub fn check(&mut self, p: &Program) {
-        self.visit_program(p);
+    pub fn check(&mut self, p: ast::Program) -> Program {
+        self.visit_program(p)
     }
 
     /// Creates a new scope.
@@ -109,7 +111,7 @@ impl Typer {
     }
 
     /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<Var>) -> Option<&VarDef> {
+    fn get_var(&self, v: impl AsRef<ast::Var>) -> Option<&ast::VarDef> {
         // Iterate over environments in reverse (last declared first processed)
         // order
         // Returns the first environment that has that variable declared
@@ -118,46 +120,52 @@ impl Typer {
     }
 
     /// Declares a new variable in the context.
-    fn add_var(&mut self, vardef: impl Into<VarDef>) {
+    fn add_var(&mut self, vardef: impl Into<ast::VarDef>) {
         let vardef = vardef.into();
         self.env.last_mut().unwrap().add_var(vardef);
     }
 
     /// Gets the definition of a function.
-    fn get_fun(&self, f: impl AsRef<str>) -> Option<&FunSig> {
+    fn get_fun(&self, f: impl AsRef<str>) -> Option<&ast::FunSig> {
         let f = f.as_ref();
         self.env.iter().rev().find_map(|e| e.get_fun(f))
     }
 
     /// Declares a new function in the context.
-    fn add_fun(&mut self, fun_def: impl Into<FunSig>) {
+    fn add_fun(&mut self, fun_def: impl Into<ast::FunSig>) {
         // Functions are always inserted in the topmost scope
         self.env.last_mut().unwrap().add_fun(fun_def);
     }
 }
 
-impl Visitor for Typer {
-    type EOutput = Ty;
-    type SOutput = ();
+impl SelfVisitor for Typer {
+    type EOutput = (Expr, Ty);
+    type SOutput = Stmt;
+    type BOutput = (Block, Ty);
+    type FOutput = Fun;
+    type POutput = Program;
 
-    fn visit_expr(&mut self, e: &Expr) -> Ty {
+    fn visit_expr(&mut self, e: ast::Expr) -> (Expr, Ty) {
         use Expr::*;
         match e {
-            UnitE => UnitT,
-            IntegerE(_) => IntT,
-            VarE(v) => {
+            ast::Expr::UnitE => (UnitE, UnitT),
+            ast::Expr::IntegerE(i) => (IntegerE(i), IntT),
+            ast::Expr::VarE(v) => {
                 let vardef = self
-                    .get_var(v)
+                    .get_var(&v)
                     .unwrap_or_else(|| panic!("{v} does not exist in this context"));
-                vardef.ty.clone()
+                (VarE(v), vardef.ty.clone())
             }
-            CallE {
+            ast::Expr::CallE {
                 name,
                 args: args_exprs,
             } => {
-                let args: Vec<Ty> = args_exprs.iter().map(|arg| self.visit_expr(arg)).collect();
+                let (args, args_ty): (Vec<Expr>, Vec<Ty>) = args_exprs
+                    .into_iter()
+                    .map(|arg| self.visit_expr(arg))
+                    .unzip();
                 let fun = self
-                    .get_fun(name)
+                    .get_fun(&name)
                     .unwrap_or_else(|| panic!("Function {name} does not exist in this scope"));
 
                 // Check the number of arguments.
@@ -171,7 +179,7 @@ impl Visitor for Typer {
 
                 // Check type of arguments.
                 for (i, (arg_ty, VarDef { ty: param_ty, .. })) in
-                    args.iter().zip(fun.params.iter()).enumerate()
+                    args_ty.iter().zip(fun.params.iter()).enumerate()
                 {
                     assert_eq!(
                         arg_ty, param_ty,
@@ -179,12 +187,12 @@ impl Visitor for Typer {
                     );
                 }
 
-                fun.ret_ty.clone()
+                (CallE { name, args }, fun.ret_ty.clone())
             }
-            IfE(box cond, box iftrue, box iffalse) => {
-                let cond_ty = self.visit_expr(cond);
-                let iftrue_ty = self.visit_block(iftrue);
-                let iffalse_ty = self.visit_block(iffalse);
+            ast::Expr::IfE(box cond, box iftrue, box iffalse) => {
+                let (cond, cond_ty) = self.visit_expr(cond);
+                let (iftrue, iftrue_ty) = self.visit_block(iftrue);
+                let (iffalse, iffalse_ty) = self.visit_block(iffalse);
                 assert_eq!(
                     cond_ty, BoolT,
                     "condition {cond:?} should compute to a boolean value"
@@ -193,23 +201,24 @@ impl Visitor for Typer {
                     iftrue_ty, iffalse_ty,
                     "if and else branches should have the same type"
                 );
-                iftrue_ty
+                (IfE(boxed(cond), boxed(iftrue), boxed(iffalse)), iftrue_ty)
             }
-            BlockE(e) => self.visit_block(e),
+            ast::Expr::BlockE(box e) => {
+                let (b, ty) = self.visit_block(e);
+                (BlockE(boxed(b)), ty)
+            }
         }
     }
 
-    fn visit_block(&mut self, b: &Block) -> Ty {
+    fn visit_block(&mut self, b: ast::Block) -> (Block, Ty) {
         self.push_scope();
-        for s in &b.stmts {
-            self.visit_stmt(s);
-        }
-        let final_ty = self.visit_expr(&b.ret);
+        let stmts = b.stmts.into_iter().map(|s| self.visit_stmt(s)).collect();
+        let (ret, final_ty) = self.visit_expr(b.ret);
         self.pop_scope().unwrap();
-        final_ty
+        (Block { stmts, ret }, final_ty)
     }
 
-    fn visit_fun(&mut self, f: &Fun) {
+    fn visit_fun(&mut self, f: ast::Fun) -> Fun {
         // Add the function signature to the context before visiting the body
         // to allow for recursion
         self.add_fun(f.signature());
@@ -219,19 +228,27 @@ impl Visitor for Typer {
             self.add_var(arg.clone());
         }
 
-        let body_ty = self.visit_block(&f.body);
+        let (body, body_ty) = self.visit_block(f.body);
         assert_eq!(
             body_ty, f.ret_ty,
             "the body should return a value of type {}, got {body_ty} instead",
             f.ret_ty,
         );
+
+        Fun {
+            name: f.name,
+            params: f.params,
+            ret_ty: f.ret_ty,
+            body,
+        }
     }
 
-    fn visit_stmt(&mut self, s: &Stmt) {
+    fn visit_stmt(&mut self, s: ast::Stmt) -> Stmt {
+        use Stmt::*;
         match s {
-            Stmt::Declare(vardef, expr) => {
+            ast::Stmt::Declare(vardef, expr) => {
                 self.add_var(vardef.clone());
-                let expr_ty = self.visit_expr(expr);
+                let (expr, expr_ty) = self.visit_expr(expr);
 
                 // Check the type
                 assert_eq!(
@@ -239,26 +256,38 @@ impl Visitor for Typer {
                     "expression type ({expr_ty}) of {expr:?} should match type annotation ({})",
                     vardef.ty
                 );
+
+                Declare(vardef, expr)
             }
-            Stmt::Assign(var, expr) => {
-                let expr_ty = self.visit_expr(expr);
+            ast::Stmt::Assign(var, expr) => {
+                let (expr, expr_ty) = self.visit_expr(expr);
                 let vardef = self
-                    .get_var(var)
+                    .get_var(&var)
                     .unwrap_or_else(|| panic!("Assigning to an undeclared variable {var}"));
 
                 // Check the type
                 assert_eq!(vardef.ty, expr_ty, "expression type ({expr_ty}) of {expr:?} should match the type of variable {var} ({})", vardef.ty);
+                Assign(var, expr)
             }
-            Stmt::While { cond, body } => {
-                let cond_ty = self.visit_expr(cond);
+            ast::Stmt::While { cond, body } => {
+                let (cond, cond_ty) = self.visit_expr(cond);
                 assert_eq!(
                     cond_ty, BoolT,
                     "condition {cond:?} should compute to a boolean value"
                 );
-                self.visit_block(body);
+                let (body, body_ty) = self.visit_block(body);
+                assert_eq!(
+                    body_ty, UnitT,
+                    "body of expression should not return anything"
+                );
+                While { cond, body }
             }
-            Stmt::ExprS(e) => self.visit_expr(e).into(),
+            ast::Stmt::ExprS(e) => ExprS(self.visit_expr(e).0),
         }
+    }
+
+    fn visit_program(&mut self, p: ast::Program) -> Program {
+        p.into_iter().map(|f| self.visit_fun(f)).collect()
     }
 }
 
