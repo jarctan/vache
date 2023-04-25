@@ -31,7 +31,7 @@ fn multiple_refs() {
                         Declare(vardef("even2", BoolT), call("is_even", vec![var("n")])),
                         Declare(vardef("n", IntT), int(11)),
                         Declare(vardef("even3", BoolT), call("is_even", vec![var("n")])),
-                        call_stmt("print", vec![var("even1"), var("even2"), var("even3")]),
+                        print(vec![var("even1"), var("even2"), var("even3")]),
                     ],
                     ret: UnitE,
                 },

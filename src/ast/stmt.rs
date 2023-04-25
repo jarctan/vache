@@ -20,6 +20,12 @@ pub enum Stmt {
     },
 }
 
+/// Shortcut to print several expressions in our program.
+pub fn print(stmts: impl IntoIterator<Item = Expr>) -> Stmt {
+    Stmt::ExprS(super::expr::call("print", stmts))
+}
+
+/// Shortcut to make a call.
 pub fn call_stmt(name: impl ToString, stmts: impl IntoIterator<Item = Expr>) -> Stmt {
     Stmt::ExprS(super::expr::call(name, stmts))
 }

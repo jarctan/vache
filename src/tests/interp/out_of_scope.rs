@@ -14,7 +14,7 @@ fn out_of_scope() {
                         Declare(vardef("p", IntT), int(24)),
                         Assign(Var::from("n"), var("p")),
                     ])),
-                    call_stmt("print", vec![var("n")]),
+                    print(vec![var("n")]),
                 ],
                 ret: UnitE,
             },
