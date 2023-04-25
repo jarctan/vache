@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn simple_fun() {
-    check(vec![Fun {
+    test(vec![Fun {
         name: "simple".to_string(),
         params: vec![vardef("n", IntT)],
         ret_ty: UnitT,

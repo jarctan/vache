@@ -3,7 +3,7 @@ use super::*;
 /// Ceil modulo 2.
 #[test]
 fn ceil_mod_2() {
-    compile(check({
+    test({
         let f1 = Fun {
             name: "is_even".to_string(),
             params: vec![vardef("n", IntT)],
@@ -29,5 +29,5 @@ fn ceil_mod_2() {
         };
 
         vec![f1, f2]
-    }));
+    });
 }

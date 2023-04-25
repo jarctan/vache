@@ -2,6 +2,7 @@
 
 use slab::Slab;
 use std::{collections::HashMap, fmt};
+use string_builder::Builder as StringBuilder;
 
 use crate::tast::{Block, Expr, Fun, Program, Stmt, Var};
 use Expr::*;
@@ -61,12 +62,15 @@ pub(crate) struct Interpreter<'a> {
     env: Vec<Env>,
     /// Map between function names and their definition.
     fun_env: &'a HashMap<String, Fun>,
+    /// Standard output, as a growable string.
+    stdout: StringBuilder,
 }
 
 /// Runs the interpreter on a given program.
 ///
 /// It will jump to and execute function `main`.
-pub fn interpret(p: Program) {
+/// Returns the output of the program, as a `String`.
+pub fn interpret(p: Program) -> String {
     let mut fun_env = HashMap::new();
 
     // Add all functions to the context.
@@ -78,8 +82,11 @@ pub fn interpret(p: Program) {
     let mut i = Interpreter {
         env: vec![Env::default()],
         fun_env: &fun_env,
+        stdout: StringBuilder::default(),
     };
     i.call("main", vec![]);
+
+    i.stdout.string().unwrap()
 }
 
 impl<'a> Interpreter<'a> {
@@ -115,9 +122,9 @@ impl<'a> Interpreter<'a> {
             "print" => {
                 for &arg in args {
                     let val = self.get_value(arg);
-                    print!("{val} ");
+                    self.stdout.append(format!("{val} "));
                 }
-                println!();
+                self.stdout.append("\n");
                 Some(self.add_value(UnitV))
             }
             _ => None,

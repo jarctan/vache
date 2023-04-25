@@ -40,9 +40,11 @@ pub fn compile(p: tast::Program) -> String {
     compiler.compile(p)
 }
 
-/// Compiles a given program.
+/// Interprets a given program.
 ///
-/// Under the hood, in charge of allocating a new `Compiler` and launching it on your program.
-pub fn interp(p: tast::Program) {
+/// Under the hood, it will allocate a new `Interpreter` and launch it on your program.
+/// It will call the function `main` within your program and return the standard output
+/// of your program.
+pub fn interp(p: tast::Program) -> String {
     interp::interpret(p)
 }

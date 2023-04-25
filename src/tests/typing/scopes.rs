@@ -4,7 +4,7 @@ use super::*;
 #[test]
 #[should_panic]
 fn wrong_nested_scopes() {
-    check(vec![Fun {
+    test(vec![Fun {
         name: "wrong_scopes".to_string(),
         params: vec![],
         ret_ty: UnitT,
@@ -17,7 +17,7 @@ fn wrong_nested_scopes() {
 
 #[test]
 fn nested_scopes() {
-    check(vec![Fun {
+    test(vec![Fun {
         name: "nested_scopes".to_string(),
         params: vec![],
         ret_ty: UnitT,

@@ -3,7 +3,7 @@ use super::*;
 /// Fibonacci example.
 #[test]
 fn fibo() {
-    compile(check(vec![Fun {
+    test(vec![Fun {
         name: "fibo".to_string(),
         params: vec![vardef("n", IntT)],
         ret_ty: IntT,
@@ -28,5 +28,5 @@ fn fibo() {
                 }),
             ),
         },
-    }]));
+    }]);
 }

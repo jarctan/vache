@@ -3,7 +3,7 @@ use super::*;
 /// Fibonacci example.
 #[test]
 fn basic_lifetime() {
-    check(vec![Fun {
+    test(vec![Fun {
         name: "main".to_string(),
         params: vec![],
         ret_ty: UnitT,

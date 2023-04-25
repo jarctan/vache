@@ -10,11 +10,3 @@ pub struct Block {
     /// Final return expression.
     pub ret: Expr,
 }
-
-/// Creates a block only made of an expression.
-pub fn expr(expr: Expr) -> Block {
-    Block {
-        stmts: vec![],
-        ret: expr,
-    }
-}
