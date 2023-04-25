@@ -120,10 +120,18 @@ impl<'a> Interpreter<'a> {
             "<=" => self.int_binop(|x, y| BoolV(x <= y), args),
             "<" => self.int_binop(|x, y| BoolV(x < y), args),
             "print" => {
+                let mut args = args.iter();
+                // Special case for the first item, which may not have a space before.
+                if let Some(&arg) = args.next() {
+                    let val = self.get_value(arg);
+                    self.stdout.append(format!("{val}"));
+                }
+
                 for &arg in args {
                     let val = self.get_value(arg);
-                    self.stdout.append(format!("{val} "));
+                    self.stdout.append(format!(" {val}"));
                 }
+
                 self.stdout.append("\n");
                 Some(self.add_value(UnitV))
             }

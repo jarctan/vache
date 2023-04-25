@@ -30,7 +30,7 @@ fn is_even() {
 
             vec![f1.clone(), f2]
         },
-        "true \n", // space here because of the way `print` prints
+        "true\n",
     );
 
     // is 11 even?
@@ -48,6 +48,6 @@ fn is_even() {
 
             vec![f1, f2]
         },
-        "false \n", // space here because of the way `print` prints
+        "false\n",
     );
 }
