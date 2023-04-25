@@ -5,9 +5,6 @@
 use super::{Block, Expr, Fun, Program, Stmt};
 
 /// Visitor of the AST.
-///
-/// By default, all functions for non-terminal nodes will just explore their children recursively.
-/// Override any method definition to change that behavior for any given node in the AST.
 pub trait SelfVisitor {
     /// Expression output.
     type EOutput;

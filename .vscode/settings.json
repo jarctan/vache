@@ -12,7 +12,10 @@
         "repr",
         "selfvisitor",
         "typer",
-        "unparse"
+        "unparse",
+        "vache",
+        "interp",
+        "chashmap"
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }

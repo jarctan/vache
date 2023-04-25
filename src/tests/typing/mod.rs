@@ -13,4 +13,4 @@ mod fibo;
 mod scopes;
 mod simple;
 
-use crate::check;
+use crate::{check, compile};
