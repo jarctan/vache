@@ -3,5 +3,5 @@
 use vache_lib::{check, compile};
 
 fn main() {
-    println!("{}", compile(check(vache_lib::examples::out_of_scope())));
+    println!("{}", compile(check(vache_lib::examples::is_11_even())));
 }

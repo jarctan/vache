@@ -25,11 +25,17 @@ impl Compiler {
     }
 
     /// Translate a type into a Rust type.
-    pub fn translate_type(&self, ty: Ty) -> TokenStream {
+    pub fn translate_type(&self, ty: Ty, show_lifetime: bool) -> TokenStream {
         match ty {
             UnitT => quote!(()),
             BoolT => quote!(bool),
-            IntT => quote!(Cow<'a, ::rug::Integer>),
+            IntT => {
+                if show_lifetime {
+                    quote!(Cow<'a, ::rug::Integer>)
+                } else {
+                    quote!(Cow<::rug::Integer>)
+                }
+            }
         }
     }
 }
@@ -123,14 +129,14 @@ impl SelfVisitor for Compiler {
             .into_iter()
             .map(|param| {
                 let name = format_ident!("{}", String::from(param.name));
-                let ty = self.translate_type(param.ty);
+                let ty = self.translate_type(param.ty, true);
                 quote! {
                     #name: #ty
                 }
             })
             .collect();
         let body = self.visit_block(f.body);
-        let ty = self.translate_type(f.ret_ty);
+        let ty = self.translate_type(f.ret_ty, true);
         if params.is_empty() {
             quote! {
                 pub fn #name(#(#params),*) -> #ty #body
@@ -147,8 +153,9 @@ impl SelfVisitor for Compiler {
             Declare(v, e) => {
                 let name = format_ident!("{}", String::from(v.name));
                 let e = self.visit_expr(e);
+                let ty = self.translate_type(v.ty, false);
                 quote! {
-                    let mut #name = #e;
+                    let mut #name: #ty = #e;
                 }
             }
             Assign(v, e) => {
