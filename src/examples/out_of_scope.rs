@@ -1,6 +1,8 @@
+//! Assigning to a variable to a stratum that lives longer.
+#![allow(missing_docs)]
+
 use super::*;
 
-#[allow(missing_docs)]
 pub fn out_of_scope() -> Program {
     vec![Fun {
         name: "main".to_string(),

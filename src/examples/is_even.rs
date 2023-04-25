@@ -1,3 +1,5 @@
+//! Basic "is_even" function.
+
 use super::*;
 
 /// Is n even.
