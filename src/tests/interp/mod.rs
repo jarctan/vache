@@ -1,6 +1,8 @@
 use super::*;
 
 mod is_even;
+mod multiple_refs;
+mod out_of_scope;
 
 fn test(p: Program, output: impl AsRef<str>) {
     assert_eq!(

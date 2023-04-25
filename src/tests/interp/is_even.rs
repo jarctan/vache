@@ -22,10 +22,10 @@ fn is_even() {
                 name: "main".to_string(),
                 params: vec![],
                 ret_ty: UnitT,
-                body: stmts(vec![ExprS(call(
+                body: stmts(vec![call_stmt(
                     "print",
                     vec![call("is_even", vec![int(10)])],
-                ))]),
+                )]),
             };
 
             vec![f1.clone(), f2]
@@ -40,10 +40,10 @@ fn is_even() {
                 name: "main".to_string(),
                 params: vec![],
                 ret_ty: UnitT,
-                body: stmts(vec![ExprS(call(
+                body: stmts(vec![call_stmt(
                     "print",
                     vec![call("is_even", vec![int(11)])],
-                ))]),
+                )]),
             };
 
             vec![f1, f2]

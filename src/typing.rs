@@ -2,10 +2,12 @@
 
 use std::collections::HashMap;
 
-use crate::ast;
 use crate::ast::fun::binop_int_sig;
 use crate::ast::SelfVisitor;
+use crate::ast::{self, boxed};
 use crate::tast::*;
+use unzip3::Unzip3;
+use Expr::*;
 use Ty::*;
 
 /// A typing environment.
@@ -111,12 +113,19 @@ impl Typer {
     }
 
     /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<ast::Var>) -> Option<&ast::VarDef> {
+    ///
+    /// It will return a reference into that definition, and the id of the stratum
+    /// in which the variables resides.
+    fn get_var(&self, v: impl AsRef<ast::Var>) -> Option<(&ast::VarDef, Stratum)> {
         // Iterate over environments in reverse (last declared first processed)
         // order
         // Returns the first environment that has that variable declared
         let v = v.as_ref();
-        self.env.iter().rev().find_map(|e| e.get_var(v))
+        self.env
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(i, e)| e.get_var(v).map(|x| (x, i)))
     }
 
     /// Declares a new variable in the context.
@@ -136,36 +145,44 @@ impl Typer {
         // Functions are always inserted in the topmost scope
         self.env.last_mut().unwrap().add_fun(fun_def);
     }
+
+    /// Returns the current stratum/scope id.
+    fn current_stratum(&self) -> usize {
+        self.env.len() - 1
+    }
 }
 
+/// Stratum/scope identifier.
+type Stratum = usize;
+
 impl SelfVisitor for Typer {
-    type EOutput = (Expr, Ty);
+    type EOutput = (Expr, Ty, Stratum);
     type SOutput = Stmt;
-    type BOutput = (Block, Ty);
+    type BOutput = (Block, Ty, Stratum);
     type FOutput = Fun;
     type POutput = Program;
 
-    fn visit_expr(&mut self, e: ast::Expr) -> (Expr, Ty) {
+    fn visit_expr(&mut self, e: ast::Expr) -> (Expr, Ty, Stratum) {
         use Expr::*;
         match e {
-            ast::Expr::UnitE => (UnitE, UnitT),
-            ast::Expr::IntegerE(i) => (IntegerE(i), IntT),
+            ast::Expr::UnitE => (UnitE, UnitT, self.current_stratum()),
+            ast::Expr::IntegerE(i) => (IntegerE(i), IntT, self.current_stratum()),
             ast::Expr::VarE(v) => {
-                let vardef = self
+                let (vardef, stm) = self
                     .get_var(&v)
                     .unwrap_or_else(|| panic!("{v} does not exist in this context"));
-                (VarE(v), vardef.ty.clone())
+                (VarE(v), vardef.ty.clone(), stm)
             }
             // Make a special case for `print` until we get generic functions so that we
             // can express `print` more elegantly with the other builtin functions.
             ast::Expr::CallE { name, args } if name == "print" => {
-                let (args, _): (Vec<Expr>, Vec<Ty>) =
-                    args.into_iter().map(|arg| self.visit_expr(arg)).unzip();
-                (CallE { name, args }, UnitT)
+                let (args, _, _): (Vec<Expr>, Vec<Ty>, Vec<Stratum>) =
+                    args.into_iter().map(|arg| self.visit_expr(arg)).unzip3();
+                (CallE { name, args }, UnitT, self.current_stratum())
             }
             ast::Expr::CallE { name, args } => {
-                let (args, args_ty): (Vec<Expr>, Vec<Ty>) =
-                    args.into_iter().map(|arg| self.visit_expr(arg)).unzip();
+                let (args, args_ty, _): (Vec<Expr>, Vec<Ty>, Vec<Stratum>) =
+                    args.into_iter().map(|arg| self.visit_expr(arg)).unzip3();
                 let fun = self
                     .get_fun(&name)
                     .unwrap_or_else(|| panic!("Function {name} does not exist in this scope"));
@@ -189,12 +206,16 @@ impl SelfVisitor for Typer {
                     );
                 }
 
-                (CallE { name, args }, fun.ret_ty.clone())
+                (
+                    CallE { name, args },
+                    fun.ret_ty.clone(),
+                    self.current_stratum(),
+                )
             }
             ast::Expr::IfE(box cond, box iftrue, box iffalse) => {
-                let (cond, cond_ty) = self.visit_expr(cond);
-                let (iftrue, iftrue_ty) = self.visit_block(iftrue);
-                let (iffalse, iffalse_ty) = self.visit_block(iffalse);
+                let (cond, cond_ty, _) = self.visit_expr(cond);
+                let (iftrue, iftrue_ty, true_stm) = self.visit_block(iftrue);
+                let (iffalse, iffalse_ty, false_stm) = self.visit_block(iffalse);
                 assert_eq!(
                     cond_ty, BoolT,
                     "condition {cond:?} should compute to a boolean value"
@@ -203,21 +224,25 @@ impl SelfVisitor for Typer {
                     iftrue_ty, iffalse_ty,
                     "if and else branches should have the same type"
                 );
-                (IfE(boxed(cond), boxed(iftrue), boxed(iffalse)), iftrue_ty)
+                (
+                    IfE(boxed(cond), boxed(iftrue), boxed(iffalse)),
+                    iftrue_ty,
+                    std::cmp::max(true_stm, false_stm),
+                )
             }
             ast::Expr::BlockE(box e) => {
-                let (b, ty) = self.visit_block(e);
-                (BlockE(boxed(b)), ty)
+                let (b, ty, stm) = self.visit_block(e);
+                (BlockE(boxed(b)), ty, stm)
             }
         }
     }
 
-    fn visit_block(&mut self, b: ast::Block) -> (Block, Ty) {
+    fn visit_block(&mut self, b: ast::Block) -> (Block, Ty, Stratum) {
         self.push_scope();
         let stmts = b.stmts.into_iter().map(|s| self.visit_stmt(s)).collect();
-        let (ret, final_ty) = self.visit_expr(b.ret);
+        let (ret, final_ty, stm) = self.visit_expr(b.ret);
         self.pop_scope().unwrap();
-        (Block { stmts, ret }, final_ty)
+        (Block { stmts, ret }, final_ty, stm)
     }
 
     fn visit_fun(&mut self, f: ast::Fun) -> Fun {
@@ -230,7 +255,7 @@ impl SelfVisitor for Typer {
             self.add_var(arg.clone());
         }
 
-        let (body, body_ty) = self.visit_block(f.body);
+        let (body, body_ty, _) = self.visit_block(f.body);
         assert_eq!(
             body_ty, f.ret_ty,
             "the body should return a value of type {}, got {body_ty} instead",
@@ -250,7 +275,7 @@ impl SelfVisitor for Typer {
         match s {
             ast::Stmt::Declare(vardef, expr) => {
                 self.add_var(vardef.clone());
-                let (expr, expr_ty) = self.visit_expr(expr);
+                let (expr, expr_ty, _) = self.visit_expr(expr);
 
                 // Check the type
                 assert_eq!(
@@ -262,22 +287,29 @@ impl SelfVisitor for Typer {
                 Declare(vardef, expr)
             }
             ast::Stmt::Assign(var, expr) => {
-                let (expr, expr_ty) = self.visit_expr(expr);
-                let vardef = self
+                let (expr, expr_ty, from_stm) = self.visit_expr(expr);
+                let (vardef, to_stm) = self
                     .get_var(&var)
                     .unwrap_or_else(|| panic!("Assigning to an undeclared variable {var}"));
 
                 // Check the type
                 assert_eq!(vardef.ty, expr_ty, "expression type ({expr_ty}) of {expr:?} should match the type of variable {var} ({})", vardef.ty);
-                Assign(var, expr)
+                Assign(
+                    var,
+                    if from_stm <= to_stm {
+                        expr
+                    } else {
+                        OwnE(boxed(expr))
+                    },
+                )
             }
             ast::Stmt::While { cond, body } => {
-                let (cond, cond_ty) = self.visit_expr(cond);
+                let (cond, cond_ty, _) = self.visit_expr(cond);
                 assert_eq!(
                     cond_ty, BoolT,
                     "condition {cond:?} should compute to a boolean value"
                 );
-                let (body, body_ty) = self.visit_block(body);
+                let (body, body_ty, _) = self.visit_block(body);
                 assert_eq!(
                     body_ty, UnitT,
                     "body of expression should not return anything"

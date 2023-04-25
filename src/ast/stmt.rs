@@ -1,4 +1,4 @@
-use super::{Block, Expr, Var, VarDef};
+use super::{boxed, Block, Expr, Var, VarDef};
 
 /// A statement.
 #[derive(Debug, Clone)]
@@ -18,6 +18,15 @@ pub enum Stmt {
         /// While body.
         body: Block,
     },
+}
+
+pub fn call_stmt(name: impl ToString, stmts: impl IntoIterator<Item = Expr>) -> Stmt {
+    Stmt::ExprS(super::expr::call(name, stmts))
+}
+
+/// Shortcut for a block statement.
+pub fn block_stmt(b: impl Into<Block>) -> Stmt {
+    Stmt::ExprS(Expr::BlockE(boxed(b.into())))
 }
 
 impl PartialEq for Stmt {

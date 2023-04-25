@@ -25,7 +25,7 @@ pub enum Expr {
     /// A block expression.
     BlockE(Box<Block>),
     /// Copies an expression.
-    Copy(Box<Block>),
+    CopyE(Box<Expr>),
     /// Owns an expression.
-    Own(Box<Block>),
+    OwnE(Box<Expr>),
 }

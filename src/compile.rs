@@ -81,13 +81,13 @@ impl SelfVisitor for Compiler {
                 }
             }
             BlockE(box e) => self.visit_block(e),
-            Copy(box b) => {
-                let b = self.visit_block(b);
-                quote!(__clone(&#b))
+            CopyE(box e) => {
+                let e = self.visit_expr(e);
+                quote!(__clone(&#e))
             }
-            Own(box b) => {
-                let b = self.visit_block(b);
-                quote!(Cow::Owned(#b.into_owned()))
+            OwnE(box e) => {
+                let e = self.visit_expr(e);
+                quote!(Cow::Owned(#e.into_owned()))
             }
         }
     }

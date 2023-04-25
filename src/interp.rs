@@ -283,8 +283,8 @@ impl Interpreter<'_> {
                 }
             }
             BlockE(box e) => self.visit_block(e),
-            Copy(box b) => self.visit_block(b), // no-op
-            Own(box b) => self.visit_block(b).to_owned(),
+            CopyE(box e) => self.visit_expr(e), // no-op
+            OwnE(box e) => self.visit_expr(e),
         }
     }
 
