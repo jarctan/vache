@@ -1,5 +1,6 @@
 use super::*;
 
+mod custom_addition;
 mod is_even;
 mod multiple_refs;
 mod out_of_scope;
