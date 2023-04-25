@@ -1,7 +1,8 @@
-//! Typing tests.
+//! List of examples.
 
-pub(crate) mod interp;
-pub(crate) mod typing;
+mod custom_addition;
+mod is_even;
+mod out_of_scope;
 
 pub use crate::ast::block::*;
 pub use crate::ast::expr::*;
@@ -13,4 +14,6 @@ pub use Expr::*;
 pub use Stmt::*;
 pub use Ty::*;
 
-use crate::examples;
+pub use custom_addition::*;
+pub use is_even::*;
+pub use out_of_scope::*;

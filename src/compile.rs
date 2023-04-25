@@ -1,6 +1,7 @@
 //! Compiler code.
 
 use proc_macro2::TokenStream;
+use string_builder::Builder as StringBuilder;
 
 use crate::tast::{Block, Expr, Fun, Program, SelfVisitor, Stmt, Ty};
 use Expr::*;
@@ -28,7 +29,7 @@ impl Compiler {
         match ty {
             UnitT => quote!(()),
             BoolT => quote!(bool),
-            IntT => quote!(Cow<::rug::Integer>),
+            IntT => quote!(Cow<'a, ::rug::Integer>),
         }
     }
 }
@@ -44,33 +45,45 @@ impl SelfVisitor for Compiler {
         match e {
             UnitE => quote!(()),
             IntegerE(i) => {
-                if let Some(bounded) = i.to_u64() {
-                    quote!(Cow(::rug::Integer::from_u64(#bounded)))
-                } else {
-                    let digits = i.to_string_radix(10);
-                    // NB: Room for optimization here
-                    quote!(Cow::Owned(::rug::Integer::from_string_radix(#digits, 10)))
-                }
+                let i = i.to_f64();
+                quote!(Cow::Owned(::rug::Integer::from_f64(#i).unwrap()))
             }
             VarE(v) => {
                 let varname = format_ident!("{}", String::from(v));
                 quote!(__clone(&#varname))
             }
             CallE { name, args } => {
-                let args = args.into_iter().map(|arg| self.visit_expr(arg));
-                let name = match &*name {
-                    "+" => "__add".to_string(),
-                    "-" => "__sub".to_string(),
-                    "*" => "__mul".to_string(),
-                    "/" => "__div".to_string(),
-                    "%" => "__rem".to_string(),
-                    "<" => "__lt".to_string(),
-                    ">" => "__gt".to_string(),
-                    "==" => "__eq".to_string(),
-                    _ => name,
-                };
-                let name = format_ident!("{name}");
-                quote!(#name(#(#args),*))
+                if name == "print" {
+                    let mut builder = StringBuilder::default();
+
+                    // Compute the format string
+                    let mut args_iter = args.iter();
+                    if args_iter.next().is_some() {
+                        builder.append("{}");
+                    }
+                    for _ in args_iter {
+                        builder.append(" {}");
+                    }
+
+                    let args = args.into_iter().map(|arg| self.visit_expr(arg));
+                    let fmt_str = builder.string().unwrap();
+                    quote!(println!(#fmt_str, #(#args),*))
+                } else {
+                    let args = args.into_iter().map(|arg| self.visit_expr(arg));
+                    let name = match &*name {
+                        "+" => "__add".to_string(),
+                        "-" => "__sub".to_string(),
+                        "*" => "__mul".to_string(),
+                        "/" => "__div".to_string(),
+                        "%" => "__rem".to_string(),
+                        "<" => "__lt".to_string(),
+                        ">" => "__gt".to_string(),
+                        "==" => "__eq".to_string(),
+                        _ => name,
+                    };
+                    let name = format_ident!("{name}");
+                    quote!(#name(#(#args),*))
+                }
             }
             IfE(box cond, box iftrue, box iffalse) => {
                 let cond = self.visit_expr(cond);
@@ -117,8 +130,15 @@ impl SelfVisitor for Compiler {
             })
             .collect();
         let body = self.visit_block(f.body);
-        quote! {
-            pub fn #name(#(#params),*) #body
+        let ty = self.translate_type(f.ret_ty);
+        if params.is_empty() {
+            quote! {
+                pub fn #name(#(#params),*) -> #ty #body
+            }
+        } else {
+            quote! {
+                pub fn #name<'a>(#(#params),*) -> #ty #body
+            }
         }
     }
 
@@ -128,7 +148,7 @@ impl SelfVisitor for Compiler {
                 let name = format_ident!("{}", String::from(v.name));
                 let e = self.visit_expr(e);
                 quote! {
-                    let #name = #e;
+                    let mut #name = #e;
                 }
             }
             Assign(v, e) => {

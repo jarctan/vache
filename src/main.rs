@@ -1,3 +1,7 @@
 //! Toy Stratum language compiler.
 
-fn main() {}
+use vache_lib::{check, compile};
+
+fn main() {
+    println!("{}", compile(check(vache_lib::examples::out_of_scope())));
+}

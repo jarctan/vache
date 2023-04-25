@@ -12,6 +12,7 @@ use typing::Typer;
 
 pub mod ast;
 mod compile;
+pub mod examples;
 mod interp;
 mod tast;
 #[cfg(test)]
