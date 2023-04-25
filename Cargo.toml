@@ -13,9 +13,9 @@ name = "vache"
 path = "src/main.rs"
 
 [dependencies]
-chashmap = "2.2.2"
 prettyplease = "0.2.4"
 proc-macro2 = "1.0.56"
 quote = "1.0.26"
 rug = "1.19.2"
+slab = "0.4.8"
 syn = "2.0.14"

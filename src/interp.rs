@@ -1,6 +1,7 @@
 //! Interpreter.
 
-use std::collections::HashMap;
+use slab::Slab;
+use std::{collections::HashMap, fmt};
 
 use crate::tast::{Block, Expr, Fun, Program, Stmt, Var};
 use Expr::*;
@@ -8,15 +9,28 @@ use Stmt::*;
 
 /// Execution environment.
 struct Env {
-    /// Map between vars and their definitions.
+    /// Slab of actual values.
+    slab: Slab<Value>,
+    /// Map between vars and their keys in the slab.
     var_env: HashMap<Var, ValueRef>,
 }
 impl Env {
     /// Creates a new, empty environment.
     fn new() -> Self {
         Self {
+            slab: Slab::new(),
             var_env: HashMap::new(),
         }
+    }
+
+    /// Gets a value from the environment, based on the key in the slab.
+    fn get_value(&self, key: usize) -> Option<&Value> {
+        self.slab.get(key)
+    }
+
+    /// Adds a value to that environment, returning the key to it in the slab.
+    fn add_value(&mut self, value: Value) -> usize {
+        self.slab.insert(value)
     }
 
     /// Gets the definition of a variable.
@@ -50,6 +64,8 @@ pub(crate) struct Interpreter<'a> {
 }
 
 /// Runs the interpreter on a given program.
+///
+/// It will jump to and execute function `main`.
 pub fn interpret(p: Program) {
     let mut fun_env = HashMap::new();
 
@@ -96,6 +112,14 @@ impl<'a> Interpreter<'a> {
             ">" => self.int_binop(|x, y| BoolV(x > y), args),
             "<=" => self.int_binop(|x, y| BoolV(x <= y), args),
             "<" => self.int_binop(|x, y| BoolV(x < y), args),
+            "print" => {
+                for &arg in args {
+                    let val = self.get_value(arg);
+                    print!("{val} ");
+                }
+                println!();
+                Some(self.add_value(UnitV))
+            }
             _ => None,
         }
     }
@@ -109,16 +133,30 @@ impl<'a> Interpreter<'a> {
             res
         } else {
             self.push_scope();
-            let f = self.fun_env.get(f_name).unwrap();
+            let f = self
+                .fun_env
+                .get(f_name)
+                .unwrap_or_else(|| panic!("Runtime error: {f_name} is not defined"));
+
+            // Check number of arguments.
+            assert_eq!(
+                f.params.len(),
+                args.len(),
+                "Runtime error: Mismatch in the number of arguments for function call to {}",
+                f.name
+            );
+
             // Introduce arguments in the typing context
             for (arg, value) in f.params.iter().zip(args.iter()) {
                 self.add_var(arg.name.clone(), *value);
             }
 
             let res = self.visit_block(&f.body).to_owned();
-            self.pop_scope();
 
-            res
+            // Request our value back!
+            let value = self.pop_scope(res).unwrap();
+
+            self.add_value(value)
         }
     }
 
@@ -128,10 +166,10 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Pops and removes the current scope.
-    fn pop_scope(&mut self) -> Option<()> {
+    fn pop_scope(&mut self, value: ValueRef) -> Option<Value> {
         // Refuse the pop the static environment
-        if self.env.len() >= 2 {
-            self.env.pop().map(|_| ())
+        if self.env.len() >= 2 && value.stratum == self.env.len() - 1 {
+            self.env.pop().map(|mut env| env.slab.remove(value.key))
         } else {
             None
         }
@@ -152,17 +190,21 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Adds a value to the dynamic store/slab.
-    fn add_value(&mut self, _value: Value) -> ValueRef {
-        todo!()
+    fn add_value(&mut self, value: Value) -> ValueRef {
+        ValueRef {
+            stratum: self.env.len() - 1,
+            key: self.env.last_mut().unwrap().add_value(value),
+        }
     }
 
     /// Gets a value from the dynamic store/slab.
-    fn get_value(&self, _value: ValueRef) -> &Value {
-        todo!()
+    fn get_value(&self, value: ValueRef) -> &Value {
+        self.env[value.stratum].get_value(value.key).unwrap()
     }
 }
 
 /// Values in our language.
+#[derive(Debug)]
 pub enum Value {
     /// Unit value.
     UnitV,
@@ -174,20 +216,35 @@ pub enum Value {
 
 use Value::*;
 
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UnitV => write!(f, "()"),
+            IntV(i) => write!(f, "{i}"),
+            BoolV(b) => write!(f, "{b}"),
+        }
+    }
+}
+
 impl Value {
     /// Truthiness of the value.
     pub fn truth(&self) -> bool {
         if let BoolV(b) = self {
             *b
         } else {
-            panic!("Requesting the truth value of something which is not a boolean")
+            panic!("Runtime error: Requesting the truth value of something which is not a boolean")
         }
     }
 }
 
 /// A reference to a value.
-#[derive(Clone, Copy)]
-pub struct ValueRef(usize);
+#[derive(Clone, Copy, Debug)]
+pub struct ValueRef {
+    /// Stratum/ environment number in which the value resides.
+    stratum: usize,
+    /// Key in the slab of that environment.
+    key: usize,
+}
 
 impl Interpreter<'_> {
     /// Executes an expression.
@@ -197,7 +254,7 @@ impl Interpreter<'_> {
             IntegerE(i) => self.add_value(IntV(i.clone())),
             VarE(v) => self
                 .get_var(v)
-                .expect("Runtime error: unknown variable {v}"),
+                .unwrap_or_else(|| panic!("Runtime error: unknown variable {v}")),
             CallE { name, args } => {
                 let args = args.iter().map(|arg| self.visit_expr(arg)).collect();
                 self.call(name, args)

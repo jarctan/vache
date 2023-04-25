@@ -156,14 +156,16 @@ impl SelfVisitor for Typer {
                     .unwrap_or_else(|| panic!("{v} does not exist in this context"));
                 (VarE(v), vardef.ty.clone())
             }
-            ast::Expr::CallE {
-                name,
-                args: args_exprs,
-            } => {
-                let (args, args_ty): (Vec<Expr>, Vec<Ty>) = args_exprs
-                    .into_iter()
-                    .map(|arg| self.visit_expr(arg))
-                    .unzip();
+            // Make a special case for `print` until we get generic functions so that we
+            // can express `print` more elegantly with the other builtin functions.
+            ast::Expr::CallE { name, args } if name == "print" => {
+                let (args, _): (Vec<Expr>, Vec<Ty>) =
+                    args.into_iter().map(|arg| self.visit_expr(arg)).unzip();
+                (CallE { name, args }, UnitT)
+            }
+            ast::Expr::CallE { name, args } => {
+                let (args, args_ty): (Vec<Expr>, Vec<Ty>) =
+                    args.into_iter().map(|arg| self.visit_expr(arg)).unzip();
                 let fun = self
                     .get_fun(&name)
                     .unwrap_or_else(|| panic!("Function {name} does not exist in this scope"));

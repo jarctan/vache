@@ -6,18 +6,14 @@ fn ceil_mod_2() {
     compile(check({
         let f1 = Fun {
             name: "is_even".to_string(),
-            params: vec![vardef("ivar_1", IntT)],
+            params: vec![vardef("n", IntT)],
             ret_ty: BoolT,
             body: Block {
                 stmts: vec![
-                    Declare(vardef("ivar_5", IntT), int(2)),
-                    Declare(
-                        vardef("ivar_2", IntT),
-                        binop(var("ivar_1"), "%", var("ivar_5")),
-                    ),
-                    Declare(vardef("ivar_3", IntT), int(0)),
+                    Declare(vardef("x", IntT), int(2)),
+                    Declare(vardef("res", IntT), binop(var("n"), "%", var("x"))),
                 ],
-                ret: binop(binop(var("ivar_2"), "%", var("ivar_3")), "==", int(1)),
+                ret: binop(var("res"), "==", int(0)),
             },
         };
 
