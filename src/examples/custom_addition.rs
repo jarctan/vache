@@ -6,7 +6,7 @@
 use super::*;
 
 #[allow(missing_docs)]
-pub fn custom_addition() -> Program {
+pub fn custom_addition() -> impl Into<Program> {
     vec![
         Fun {
             name: "add".to_string(),

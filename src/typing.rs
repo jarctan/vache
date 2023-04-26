@@ -160,6 +160,7 @@ impl SelfVisitor for Typer {
     type SOutput = Stmt;
     type BOutput = (Block, Ty, Stratum);
     type FOutput = Fun;
+    type TOutput = Struct;
     type POutput = Program;
 
     fn visit_expr(&mut self, e: ast::Expr) -> (Expr, Ty, Stratum) {
@@ -247,10 +248,6 @@ impl SelfVisitor for Typer {
     }
 
     fn visit_fun(&mut self, f: ast::Fun) -> Fun {
-        // Add the function signature to the context before visiting the body
-        // to allow for recursion
-        self.add_fun(f.signature());
-
         // Introduce arguments in the typing context
         for arg in &f.params {
             self.add_var(arg.clone());
@@ -325,7 +322,29 @@ impl SelfVisitor for Typer {
     }
 
     fn visit_program(&mut self, p: ast::Program) -> Program {
-        p.into_iter().map(|f| self.visit_fun(f)).collect()
+        let ast::Program { funs, structs } = p;
+
+        // Add the function signature to the context before visiting the body
+        // to allow for (mutual) recursion.
+        for (name, f) in &funs {
+            assert_eq!(*name, *f.name);
+            self.add_fun(f.signature());
+        }
+
+        Program {
+            funs: funs
+                .into_iter()
+                .map(|(name, f)| (name, self.visit_fun(f)))
+                .collect(),
+            structs: structs
+                .into_iter()
+                .map(|(name, s)| (name, self.visit_struct(s)))
+                .collect(),
+        }
+    }
+
+    fn visit_struct(&mut self, _s: ast::Struct) -> Struct {
+        todo!()
     }
 }
 

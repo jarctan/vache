@@ -15,7 +15,8 @@
         "unparse",
         "vache",
         "interp",
-        "chashmap"
+        "chashmap",
+        "funs"
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }

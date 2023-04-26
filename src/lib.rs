@@ -28,17 +28,17 @@ extern crate quote;
 /// there should of course be no panicking in the future, only `Result`s).
 ///
 /// Under the hood, this function is in charge of allocating a new `Typer` and launching it on your program.
-pub fn check(p: ast::Program) -> tast::Program {
+pub fn check(p: impl Into<ast::Program>) -> tast::Program {
     let mut typer = Typer::new();
-    typer.check(p)
+    typer.check(p.into())
 }
 
 /// Compiles a given program.
 ///
 /// Under the hood, in charge of allocating a new `Compiler` and launching it on your program.
-pub fn compile(p: tast::Program) -> String {
+pub fn compile(p: impl Into<tast::Program>) -> String {
     let mut compiler = Compiler::new();
-    compiler.compile(p)
+    compiler.compile(p.into())
 }
 
 /// Interprets a given program.
@@ -46,6 +46,6 @@ pub fn compile(p: tast::Program) -> String {
 /// Under the hood, it will allocate a new `Interpreter` and launch it on your program.
 /// It will call the function `main` within your program and return the standard output
 /// of your program.
-pub fn interp(p: tast::Program) -> String {
-    interp::interpret(p)
+pub fn interp(p: impl Into<tast::Program>) -> String {
+    interp::interpret(p.into())
 }

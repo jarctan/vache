@@ -3,7 +3,7 @@
 
 use super::*;
 
-pub fn out_of_scope() -> Program {
+pub fn out_of_scope() -> impl Into<Program> {
     vec![Fun {
         name: "main".to_string(),
         params: vec![],

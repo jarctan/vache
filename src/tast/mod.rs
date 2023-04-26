@@ -8,8 +8,8 @@ pub mod fun;
 pub mod program;
 pub mod selfvisitor;
 pub mod stmt;
-pub mod visitor;
 
+pub use crate::ast::structure::Struct;
 pub use crate::ast::ty::Ty;
 pub use crate::ast::var::{Var, VarDef};
 pub use block::Block;
@@ -18,4 +18,3 @@ pub use fun::{Fun, FunSig};
 pub use program::Program;
 pub use selfvisitor::SelfVisitor;
 pub use stmt::Stmt;
-pub use visitor::Visitor;

@@ -6,6 +6,6 @@ mod simple;
 
 use super::*;
 
-fn test(p: Program) {
-    crate::check(p);
+fn test(p: impl Into<Program>) {
+    crate::check(p.into());
 }

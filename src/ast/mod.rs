@@ -8,9 +8,9 @@ pub mod fun;
 pub mod program;
 pub mod selfvisitor;
 pub mod stmt;
+pub mod structure;
 pub mod ty;
 pub mod var;
-pub mod visitor;
 
 /// Alias for `Box::new()` to make it shorter and easier
 /// to use in manually-created ASTs.
@@ -24,6 +24,6 @@ pub use fun::{Fun, FunSig};
 pub use program::Program;
 pub use selfvisitor::SelfVisitor;
 pub use stmt::Stmt;
+pub use structure::Struct;
 pub use ty::Ty;
 pub use var::{Var, VarDef};
-pub use visitor::Visitor;

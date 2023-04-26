@@ -3,7 +3,7 @@
 use proc_macro2::TokenStream;
 use string_builder::Builder as StringBuilder;
 
-use crate::tast::{Block, Expr, Fun, Program, SelfVisitor, Stmt, Ty};
+use crate::tast::{Block, Expr, Fun, Program, SelfVisitor, Stmt, Struct, Ty};
 use Expr::*;
 use Stmt::*;
 use Ty::*;
@@ -52,6 +52,7 @@ impl SelfVisitor for Compiler {
     type SOutput = TokenStream;
     type BOutput = TokenStream;
     type FOutput = TokenStream;
+    type TOutput = TokenStream;
     type POutput = TokenStream;
 
     fn visit_expr(&mut self, e: Expr) -> TokenStream {
@@ -197,7 +198,19 @@ impl SelfVisitor for Compiler {
     }
 
     fn visit_program(&mut self, p: Program) -> TokenStream {
-        let p: Vec<TokenStream> = p.into_iter().map(|f| self.visit_fun(f)).collect();
-        quote!(#(#p)*)
+        let Program { funs, structs } = p;
+        let funs: Vec<TokenStream> = funs.into_values().map(|f| self.visit_fun(f)).collect();
+        let structs: Vec<TokenStream> = structs
+            .into_values()
+            .map(|s| self.visit_struct(s))
+            .collect();
+        quote! {
+            #(#structs)*
+            #(#funs)*
+        }
+    }
+
+    fn visit_struct(&mut self, s: Struct) -> TokenStream {
+        todo!()
     }
 }

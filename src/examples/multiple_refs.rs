@@ -3,7 +3,7 @@
 
 use super::*;
 
-pub fn multiple_refs() -> Program {
+pub fn multiple_refs() -> impl Into<Program> {
     vec![
         Fun {
             name: "is_even".to_string(),

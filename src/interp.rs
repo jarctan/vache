@@ -74,8 +74,8 @@ pub fn interpret(p: Program) -> String {
     let mut fun_env = HashMap::new();
 
     // Add all functions to the context.
-    for f in p {
-        fun_env.insert(f.name.clone(), f);
+    for (name, f) in p.funs {
+        fun_env.insert(name, f);
     }
 
     // Create the interpreter and run it.

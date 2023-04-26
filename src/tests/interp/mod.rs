@@ -6,9 +6,9 @@ mod is_even;
 mod multiple_refs;
 mod out_of_scope;
 
-fn test(p: Program, output: impl AsRef<str>) {
+fn test(p: impl Into<Program>, output: impl AsRef<str>) {
     assert_eq!(
-        crate::interp(crate::check(p)),
+        crate::interp(crate::check(p.into())),
         output.as_ref(),
         "Output mismatch"
     );

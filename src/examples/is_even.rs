@@ -19,7 +19,7 @@ pub fn is_even() -> Fun {
 }
 
 /// Is 10 even.
-pub fn is_10_even() -> Program {
+pub fn is_10_even() -> impl Into<Program> {
     let main = Fun {
         name: "main".to_string(),
         params: vec![],
@@ -34,7 +34,7 @@ pub fn is_10_even() -> Program {
 }
 
 /// Is 11 even.
-pub fn is_11_even() -> Program {
+pub fn is_11_even() -> impl Into<Program> {
     let main = Fun {
         name: "main".to_string(),
         params: vec![],

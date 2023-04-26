@@ -1,4 +1,13 @@
-use super::Fun;
+use std::collections::HashMap;
 
-/// A program: just a collection of functions.
-pub type Program = Vec<Fun>;
+use super::{Fun, Struct};
+
+/// A program: a collection of:
+/// * structures
+/// * functions
+pub struct Program {
+    /// Collection of functions defined in the program, indexed by their names.
+    pub funs: HashMap<String, Fun>,
+    /// Collection of structures defined in the program, indexed by their names.
+    pub structs: HashMap<String, Struct>,
+}
