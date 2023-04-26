@@ -167,6 +167,7 @@ impl SelfVisitor for Typer {
         match e {
             ast::Expr::UnitE => (UnitE, UnitT, self.current_stratum()),
             ast::Expr::IntegerE(i) => (IntegerE(i), IntT, self.current_stratum()),
+            ast::Expr::StringE(s) => (StringE(s), StrT, self.current_stratum()),
             ast::Expr::VarE(v) => {
                 let (vardef, stm) = self
                     .get_var(&v)

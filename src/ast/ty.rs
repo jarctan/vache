@@ -9,7 +9,11 @@ pub enum Ty {
     BoolT,
     /// An unbounded integer.
     IntT,
+    /// The string type.
+    StrT,
 }
+
+use Ty::*;
 
 impl Default for Ty {
     /// The default type: the unit type.
@@ -38,9 +42,10 @@ impl From<Ty> for () {
 impl fmt::Display for Ty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Ty::UnitT => write!(f, "()"),
-            Ty::BoolT => write!(f, "bool"),
-            Ty::IntT => write!(f, "int"),
+            UnitT => write!(f, "()"),
+            BoolT => write!(f, "bool"),
+            IntT => write!(f, "int"),
+            StrT => write!(f, "str"),
         }
     }
 }

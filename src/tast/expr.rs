@@ -11,6 +11,8 @@ pub enum Expr {
     UnitE,
     /// An unbounded integer.
     IntegerE(Integer),
+    /// A string.
+    StringE(String),
     /// A variable.
     VarE(VarDef),
     /// A function call.

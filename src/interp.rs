@@ -225,6 +225,8 @@ pub enum Value {
     UnitV,
     /// Integer value.
     IntV(rug::Integer),
+    /// String value.
+    StrV(String),
     /// Boolean value.
     BoolV(bool),
 }
@@ -236,6 +238,7 @@ impl fmt::Display for Value {
         match self {
             UnitV => write!(f, "()"),
             IntV(i) => write!(f, "{i}"),
+            StrV(s) => write!(f, "{s}"),
             BoolV(b) => write!(f, "{b}"),
         }
     }
@@ -267,6 +270,7 @@ impl Interpreter<'_> {
         match e {
             UnitE => self.add_value(UnitV),
             IntegerE(i) => self.add_value(IntV(i.clone())),
+            StringE(s) => self.add_value(StrV(s.clone())),
             VarE(v) => self
                 .get_var(v)
                 .unwrap_or_else(|| panic!("Runtime error: unknown variable {}", v.name)),

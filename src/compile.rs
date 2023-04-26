@@ -36,6 +36,13 @@ impl Compiler {
                     quote!(Cow<::rug::Integer>)
                 }
             }
+            StrT => {
+                if show_lifetime {
+                    quote!(Cow<'a, String>)
+                } else {
+                    quote!(Cow<String>)
+                }
+            }
         }
     }
 }
@@ -54,12 +61,16 @@ impl SelfVisitor for Compiler {
                 let i = i.to_f64();
                 quote!(Cow::Owned(::rug::Integer::from_f64(#i).unwrap()))
             }
+            StringE(s) => {
+                quote!(Cow::Owned(::std::string::String::from(#s)))
+            }
             VarE(v) => {
                 let varname = format_ident!("{}", String::from(v.name));
                 match v.ty {
                     UnitT => quote!(()),
                     BoolT => quote!(#varname),
                     IntT => quote!(__clone(&#varname)),
+                    StrT => quote!(__clone(&#varname)),
                 }
             }
             CallE { name, args } => {

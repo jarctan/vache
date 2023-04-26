@@ -11,6 +11,8 @@ pub enum Expr {
     UnitE,
     /// An unbounded integer.
     IntegerE(Integer),
+    /// A string.
+    StringE(String),
     /// A variable.
     VarE(Var),
     /// A function call.
@@ -36,6 +38,11 @@ pub fn var(v: impl ToString) -> Expr {
 /// Shortcut to create a constant integer `Expr` based on some integer value.
 pub fn int(value: impl Into<Integer>) -> Expr {
     IntegerE(value.into())
+}
+
+/// Shortcut to create a constant string `String` based on some string value.
+pub fn string(value: impl Into<String>) -> Expr {
+    StringE(value.into())
 }
 
 /// Shortcut to create a call `Expr`.
