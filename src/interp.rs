@@ -71,17 +71,10 @@ pub(crate) struct Interpreter<'a> {
 /// It will jump to and execute function `main`.
 /// Returns the output of the program, as a `String`.
 pub fn interpret(p: Program) -> String {
-    let mut fun_env = HashMap::new();
-
-    // Add all functions to the context.
-    for (name, f) in p.funs {
-        fun_env.insert(name, f);
-    }
-
     // Create the interpreter and run it.
     let mut i = Interpreter {
         env: vec![Env::default()],
-        fun_env: &fun_env,
+        fun_env: &p.funs,
         stdout: StringBuilder::default(),
     };
     i.call("main", vec![]);
@@ -229,6 +222,12 @@ pub enum Value {
     StrV(String),
     /// Boolean value.
     BoolV(bool),
+    /// Structure value.
+    ///
+    /// `StructV(name, fields)`
+    ///
+    /// We keep the name to display structures nicely in the end.
+    StructV(String, HashMap<String, ValueRef>),
 }
 
 use Value::*;
@@ -240,6 +239,13 @@ impl fmt::Display for Value {
             IntV(i) => write!(f, "{i}"),
             StrV(s) => write!(f, "{s}"),
             BoolV(b) => write!(f, "{b}"),
+            StructV(name, fields) => {
+                let mut display = f.debug_struct(name);
+                for (s, v) in fields {
+                    display.field(s, v);
+                }
+                display.finish()
+            }
         }
     }
 }
@@ -289,8 +295,21 @@ impl Interpreter<'_> {
             BlockE(box e) => self.visit_block(e),
             CopyE(box e) => self.visit_expr(e), // no-op
             OwnE(box e) => self.visit_expr(e),
-            FieldE(box _s, _field) => todo!(),
-            StructE { name: _, fields: _ } => todo!(),
+            FieldE(box strukt, field) => {
+                let strukt = self.visit_expr(strukt);
+                if let StructV(_, fields) = self.get_value(strukt) {
+                    fields[field]
+                } else {
+                    panic!("Runtime error: value should be a structure");
+                }
+            }
+            StructE { name, fields } => {
+                let fields = fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), self.visit_expr(v)))
+                    .collect();
+                self.add_value(StructV(name.to_owned(), fields))
+            }
         }
     }
 

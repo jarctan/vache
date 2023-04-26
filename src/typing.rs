@@ -246,7 +246,7 @@ impl SelfVisitor for Typer {
                 if let StructT(name) = ty {
                     let strukt = self.get_struct(&name).unwrap();
                     let ty = strukt.get_field(&field).clone();
-                    (s, ty, stm)
+                    (FieldE(boxed(s), field), ty, stm)
                 } else {
                     panic!("Cannot get a field of something which is not a struct");
                 }
@@ -263,7 +263,6 @@ impl SelfVisitor for Typer {
                     .map(|(name, expr)| (name, self.visit_expr(expr)))
                     .collect();
 
-                println!("getting {s_name}");
                 let strukt = self.get_struct(&s_name).unwrap();
 
                 // Check that the instance has the same field names as the declaration
