@@ -38,7 +38,7 @@ generate-docs:
   stage: build
   script:
     - cargo doc --no-deps
-    - cp -R target/doc/stratum ./public
+    - cp -R target/doc/vache ./public
   artifacts:
       paths:
       - public
