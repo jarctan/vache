@@ -2,10 +2,11 @@
 
 use std::collections::HashMap;
 
+use crate::ast;
 use crate::ast::fun::binop_int_sig;
 use crate::ast::SelfVisitor;
-use crate::ast::{self, boxed};
 use crate::tast::*;
+use crate::utils::{boxed, keys_match};
 use unzip3::Unzip3;
 use Expr::*;
 use Ty::*;
@@ -16,8 +17,6 @@ use Ty::*;
 struct Env {
     /// Map between vars and their definitions.
     var_env: HashMap<ast::Var, ast::VarDef>,
-    /// Map between function names and their definitions.
-    fun_env: HashMap<String, ast::FunSig>,
 }
 
 impl Env {
@@ -25,7 +24,6 @@ impl Env {
     fn new() -> Self {
         Self {
             var_env: HashMap::new(),
-            fun_env: HashMap::new(),
         }
     }
 
@@ -44,17 +42,6 @@ impl Env {
         let vardef = vardef.into();
         self.var_env.insert(vardef.name.to_owned(), vardef);
     }
-
-    /// Gets the definition of a function.
-    fn get_fun(&self, f: impl AsRef<str>) -> Option<&ast::FunSig> {
-        self.fun_env.get(f.as_ref())
-    }
-
-    /// Declares a new function in the context.
-    fn add_fun(&mut self, fun_def: impl Into<ast::FunSig>) {
-        let fun_def = fun_def.into();
-        self.fun_env.insert(fun_def.name.to_owned(), fun_def);
-    }
 }
 
 impl Default for Env {
@@ -66,6 +53,10 @@ impl Default for Env {
 /// A typer that will type-check some program by
 /// visiting it.
 pub(crate) struct Typer {
+    /// Map between function names and their definitions.
+    fun_env: HashMap<String, ast::FunSig>,
+    /// Map between function names and their definitions.
+    struct_env: HashMap<String, Struct>,
     /// The typing environment stack.
     env: Vec<Env>,
 }
@@ -73,8 +64,11 @@ pub(crate) struct Typer {
 impl Typer {
     /// Creates a new typer.
     pub fn new() -> Self {
-        let env = Env::default();
-        let mut typer = Self { env: vec![env] };
+        let mut typer = Self {
+            fun_env: HashMap::new(),
+            struct_env: HashMap::new(),
+            env: vec![Env::default()],
+        };
 
         // Add builtin function signatures.
         typer.add_fun(binop_int_sig("+", IntT));
@@ -136,14 +130,25 @@ impl Typer {
 
     /// Gets the definition of a function.
     fn get_fun(&self, f: impl AsRef<str>) -> Option<&ast::FunSig> {
-        let f = f.as_ref();
-        self.env.iter().rev().find_map(|e| e.get_fun(f))
+        self.fun_env.get(f.as_ref())
     }
 
     /// Declares a new function in the context.
     fn add_fun(&mut self, fun_def: impl Into<ast::FunSig>) {
-        // Functions are always inserted in the topmost scope
-        self.env.last_mut().unwrap().add_fun(fun_def);
+        let fun_def = fun_def.into();
+        self.fun_env.insert(fun_def.name.to_owned(), fun_def);
+    }
+
+    /// Gets the definition of a structure.
+    fn get_struct(&self, s: impl AsRef<str>) -> Option<&Struct> {
+        self.struct_env.get(s.as_ref())
+    }
+
+    /// Declares a new structure in the context.
+    fn add_struct(&mut self, struct_def: impl Into<Struct>) {
+        let struct_def = struct_def.into();
+        self.struct_env
+            .insert(struct_def.name.to_owned(), struct_def);
     }
 
     /// Returns the current stratum/scope id.
@@ -236,6 +241,59 @@ impl SelfVisitor for Typer {
                 let (b, ty, stm) = self.visit_block(e);
                 (BlockE(boxed(b)), ty, stm)
             }
+            ast::Expr::FieldE(box s, field) => {
+                let (s, ty, stm) = self.visit_expr(s);
+                if let StructT(name) = ty {
+                    let strukt = self.get_struct(&name).unwrap();
+                    let ty = strukt.get_field(&field).clone();
+                    (s, ty, stm)
+                } else {
+                    panic!("Cannot get a field of something which is not a struct");
+                }
+            }
+            ast::Expr::StructE {
+                name: s_name,
+                fields,
+            } => {
+                // Compute the type of the fields
+                // Because of borrowing rules, we need to do that before we immutably borrow
+                // `self` through `.get_struct()` since we need a mutable borrow into `self` here.
+                let fields = fields
+                    .into_iter()
+                    .map(|(name, expr)| (name, self.visit_expr(expr)))
+                    .collect();
+
+                println!("getting {s_name}");
+                let strukt = self.get_struct(&s_name).unwrap();
+
+                // Check that the instance has the same field names as the declaration
+                assert!(keys_match(&strukt.fields, &fields));
+
+                // Check that the type of each field matches the expected one
+                for (fname, (_, ty, _)) in &fields {
+                    let expected = strukt.get_field(fname);
+                    assert_eq!(
+                        expected, ty,
+                        "field `{fname}` of `{s_name}` should be of type {expected}, found {ty}"
+                    );
+                }
+
+                let static_stratum = 0;
+                let common_stm = fields
+                    .values()
+                    .fold(static_stratum, |s1, &(_, _, s2)| core::cmp::max(s1, s2));
+                (
+                    Expr::StructE {
+                        name: s_name.clone(),
+                        fields: fields
+                            .into_iter()
+                            .map(|(name, (e, _, _))| (name, e))
+                            .collect(),
+                    },
+                    StructT(s_name),
+                    common_stm,
+                )
+            }
         }
     }
 
@@ -324,27 +382,33 @@ impl SelfVisitor for Typer {
     fn visit_program(&mut self, p: ast::Program) -> Program {
         let ast::Program { funs, structs } = p;
 
-        // Add the function signature to the context before visiting the body
-        // to allow for (mutual) recursion.
+        // Add all function signatures to the context to allow for (mutual) recursion.
         for (name, f) in &funs {
             assert_eq!(*name, *f.name);
             self.add_fun(f.signature());
         }
 
+        // Note: order is important.
+        // We must visit structures first.
         Program {
-            funs: funs
-                .into_iter()
-                .map(|(name, f)| (name, self.visit_fun(f)))
-                .collect(),
             structs: structs
                 .into_iter()
                 .map(|(name, s)| (name, self.visit_struct(s)))
                 .collect(),
+            funs: funs
+                .into_iter()
+                .map(|(name, f)| (name, self.visit_fun(f)))
+                .collect(),
         }
     }
 
-    fn visit_struct(&mut self, _s: ast::Struct) -> Struct {
-        todo!()
+    fn visit_struct(&mut self, strukt: ast::Struct) -> Struct {
+        // TODO: do not return Struct in this function. Nor should we return
+        // Fun in `visit_fun`. We should just append them to the context and retrieve them
+        // all only at the end, in one go. This would avoid this disgraceful clone.
+        self.add_struct(strukt.clone());
+
+        strukt
     }
 }
 

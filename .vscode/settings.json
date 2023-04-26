@@ -15,8 +15,8 @@
         "unparse",
         "vache",
         "interp",
-        "chashmap",
-        "funs"
+        "funs",
+        "strukt" // alternative orthograph to avoid the `struct` keyword
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }

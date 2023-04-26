@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use rug::Integer;
 
 use super::{Block, Var};
+use crate::utils::boxed;
 
 /// An expression in the parser AST.
 ///
@@ -15,6 +18,15 @@ pub enum Expr {
     StringE(String),
     /// A variable.
     VarE(Var),
+    /// A field in a structure.
+    FieldE(Box<Expr>, String),
+    /// An instance of a structure.
+    StructE {
+        /// Name (identifier).
+        name: String,
+        /// Collection of field names and values.
+        fields: HashMap<String, Expr>,
+    },
     /// A function call.
     CallE {
         /// Name/identifier of the function.
@@ -50,6 +62,19 @@ pub fn call(name: impl ToString, stmts: impl IntoIterator<Item = Expr>) -> Expr 
     CallE {
         name: name.to_string(),
         args: stmts.into_iter().collect(),
+    }
+}
+
+/// Shortcut to create a `s.field` expression.
+pub fn field(e: Expr, member: impl ToString) -> Expr {
+    FieldE(boxed(e), member.to_string())
+}
+
+/// Shortcut to create a `MyStruct { (field: value)* }` expression.
+pub fn structure(name: impl ToString, fields: impl IntoIterator<Item = (String, Expr)>) -> Expr {
+    StructE {
+        name: name.to_string(),
+        fields: fields.into_iter().collect(),
     }
 }
 

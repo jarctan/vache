@@ -11,6 +11,10 @@ pub enum Ty {
     IntT,
     /// The string type.
     StrT,
+    /// Structures.
+    ///
+    /// Structures are identified by their names.
+    StructT(String),
 }
 
 use Ty::*;
@@ -46,6 +50,7 @@ impl fmt::Display for Ty {
             BoolT => write!(f, "bool"),
             IntT => write!(f, "int"),
             StrT => write!(f, "str"),
+            StructT(s) => write!(f, "{s}{{}}"),
         }
     }
 }

@@ -1,4 +1,5 @@
-use super::{boxed, Block, Expr, Var, VarDef};
+use super::{Block, Expr, Var, VarDef};
+use crate::utils::boxed;
 
 /// A statement.
 #[derive(Debug, Clone)]

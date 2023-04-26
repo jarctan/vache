@@ -9,6 +9,7 @@ pub use crate::ast::stmt::*;
 pub use crate::ast::ty::*;
 pub use crate::ast::var::*;
 pub use crate::ast::*;
+pub use crate::utils::boxed;
 pub use Expr::*;
 pub use Stmt::*;
 pub use Ty::*;

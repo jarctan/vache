@@ -289,6 +289,8 @@ impl Interpreter<'_> {
             BlockE(box e) => self.visit_block(e),
             CopyE(box e) => self.visit_expr(e), // no-op
             OwnE(box e) => self.visit_expr(e),
+            FieldE(box _s, _field) => todo!(),
+            StructE { name: _, fields: _ } => todo!(),
         }
     }
 

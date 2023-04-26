@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use rug::Integer;
 
 use super::{Block, VarDef};
@@ -15,6 +17,15 @@ pub enum Expr {
     StringE(String),
     /// A variable.
     VarE(VarDef),
+    /// A field in a structure.
+    FieldE(Box<Expr>, String),
+    /// An instance of a structure.
+    StructE {
+        /// Name (identifier).
+        name: String,
+        /// Collection of field names and values.
+        fields: HashMap<String, Expr>,
+    },
     /// A function call.
     CallE {
         /// Name/identifier of the function.

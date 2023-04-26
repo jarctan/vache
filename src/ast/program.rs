@@ -12,6 +12,16 @@ pub struct Program {
     pub structs: HashMap<String, Struct>,
 }
 
+impl Program {
+    /// Builds a program listing out of a list of structures and a list of functions.
+    pub fn new(structs: Vec<Struct>, funs: Vec<Fun>) -> Self {
+        Self {
+            funs: funs.into_iter().map(|f| (f.name.clone(), f)).collect(),
+            structs: structs.into_iter().map(|f| (f.name.clone(), f)).collect(),
+        }
+    }
+}
+
 impl From<Vec<Fun>> for Program {
     fn from(list: Vec<Fun>) -> Self {
         Program {

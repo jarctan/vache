@@ -12,12 +12,6 @@ pub mod structure;
 pub mod ty;
 pub mod var;
 
-/// Alias for `Box::new()` to make it shorter and easier
-/// to use in manually-created ASTs.
-pub fn boxed<T>(t: T) -> Box<T> {
-    Box::new(t)
-}
-
 pub use block::Block;
 pub use expr::Expr;
 pub use fun::{Fun, FunSig};

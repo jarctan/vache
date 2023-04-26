@@ -18,6 +18,7 @@ mod tast;
 #[cfg(test)]
 mod tests;
 mod typing;
+mod utils;
 
 #[macro_use]
 extern crate quote;

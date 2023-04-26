@@ -43,6 +43,7 @@ impl Compiler {
                     quote!(Cow<String>)
                 }
             }
+            StructT(_) => todo!(),
         }
     }
 }
@@ -72,6 +73,7 @@ impl SelfVisitor for Compiler {
                     BoolT => quote!(#varname),
                     IntT => quote!(__clone(&#varname)),
                     StrT => quote!(__clone(&#varname)),
+                    StructT(_) => todo!(),
                 }
             }
             CallE { name, args } => {
@@ -124,6 +126,8 @@ impl SelfVisitor for Compiler {
                 let e = self.visit_expr(e);
                 quote!(Cow::Owned(#e.into_owned()))
             }
+            FieldE(box _s, _field) => todo!(),
+            StructE { name: _, fields: _ } => todo!(),
         }
     }
 
@@ -210,7 +214,7 @@ impl SelfVisitor for Compiler {
         }
     }
 
-    fn visit_struct(&mut self, s: Struct) -> TokenStream {
+    fn visit_struct(&mut self, _: Struct) -> TokenStream {
         todo!()
     }
 }

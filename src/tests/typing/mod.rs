@@ -3,6 +3,7 @@ mod ceil_mod2;
 mod fibo;
 mod scopes;
 mod simple;
+mod structures;
 
 use super::*;
 
