@@ -171,7 +171,7 @@ impl SelfVisitor for Typer {
                 let (vardef, stm) = self
                     .get_var(&v)
                     .unwrap_or_else(|| panic!("{v} does not exist in this context"));
-                (VarE(v), vardef.ty.clone(), stm)
+                (VarE(vardef.clone()), vardef.ty.clone(), stm)
             }
             // Make a special case for `print` until we get generic functions so that we
             // can express `print` more elegantly with the other builtin functions.
@@ -295,7 +295,10 @@ impl SelfVisitor for Typer {
                 // Check the type
                 assert_eq!(vardef.ty, expr_ty, "expression type ({expr_ty}) of {expr:?} should match the type of variable {var} ({})", vardef.ty);
                 Assign(
-                    var,
+                    VarDef {
+                        name: var,
+                        ty: vardef.ty.clone(),
+                    },
                     if from_stm <= to_stm {
                         expr
                     } else {

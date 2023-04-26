@@ -1,4 +1,4 @@
-use super::{Block, Expr, Var, VarDef};
+use super::{Block, Expr, VarDef};
 
 /// A statement.
 #[derive(Debug, Clone)]
@@ -8,7 +8,7 @@ pub enum Stmt {
     /// defined in the 1st argument.
     Declare(VarDef, Expr),
     /// An assignment.
-    Assign(Var, Expr),
+    Assign(VarDef, Expr),
     /// An expression, whose final value is discarded.
     ExprS(Expr),
     /// A while statement.

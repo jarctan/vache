@@ -269,7 +269,7 @@ impl Interpreter<'_> {
             IntegerE(i) => self.add_value(IntV(i.clone())),
             VarE(v) => self
                 .get_var(v)
-                .unwrap_or_else(|| panic!("Runtime error: unknown variable {v}")),
+                .unwrap_or_else(|| panic!("Runtime error: unknown variable {}", v.name)),
             CallE { name, args } => {
                 let args = args.iter().map(|arg| self.visit_expr(arg)).collect();
                 self.call(name, args)
@@ -299,13 +299,9 @@ impl Interpreter<'_> {
     /// Executes a statement.
     fn visit_stmt(&mut self, s: &Stmt) {
         match s {
-            Declare(v, e) => {
+            Declare(v, e) | Assign(v, e) => {
                 let e = self.visit_expr(e);
                 self.add_var(v.name.clone(), e);
-            }
-            Assign(v, e) => {
-                let e = self.visit_expr(e);
-                self.add_var(v.clone(), e);
             }
             ExprS(e) => {
                 self.visit_expr(e);

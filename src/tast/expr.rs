@@ -1,6 +1,6 @@
 use rug::Integer;
 
-use super::{Block, Var};
+use super::{Block, VarDef};
 
 /// An expression in the parser AST.
 ///
@@ -12,7 +12,7 @@ pub enum Expr {
     /// An unbounded integer.
     IntegerE(Integer),
     /// A variable.
-    VarE(Var),
+    VarE(VarDef),
     /// A function call.
     CallE {
         /// Name/identifier of the function.

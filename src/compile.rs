@@ -55,8 +55,12 @@ impl SelfVisitor for Compiler {
                 quote!(Cow::Owned(::rug::Integer::from_f64(#i).unwrap()))
             }
             VarE(v) => {
-                let varname = format_ident!("{}", String::from(v));
-                quote!(__clone(&#varname))
+                let varname = format_ident!("{}", String::from(v.name));
+                match v.ty {
+                    UnitT => quote!(()),
+                    BoolT => quote!(#varname),
+                    IntT => quote!(__clone(&#varname)),
+                }
             }
             CallE { name, args } => {
                 if name == "print" {
@@ -159,7 +163,7 @@ impl SelfVisitor for Compiler {
                 }
             }
             Assign(v, e) => {
-                let name = format_ident!("{}", String::from(v));
+                let name = format_ident!("{}", String::from(v.name));
                 let e = self.visit_expr(e);
                 quote! {
                     #name = #e;
