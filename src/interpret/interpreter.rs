@@ -1,85 +1,26 @@
-//! Interpreter.
+//! Visiting the AST to execute the program.
+//!
+//! This is where the program is effectively being executed. This module ties all modules into one.
 
-use slab::Slab;
-use std::{collections::HashMap, fmt};
-use string_builder::Builder as StringBuilder;
-
-use crate::tast::{Block, Expr, Fun, Program, Stmt, Var};
+use super::value::{Value, ValueRef};
+use crate::tast::{Block, Expr, Fun, Stmt, Var};
+use std::collections::HashMap;
 use Expr::*;
 use Stmt::*;
+use Value::*;
 
-/// Execution environment.
-struct Env {
-    /// Slab of actual values.
-    slab: Slab<Value>,
-    /// Map between vars and their keys in the slab.
-    var_env: HashMap<Var, ValueRef>,
-}
-impl Env {
-    /// Creates a new, empty environment.
-    fn new() -> Self {
-        Self {
-            slab: Slab::new(),
-            var_env: HashMap::new(),
-        }
-    }
+use string_builder::Builder as StringBuilder;
 
-    /// Gets a value from the environment, based on the key in the slab.
-    fn get_value(&self, key: usize) -> Option<&Value> {
-        self.slab.get(key)
-    }
-
-    /// Adds a value to that environment, returning the key to it in the slab.
-    fn add_value(&mut self, value: Value) -> usize {
-        self.slab.insert(value)
-    }
-
-    /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<Var>) -> Option<&ValueRef> {
-        self.var_env.get(v.as_ref())
-    }
-
-    /// Declares a new variable in the context.
-    ///
-    /// # Panics
-    /// Panics if the var is not stated as declared in that stratum/environment.
-    /// You should only add a var definition in the stratum in which it is
-    /// tied to.
-    fn add_var(&mut self, name: impl Into<Var>, value: impl Into<ValueRef>) {
-        self.var_env.insert(name.into(), value.into());
-    }
-}
-
-impl Default for Env {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+use super::env::Env;
 
 /// Interpreter for our language.
 pub(crate) struct Interpreter<'a> {
     /// The execution environment stack.
-    env: Vec<Env>,
+    pub env: Vec<Env>,
     /// Map between function names and their definition.
-    fun_env: &'a HashMap<String, Fun>,
+    pub fun_env: &'a HashMap<String, Fun>,
     /// Standard output, as a growable string.
-    stdout: StringBuilder,
-}
-
-/// Runs the interpreter on a given program.
-///
-/// It will jump to and execute function `main`.
-/// Returns the output of the program, as a `String`.
-pub fn interpret(p: Program) -> String {
-    // Create the interpreter and run it.
-    let mut i = Interpreter {
-        env: vec![Env::default()],
-        fun_env: &p.funs,
-        stdout: StringBuilder::default(),
-    };
-    i.call("main", vec![]);
-
-    i.stdout.string().unwrap()
+    pub stdout: StringBuilder,
 }
 
 impl<'a> Interpreter<'a> {
@@ -133,7 +74,7 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Executes a call to a function in scope.
-    fn call(&mut self, f_name: impl AsRef<str>, args: Vec<ValueRef>) -> ValueRef {
+    pub fn call(&mut self, f_name: impl AsRef<str>, args: Vec<ValueRef>) -> ValueRef {
         let f_name = f_name.as_ref();
 
         // Override in case of builtin.
@@ -174,10 +115,15 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Pops and removes the current scope.
+    ///
+    /// Give as argument a value you want to retrieve before popping that scope,
+    /// and it will give it back to you. Now or never to retrieve values in the scope,
+    /// other will be freed!
     fn pop_scope(&mut self, value: ValueRef) -> Option<Value> {
         // Refuse the pop the static environment
+        // And refuse to pop if the requested value is not in that scope.
         if self.env.len() >= 2 && value.stratum == self.env.len() - 1 {
-            self.env.pop().map(|mut env| env.slab.remove(value.key))
+            self.env.pop().map(|env| env.close(value))
         } else {
             None
         }
@@ -209,65 +155,11 @@ impl<'a> Interpreter<'a> {
     fn get_value(&self, value: ValueRef) -> &Value {
         self.env[value.stratum].get_value(value.key).unwrap()
     }
-}
 
-/// Values in our language.
-#[derive(Debug)]
-pub enum Value {
-    /// Unit value.
-    UnitV,
-    /// Integer value.
-    IntV(rug::Integer),
-    /// String value.
-    StrV(String),
-    /// Boolean value.
-    BoolV(bool),
-    /// Structure value.
-    ///
-    /// `StructV(name, fields)`
-    ///
-    /// We keep the name to display structures nicely in the end.
-    StructV(String, HashMap<String, ValueRef>),
-}
-
-use Value::*;
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UnitV => write!(f, "()"),
-            IntV(i) => write!(f, "{i}"),
-            StrV(s) => write!(f, "{s}"),
-            BoolV(b) => write!(f, "{b}"),
-            StructV(name, fields) => {
-                let mut display = f.debug_struct(name);
-                for (s, v) in fields {
-                    display.field(s, v);
-                }
-                display.finish()
-            }
-        }
+    /// Returns the final standard output of the execution of the program.
+    pub fn stdout(self) -> String {
+        self.stdout.string().unwrap()
     }
-}
-
-impl Value {
-    /// Truthiness of the value.
-    pub fn truth(&self) -> bool {
-        if let BoolV(b) = self {
-            *b
-        } else {
-            panic!("Runtime error: Requesting the truth value of something which is not a boolean")
-        }
-    }
-}
-
-/// A reference to a value.
-#[derive(Clone, Copy, Debug)]
-pub struct ValueRef {
-    /// Stratum/ environment number in which the value resides.
-    stratum: usize,
-    /// Key in the slab of that environment.
-    key: usize,
 }
 
 impl Interpreter<'_> {

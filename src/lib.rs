@@ -13,7 +13,7 @@ use typing::Typer;
 pub mod ast;
 mod compile;
 pub mod examples;
-mod interp;
+mod interpret;
 mod tast;
 #[cfg(test)]
 mod tests;
@@ -48,5 +48,5 @@ pub fn compile(p: impl Into<tast::Program>) -> String {
 /// It will call the function `main` within your program and return the standard output
 /// of your program.
 pub fn interp(p: impl Into<tast::Program>) -> String {
-    interp::interpret(p.into())
+    interpret::interpret(p.into())
 }
