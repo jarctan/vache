@@ -1,6 +1,6 @@
 //! Typing.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use unzip3::Unzip3;
 use Expr::*;
@@ -58,6 +58,9 @@ pub(crate) struct Typer {
     fun_env: HashMap<String, ast::FunSig>,
     /// Map between function names and their definitions.
     struct_env: HashMap<String, Struct>,
+    /// Set of valid type names. Initialized at the very beginning,
+    /// allows to have mutually-referencing structures.
+    valid_type_names: HashSet<String>,
     /// The typing environment stack.
     env: Vec<Env>,
 }
@@ -68,6 +71,7 @@ impl Typer {
         let mut typer = Self {
             fun_env: HashMap::new(),
             struct_env: HashMap::new(),
+            valid_type_names: HashSet::new(),
             env: vec![Env::default()],
         };
 
@@ -155,6 +159,19 @@ impl Typer {
     /// Returns the current stratum/scope id.
     fn current_stratum(&self) -> usize {
         self.env.len() - 1
+    }
+
+    /// Checks that `ty` is well defined in the environment.
+    ///
+    /// In particular, unknown structure names will raise an error.
+    fn check_ty(&mut self, ty: &Ty) {
+        match ty {
+            UnitT | BoolT | IntT | StrT => (),
+            StructT(name) => assert!(
+                self.valid_type_names.contains(name),
+                "Unknown struct {name}"
+            ),
+        }
     }
 }
 
@@ -309,6 +326,7 @@ impl SelfVisitor for Typer {
     fn visit_fun(&mut self, f: ast::Fun) -> Fun {
         // Introduce arguments in the typing context
         for arg in &f.params {
+            self.check_ty(&arg.ty);
             self.add_var(arg.clone());
         }
 
@@ -333,6 +351,9 @@ impl SelfVisitor for Typer {
             ast::Stmt::Declare(vardef, expr) => {
                 self.add_var(vardef.clone());
                 let (expr, expr_ty, _) = self.visit_expr(expr);
+
+                // Check type declaration.
+                self.check_ty(&vardef.ty);
 
                 // Check the type
                 assert_eq!(
@@ -389,6 +410,15 @@ impl SelfVisitor for Typer {
             self.add_fun(f.signature());
         }
 
+        // Add all valid type names in the context, so they may be referenced
+        // everywhere.
+        for name in structs.keys() {
+            assert!(
+                self.valid_type_names.insert(name.clone()),
+                "{name} is defined twice"
+            );
+        }
+
         // Note: order is important.
         // We must visit structures first.
         Program {
@@ -404,6 +434,11 @@ impl SelfVisitor for Typer {
     }
 
     fn visit_struct(&mut self, strukt: ast::Struct) -> Struct {
+        // Check that all types in the structure exist.
+        for ty in strukt.fields.values() {
+            self.check_ty(ty);
+        }
+
         // TODO: do not return Struct in this function. Nor should we return
         // Fun in `visit_fun`. We should just append them to the context and retrieve
         // them all only at the end, in one go. This would avoid this
