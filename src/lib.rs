@@ -25,10 +25,12 @@ extern crate quote;
 
 /// Checks a given program.
 ///
-/// If it returns successfully, the program type-checked. Otherwise, it will panic (note: temporary behavior,
-/// there should of course be no panicking in the future, only `Result`s).
+/// If it returns successfully, the program type-checked. Otherwise, it will
+/// panic (note: temporary behavior, there should of course be no panicking in
+/// the future, only `Result`s).
 ///
-/// Under the hood, this function is in charge of allocating a new `Typer` and launching it on your program.
+/// Under the hood, this function is in charge of allocating a new `Typer` and
+/// launching it on your program.
 pub fn check(p: impl Into<ast::Program>) -> tast::Program {
     let mut typer = Typer::new();
     typer.check(p.into())
@@ -36,7 +38,8 @@ pub fn check(p: impl Into<ast::Program>) -> tast::Program {
 
 /// Compiles a given program.
 ///
-/// Under the hood, in charge of allocating a new `Compiler` and launching it on your program.
+/// Under the hood, in charge of allocating a new `Compiler` and launching it on
+/// your program.
 pub fn compile(p: impl Into<tast::Program>) -> String {
     let mut compiler = Compiler::new();
     compiler.compile(p.into())
@@ -44,9 +47,9 @@ pub fn compile(p: impl Into<tast::Program>) -> String {
 
 /// Interprets a given program.
 ///
-/// Under the hood, it will allocate a new `Interpreter` and launch it on your program.
-/// It will call the function `main` within your program and return the standard output
-/// of your program.
+/// Under the hood, it will allocate a new `Interpreter` and launch it on your
+/// program. It will call the function `main` within your program and return the
+/// standard output of your program.
 pub fn interp(p: impl Into<tast::Program>) -> String {
     interpret::interpret(p.into())
 }

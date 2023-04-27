@@ -1,7 +1,8 @@
 //! Wrap builtin addition in a new function, and implement it.
 //!
-//! Essentially an example to verify that giving twice the same argument leads to no problem, ie
-//! we preserve the value of our argument in the end and we compute the right thing.
+//! Essentially an example to verify that giving twice the same argument leads
+//! to no problem, ie we preserve the value of our argument in the end and we
+//! compute the right thing.
 
 use super::*;
 

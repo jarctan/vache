@@ -1,7 +1,8 @@
 //! Interpreter.
 
-use crate::tast::Program;
 use string_builder::Builder as StringBuilder;
+
+use crate::tast::Program;
 
 mod env;
 mod interpreter;

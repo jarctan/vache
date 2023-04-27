@@ -1,4 +1,5 @@
-//! Module for all helper functions that are not related in particular to any other module.
+//! Module for all helper functions that are not related in particular to any
+//! other module.
 
 use std::collections::HashMap;
 use std::hash::Hash;

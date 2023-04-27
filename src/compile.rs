@@ -2,11 +2,11 @@
 
 use proc_macro2::TokenStream;
 use string_builder::Builder as StringBuilder;
-
-use crate::tast::{Block, Expr, Fun, Program, SelfVisitor, Stmt, Struct, Ty};
 use Expr::*;
 use Stmt::*;
 use Ty::*;
+
+use crate::tast::{Block, Expr, Fun, Program, SelfVisitor, Stmt, Struct, Ty};
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
@@ -49,12 +49,12 @@ impl Compiler {
 }
 
 impl SelfVisitor for Compiler {
-    type EOutput = TokenStream;
-    type SOutput = TokenStream;
     type BOutput = TokenStream;
+    type EOutput = TokenStream;
     type FOutput = TokenStream;
-    type TOutput = TokenStream;
     type POutput = TokenStream;
+    type SOutput = TokenStream;
+    type TOutput = TokenStream;
 
     fn visit_expr(&mut self, e: Expr) -> TokenStream {
         match e {

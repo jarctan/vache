@@ -1,8 +1,9 @@
 use std::vec;
 
+use Ty::*;
+
 use super::var::vardef;
 use super::{Block, Ty, VarDef};
-use Ty::*;
 
 /// A function in the parser AST.
 #[derive(Debug, Clone)]

@@ -2,14 +2,15 @@
 
 use std::collections::HashMap;
 
+use unzip3::Unzip3;
+use Expr::*;
+use Ty::*;
+
 use crate::ast;
 use crate::ast::fun::binop_int_sig;
 use crate::ast::SelfVisitor;
 use crate::tast::*;
 use crate::utils::{boxed, keys_match};
-use unzip3::Unzip3;
-use Expr::*;
-use Ty::*;
 
 /// A typing environment.
 ///
@@ -108,8 +109,8 @@ impl Typer {
 
     /// Gets the definition of a variable.
     ///
-    /// It will return a reference into that definition, and the id of the stratum
-    /// in which the variables resides.
+    /// It will return a reference into that definition, and the id of the
+    /// stratum in which the variables resides.
     fn get_var(&self, v: impl AsRef<ast::Var>) -> Option<(&ast::VarDef, Stratum)> {
         // Iterate over environments in reverse (last declared first processed)
         // order
@@ -161,12 +162,12 @@ impl Typer {
 type Stratum = usize;
 
 impl SelfVisitor for Typer {
-    type EOutput = (Expr, Ty, Stratum);
-    type SOutput = Stmt;
     type BOutput = (Block, Ty, Stratum);
+    type EOutput = (Expr, Ty, Stratum);
     type FOutput = Fun;
-    type TOutput = Struct;
     type POutput = Program;
+    type SOutput = Stmt;
+    type TOutput = Struct;
 
     fn visit_expr(&mut self, e: ast::Expr) -> (Expr, Ty, Stratum) {
         use Expr::*;
@@ -257,7 +258,8 @@ impl SelfVisitor for Typer {
             } => {
                 // Compute the type of the fields
                 // Because of borrowing rules, we need to do that before we immutably borrow
-                // `self` through `.get_struct()` since we need a mutable borrow into `self` here.
+                // `self` through `.get_struct()` since we need a mutable borrow into `self`
+                // here.
                 let fields = fields
                     .into_iter()
                     .map(|(name, expr)| (name, self.visit_expr(expr)))
@@ -403,8 +405,9 @@ impl SelfVisitor for Typer {
 
     fn visit_struct(&mut self, strukt: ast::Struct) -> Struct {
         // TODO: do not return Struct in this function. Nor should we return
-        // Fun in `visit_fun`. We should just append them to the context and retrieve them
-        // all only at the end, in one go. This would avoid this disgraceful clone.
+        // Fun in `visit_fun`. We should just append them to the context and retrieve
+        // them all only at the end, in one go. This would avoid this
+        // disgraceful clone.
         self.add_struct(strukt.clone());
 
         strukt

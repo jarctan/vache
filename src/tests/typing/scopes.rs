@@ -1,6 +1,7 @@
 use super::*;
 
-/// We assign to a variable `e` another variable `d` which is already out of scope.
+/// We assign to a variable `e` another variable `d` which is already out of
+/// scope.
 #[test]
 #[should_panic]
 fn wrong_nested_scopes() {

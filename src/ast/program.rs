@@ -13,7 +13,8 @@ pub struct Program {
 }
 
 impl Program {
-    /// Builds a program listing out of a list of structures and a list of functions.
+    /// Builds a program listing out of a list of structures and a list of
+    /// functions.
     pub fn new(structs: Vec<Struct>, funs: Vec<Fun>) -> Self {
         Self {
             funs: funs.into_iter().map(|f| (f.name.clone(), f)).collect(),

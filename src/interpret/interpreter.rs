@@ -1,17 +1,18 @@
 //! Visiting the AST to execute the program.
 //!
-//! This is where the program is effectively being executed. This module ties all modules into one.
+//! This is where the program is effectively being executed. This module ties
+//! all modules into one.
 
-use super::value::{Value, ValueRef};
-use crate::tast::{Block, Expr, Fun, Stmt, Var};
 use std::collections::HashMap;
+
+use string_builder::Builder as StringBuilder;
 use Expr::*;
 use Stmt::*;
 use Value::*;
 
-use string_builder::Builder as StringBuilder;
-
 use super::env::Env;
+use super::value::{Value, ValueRef};
+use crate::tast::{Block, Expr, Fun, Stmt, Var};
 
 /// Interpreter for our language.
 pub(crate) struct Interpreter<'a> {
@@ -24,8 +25,8 @@ pub(crate) struct Interpreter<'a> {
 }
 
 impl<'a> Interpreter<'a> {
-    /// Shortcut to produce the result of a call to an integer binop operation `f`
-    /// that takes two integers and returns a value.
+    /// Shortcut to produce the result of a call to an integer binop operation
+    /// `f` that takes two integers and returns a value.
     fn int_binop(
         &mut self,
         f: impl Fn(&rug::Integer, &rug::Integer) -> Value,
@@ -39,7 +40,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Checks if we can apply builtin functions to the call to `f_name(..args)`.
+    /// Checks if we can apply builtin functions to the call to
+    /// `f_name(..args)`.
     fn check_builtin(&mut self, f_name: &str, args: &Vec<ValueRef>) -> Option<ValueRef> {
         match f_name {
             "+" => self.int_binop(|x, y| IntV((x + y).into()), args),
@@ -117,8 +119,8 @@ impl<'a> Interpreter<'a> {
     /// Pops and removes the current scope.
     ///
     /// Give as argument a value you want to retrieve before popping that scope,
-    /// and it will give it back to you. Now or never to retrieve values in the scope,
-    /// other will be freed!
+    /// and it will give it back to you. Now or never to retrieve values in the
+    /// scope, other will be freed!
     fn pop_scope(&mut self, value: ValueRef) -> Option<Value> {
         // Refuse the pop the static environment
         // And refuse to pop if the requested value is not in that scope.

@@ -1,9 +1,11 @@
 //! Defining the environment in which the program executes.
 
+use std::collections::HashMap;
+
+use slab::Slab;
+
 use super::value::{Value, ValueRef};
 use crate::tast::Var;
-use slab::Slab;
-use std::collections::HashMap;
 
 /// Execution environment.
 pub struct Env {
@@ -48,9 +50,9 @@ impl Env {
 
     /// Closes the environment, returning one final value from the slab.
     ///
-    /// Give the reference of the value you want to keep, and it will return it for you,
-    /// before closing the environment once and for all (and thus freeing all values in that
-    /// environment).
+    /// Give the reference of the value you want to keep, and it will return it
+    /// for you, before closing the environment once and for all (and thus
+    /// freeing all values in that environment).
     pub fn close(mut self, value: ValueRef) -> Value {
         self.slab.remove(value.key)
     }
