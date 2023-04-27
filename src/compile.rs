@@ -43,7 +43,14 @@ impl Compiler {
                     quote!(Cow<String>)
                 }
             }
-            StructT(_) => todo!(),
+            StructT(name) => {
+                let name = format_ident!("{}", name);
+                if show_lifetime {
+                    quote!(Cow<'a, #name>)
+                } else {
+                    quote!(Cow<#name>)
+                }
+            }
         }
     }
 }
@@ -68,13 +75,7 @@ impl SelfVisitor for Compiler {
             }
             VarE(v) => {
                 let varname = format_ident!("{}", String::from(v.name));
-                match v.ty {
-                    UnitT => quote!(()),
-                    BoolT => quote!(#varname),
-                    IntT => quote!(__clone(&#varname)),
-                    StrT => quote!(__clone(&#varname)),
-                    StructT(_) => todo!(),
-                }
+                quote!(#varname)
             }
             CallE { name, args } => {
                 if name == "print" {
@@ -126,8 +127,27 @@ impl SelfVisitor for Compiler {
                 let e = self.visit_expr(e);
                 quote!(Cow::Owned(#e.into_owned()))
             }
-            FieldE(box _s, _field) => todo!(),
-            StructE { name: _, fields: _ } => todo!(),
+            FieldE(box s, field) => {
+                let s = self.visit_expr(s);
+                let field = format_ident!("{field}");
+                quote!(#s.#field)
+            }
+            StructE { name, fields } => {
+                let name = format_ident!("{name}");
+                let fields: TokenStream = fields
+                    .into_iter()
+                    .map(|(k, e)| {
+                        let k = format_ident!("{k}");
+                        let e = self.visit_expr(e);
+                        quote!(#k: #e,)
+                    })
+                    .collect();
+                quote! (
+                    Cow::Owned(#name {
+                        #fields
+                    })
+                )
+            }
         }
     }
 
@@ -214,7 +234,22 @@ impl SelfVisitor for Compiler {
         }
     }
 
-    fn visit_struct(&mut self, _: Struct) -> TokenStream {
-        todo!()
+    fn visit_struct(&mut self, strukt: Struct) -> TokenStream {
+        let name = format_ident!("{}", strukt.name);
+        let fields: TokenStream = strukt
+            .fields
+            .into_iter()
+            .map(|(k, ty)| {
+                let k = format_ident!("{k}");
+                let ty = self.translate_type(ty, true);
+                quote!(#k: #ty,)
+            })
+            .collect();
+        quote!(
+            #[derive(Debug, Clone)]
+            pub struct #name<'a> {
+                #fields
+            }
+        )
     }
 }

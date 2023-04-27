@@ -3,5 +3,8 @@
 use vache_lib::{check, compile};
 
 fn main() {
-    println!("{}", compile(check(vache_lib::examples::multiple_refs())));
+    println!(
+        "{}",
+        compile(check(vache_lib::examples::struct_instantiation()))
+    );
 }

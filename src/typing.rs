@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use unzip3::Unzip3;
 use Expr::*;
 use Ty::*;
 
@@ -201,13 +200,33 @@ impl SelfVisitor for Typer {
             // Make a special case for `print` until we get generic functions so that we
             // can express `print` more elegantly with the other builtin functions.
             ast::Expr::CallE { name, args } if name == "print" => {
-                let (args, _, _): (Vec<Expr>, Vec<Ty>, Vec<Stratum>) =
-                    args.into_iter().map(|arg| self.visit_expr(arg)).unzip3();
+                let args = args
+                    .into_iter()
+                    .map(|arg| self.visit_expr(arg))
+                    .map(|(arg, ty, _)| {
+                        if !ty.copyable() {
+                            CopyE(boxed(arg)) // If we are not copyable,
+                                              // we ask to copy the Cow.
+                        } else {
+                            arg
+                        }
+                    })
+                    .collect();
                 (CallE { name, args }, UnitT, self.current_stratum())
             }
             ast::Expr::CallE { name, args } => {
-                let (args, args_ty, _): (Vec<Expr>, Vec<Ty>, Vec<Stratum>) =
-                    args.into_iter().map(|arg| self.visit_expr(arg)).unzip3();
+                let (args, args_ty): (Vec<Expr>, Vec<Ty>) = args
+                    .into_iter()
+                    .map(|arg| self.visit_expr(arg))
+                    .map(|(arg, ty, _)| {
+                        if !ty.copyable() {
+                            (CopyE(boxed(arg)), ty) // If we are not copyable,
+                                                    // we ask to copy the Cow.
+                        } else {
+                            (arg, ty)
+                        }
+                    })
+                    .unzip();
                 let fun = self
                     .get_fun(&name)
                     .unwrap_or_else(|| panic!("Function {name} does not exist in this scope"));
@@ -264,7 +283,7 @@ impl SelfVisitor for Typer {
                 if let StructT(name) = ty {
                     let strukt = self.get_struct(&name).unwrap();
                     let ty = strukt.get_field(&field).clone();
-                    (FieldE(boxed(s), field), ty, stm)
+                    (CopyE(boxed(FieldE(boxed(s), field))), ty, stm) // Choose to copy every time. TODO: do not copy on last use
                 } else {
                     panic!("Cannot get a field of something which is not a struct");
                 }

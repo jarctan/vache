@@ -19,6 +19,16 @@ pub enum Ty {
 
 use Ty::*;
 
+impl Ty {
+    /// Is this type `Copy` in Rust (no deep clone needed).
+    pub fn copyable(&self) -> bool {
+        match self {
+            UnitT | BoolT => true,
+            IntT | StrT | StructT(_) => false,
+        }
+    }
+}
+
 impl Default for Ty {
     /// The default type: the unit type.
     fn default() -> Self {
