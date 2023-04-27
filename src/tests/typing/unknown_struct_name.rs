@@ -1,3 +1,7 @@
+//! Checking that any reference to an undeclared structure name triggers an
+//! error, be it in the function parameters, variable declaration or in the
+//! fields of a structure declaration.
+
 use super::*;
 
 fn person_struct() -> Struct {
