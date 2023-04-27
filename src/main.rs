@@ -3,8 +3,5 @@
 use vache_lib::{check, compile};
 
 fn main() {
-    println!(
-        "{}",
-        compile(check(vache_lib::examples::struct_instantiation()))
-    );
+    println!("{}", compile(check(vache_lib::examples::change_field())));
 }

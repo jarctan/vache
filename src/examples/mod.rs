@@ -1,11 +1,13 @@
 //! List of examples.
 
+mod change_field;
 mod custom_addition;
 mod is_even;
 mod multiple_refs;
 mod out_of_scope;
 mod structure;
 
+pub use change_field::*;
 pub use custom_addition::*;
 pub use is_even::*;
 pub use multiple_refs::*;
