@@ -1,6 +1,8 @@
+//! Checking what happens when assigning to a variable that lives longer that
+//! the assigned expression.
+
 use super::*;
 
-/// Fibonacci example.
 #[test]
 fn basic_lifetime() {
     test(vec![Fun {

@@ -1,3 +1,6 @@
+//! Checking that we accept two mutually dependant struct declaration (A
+//! mentions B and vice versa).
+
 use super::*;
 
 #[test]

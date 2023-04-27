@@ -1,3 +1,6 @@
+//! Checking structure definition, and obvious errors like accessing an
+//! unknown field, wrong instantiation of a structure, etc.
+
 use super::*;
 
 fn person_struct() -> Struct {

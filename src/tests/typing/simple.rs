@@ -1,3 +1,5 @@
+//! Doing the most basic example ever.
+
 use super::*;
 
 #[test]
