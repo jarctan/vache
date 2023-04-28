@@ -17,10 +17,83 @@ impl Compiler {
         Self {}
     }
 
+    /// Producing the necessary prelude for all our outputs.
+    fn prelude() -> TokenStream {
+        quote!(
+            extern crate rug;
+            use std::borrow::{Cow, Borrow};
+            use std::ops::{Sub, Add, Rem, Mul, Div};
+
+            /// Prelude function.
+            pub(crate) fn __eq<B: PartialEq + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
+                let b1: &B = x.borrow();
+                let b2: &B = y.borrow();
+                b1 == b2
+            }
+
+            /// Prelude function.
+            pub(crate) fn __add<'a, B: Add<Output = B> + Clone>(
+                x: Cow<B>,
+                y: Cow<B>,
+            ) -> Cow<'a, B> {
+                Cow::Owned(x.into_owned() + y.into_owned())
+            }
+
+            /// Prelude function.
+            pub(crate) fn __sub<'a, B: Sub<Output = B> + Clone>(
+                x: Cow<B>,
+                y: Cow<B>,
+            ) -> Cow<'a, B> {
+                Cow::Owned(x.into_owned() - y.into_owned())
+            }
+
+            /// Prelude function.
+            pub(crate) fn __mul<'a, B: Mul<Output = B> + Clone>(
+                x: Cow<B>,
+                y: Cow<B>,
+            ) -> Cow<'a, B> {
+                Cow::Owned(x.into_owned() * y.into_owned())
+            }
+
+            /// Prelude function.
+            pub(crate) fn __div<'a, B: Div<Output = B> + Clone>(
+                x: Cow<B>,
+                y: Cow<B>,
+            ) -> Cow<'a, B> {
+                Cow::Owned(x.into_owned() / y.into_owned())
+            }
+
+            /// Prelude function.
+            pub(crate) fn __rem<'a, B: Rem<Output = B> + Clone>(
+                x: Cow<B>,
+                y: Cow<B>,
+            ) -> Cow<'a, B> {
+                Cow::Owned(x.into_owned() % y.into_owned())
+            }
+
+            /// Prelude function.
+            #[allow(clippy::ptr_arg)]
+            pub(crate) fn __clone<'a, B: ?Sized + ToOwned>(cow: &'a Cow<'a, B>) -> Cow<'a, B> {
+                match *cow {
+                    Cow::Borrowed(b) => Cow::Borrowed(b),
+                    Cow::Owned(ref o) => {
+                        let b: &'a B = o.borrow();
+                        Cow::Borrowed(b)
+                    }
+                }
+            }
+        )
+    }
+
     /// Compiles a program in our language into an executable source code.
     pub fn compile(&mut self, p: Program) -> String {
         let tokens = self.visit_program(p);
-        let file = syn::parse2(tokens).unwrap();
+        let prelude = Self::prelude();
+        let file = syn::parse2(quote! {
+            #prelude
+            #tokens
+        })
+        .unwrap();
         prettyplease::unparse(&file)
     }
 
@@ -45,11 +118,7 @@ impl Compiler {
             }
             StructT(name) => {
                 let name = format_ident!("{}", name);
-                if show_lifetime {
-                    quote!(Cow<'a, #name>)
-                } else {
-                    quote!(Cow<#name>)
-                }
+                quote!(#name)
             }
         }
     }
@@ -143,9 +212,9 @@ impl SelfVisitor for Compiler {
                     })
                     .collect();
                 quote! (
-                    Cow::Owned(#name {
+                    #name {
                         #fields
-                    })
+                    }
                 )
             }
         }
