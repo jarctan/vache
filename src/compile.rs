@@ -32,6 +32,41 @@ impl Compiler {
             }
 
             /// Prelude function.
+            pub(crate) fn __neq<B: PartialEq + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
+                let b1: &B = x.borrow();
+                let b2: &B = y.borrow();
+                b1 != b2
+            }
+
+            /// Prelude function.
+            pub(crate) fn __ge<B: PartialOrd + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
+                let b1: &B = x.borrow();
+                let b2: &B = y.borrow();
+                b1 >= b2
+            }
+
+            /// Prelude function.
+            pub(crate) fn __gt<B: PartialOrd + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
+                let b1: &B = x.borrow();
+                let b2: &B = y.borrow();
+                b1 > b2
+            }
+
+            /// Prelude function.
+            pub(crate) fn __le<B: PartialOrd + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
+                let b1: &B = x.borrow();
+                let b2: &B = y.borrow();
+                b1 <= b2
+            }
+
+            /// Prelude function.
+            pub(crate) fn __lt<B: PartialOrd + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
+                let b1: &B = x.borrow();
+                let b2: &B = y.borrow();
+                b1 < b2
+            }
+
+            /// Prelude function.
             pub(crate) fn __add<'a, B: Add<Output = B> + Clone>(
                 x: Cow<B>,
                 y: Cow<B>,
@@ -175,6 +210,7 @@ impl SelfVisitor for Compiler {
                         "<=" => "__le".to_string(),
                         ">=" => "__ge".to_string(),
                         "==" => "__eq".to_string(),
+                        "!=" => "__neq".to_string(),
                         _ => name,
                     };
                     let name = format_ident!("{name}");
