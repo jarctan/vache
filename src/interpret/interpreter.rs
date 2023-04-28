@@ -225,7 +225,7 @@ impl Interpreter<'_> {
             ExprS(e) => {
                 self.visit_expr(e);
             }
-            While { cond, body } => {
+            WhileS { cond, body } => {
                 while {
                     let e = self.visit_expr(cond);
                     self.get_value(e).truth()

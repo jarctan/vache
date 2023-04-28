@@ -403,7 +403,7 @@ impl SelfVisitor for Typer {
                     },
                 )
             }
-            ast::Stmt::While { cond, body } => {
+            ast::Stmt::WhileS { cond, body } => {
                 let (cond, cond_ty, _) = self.visit_expr(cond);
                 assert_eq!(
                     cond_ty, BoolT,
@@ -414,7 +414,7 @@ impl SelfVisitor for Typer {
                     body_ty, UnitT,
                     "body of expression should not return anything"
                 );
-                While { cond, body }
+                WhileS { cond, body }
             }
             ast::Stmt::ExprS(e) => ExprS(self.visit_expr(e).0),
         }

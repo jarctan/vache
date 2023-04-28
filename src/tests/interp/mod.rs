@@ -7,6 +7,7 @@ mod is_even;
 mod multiple_refs;
 mod out_of_scope;
 mod structures;
+mod while_loop;
 
 fn test(p: impl Into<Program>, output: impl AsRef<str>) {
     assert_eq!(

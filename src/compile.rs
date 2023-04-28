@@ -172,6 +172,8 @@ impl SelfVisitor for Compiler {
                         "%" => "__rem".to_string(),
                         "<" => "__lt".to_string(),
                         ">" => "__gt".to_string(),
+                        "<=" => "__le".to_string(),
+                        ">=" => "__ge".to_string(),
                         "==" => "__eq".to_string(),
                         _ => name,
                     };
@@ -280,7 +282,7 @@ impl SelfVisitor for Compiler {
                     #e;
                 }
             }
-            While { cond, body } => {
+            WhileS { cond, body } => {
                 let cond = self.visit_expr(cond);
                 let body = self.visit_block(body);
                 quote! {
