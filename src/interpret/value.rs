@@ -70,15 +70,6 @@ impl Value {
             panic!("Runtime error: Requesting the truth value of something which is not a boolean")
         }
     }
-
-    /// Is the value the uninitialized value?
-    pub fn is_uninit(&self) -> bool {
-        if let UninitV = self {
-            true
-        } else {
-            false
-        }
-    }
 }
 
 /// A reference to a value.

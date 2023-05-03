@@ -47,7 +47,7 @@ impl Env {
     pub fn get_value(&self, key: usize) -> Option<&Value> {
         let value = self.slab.get(key)?;
         assert!(
-            !value.is_uninit(),
+            !matches!(value, Value::UninitV),
             "Runtime error: getting an uninitialized value"
         );
         Some(value)

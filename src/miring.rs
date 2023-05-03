@@ -108,11 +108,19 @@ impl MIRer {
     /// Visits an expression. It It will add the nodes for that
     /// block in the CFG, and return its stratum and the CFG label for it.
     ///
-    /// Takes as arguments:
-    /// * the expression itself (as a parser AST node)
-    /// * the destination variable that will store the result of this expression
-    /// * the label to jump in the CFG to after evaluating this expression
-    fn visit_expr(&mut self, e: tast::Expr, dest_v: VarDef, dest_l: CfgLabel) -> CfgLabel {
+    /// It takes as arguments:
+    /// * The expression itself (as a parser AST node).
+    /// * The destination variable that will store the result of this
+    ///   expression.
+    /// * The label to jump in the CFG to after evaluating this expression.
+    /// * The map of structures declarations.
+    fn visit_expr(
+        &mut self,
+        e: tast::Expr,
+        dest_v: VarDef,
+        dest_l: CfgLabel,
+        structs: &HashMap<String, Struct>,
+    ) -> CfgLabel {
         match e.raw {
             tast::RawExpr::UnitE => {
                 self.cfg()
@@ -158,7 +166,7 @@ impl MIRer {
                     .rev()
                     .zip(arg_vars.iter().rev().cloned())
                     .fold(call_l, |dest_l, (arg_expr, arg_var)| {
-                        self.visit_expr(arg_expr, arg_var, dest_l)
+                        self.visit_expr(arg_expr, arg_var, dest_l, structs)
                     });
 
                 // Declaration of the arguments
@@ -168,8 +176,8 @@ impl MIRer {
             }
             tast::RawExpr::IfE(box cond, box iftrue, box iffalse) => {
                 // Branches.
-                let iftrue_l = self.visit_block(iftrue, dest_v.clone(), dest_l.clone());
-                let iffalse_l = self.visit_block(iffalse, dest_v, dest_l);
+                let iftrue_l = self.visit_block(iftrue, dest_v.clone(), dest_l.clone(), structs);
+                let iffalse_l = self.visit_block(iffalse, dest_v, dest_l, structs);
 
                 // The switch
                 let cond_var = self.cfg().fresh_var(BoolT);
@@ -178,20 +186,24 @@ impl MIRer {
                         .insert(Instr::Branch(cond_var.name.clone(), iftrue_l, iffalse_l));
 
                 // Evaluate the condition
-                self.visit_expr(cond, cond_var, cond_l)
+                self.visit_expr(cond, cond_var, cond_l, structs)
             }
-            tast::RawExpr::BlockE(box e) => self.visit_block(e, dest_v, dest_l),
-            tast::RawExpr::FieldE(box _s, _field) => {
-                /*let field_l = self.
-                let (s, ty, stm) = self.visit_expr(s);
-                if let StructT(name) = ty {
-                    let strukt = self.get_struct(&name).unwrap();
-                    let ty = strukt.get_field(&field).clone();
-                    (CopyE(boxed(FieldE(boxed(s), field))), ty, stm) // Choose to copy every time. TODO: do not copy on last use
+            tast::RawExpr::BlockE(box e) => self.visit_block(e, dest_v, dest_l, structs),
+            tast::RawExpr::FieldE(box s, field) => {
+                if let StructT(name) = &s.ty {
+                    let field_ty = structs.get(name).unwrap().get_field(&field).clone();
+                    let struct_var = self.cfg().fresh_var(field_ty);
+                    let dest_l = self.cfg().insert(Instr::Field {
+                        strukt: struct_var.name.clone(),
+                        field,
+                        destination: dest_v,
+                        target: dest_l,
+                    });
+                    let dest_l = self.visit_expr(s, struct_var.clone(), dest_l, structs);
+                    self.cfg().insert(Instr::Declare(struct_var, dest_l))
                 } else {
                     panic!("Cannot get a field of something which is not a struct");
-                }*/
-                todo!()
+                }
             }
             tast::RawExpr::StructE {
                 name: s_name,
@@ -208,20 +220,25 @@ impl MIRer {
                 let struct_l = self.cfg().insert(Instr::Struct {
                     name: s_name,
                     fields: field_vars
+                        .clone()
                         .into_iter()
                         .map(|(field, var)| (field, var.name))
                         .collect(),
-                    destination: dest_v.clone(),
+                    destination: dest_v,
                     target: dest_l,
                 });
 
                 // Compute the expressions in the fields in the CFG (rev order!)
-                fields
+                let compute_l = fields
                     .into_iter()
                     .rev()
-                    .fold(struct_l, |dest_l, (_, expr)| {
-                        self.visit_expr(expr, dest_v.clone(), dest_l)
-                    })
+                    .fold(struct_l, |dest_l, (field, expr)| {
+                        self.visit_expr(expr, field_vars[&field].clone(), dest_l, structs)
+                    });
+
+                field_vars.into_values().fold(compute_l, |dest_l, var| {
+                    self.cfg().insert(Instr::Declare(var, dest_l))
+                })
             }
         }
     }
@@ -230,18 +247,25 @@ impl MIRer {
     /// block in the CFG, and return its stratum and the CFG label for it.
     ///
     /// Takes as arguments:
-    /// * the expression itself (as a parser AST node)
-    /// * the destination variable that will store the result of this expression
-    /// * the label to jump in the CFG to after evaluating this expression
-    fn visit_block(&mut self, b: tast::Block, dest_v: VarDef, dest_l: CfgLabel) -> CfgLabel {
+    /// * The expression itself (as a parser AST node)
+    /// * The destination variable that will store the result of this expression
+    /// * The label to jump in the CFG to after evaluating this expression
+    /// * The map of structures declarations.
+    fn visit_block(
+        &mut self,
+        b: tast::Block,
+        dest_v: VarDef,
+        dest_l: CfgLabel,
+        structs: &HashMap<String, Struct>,
+    ) -> CfgLabel {
         self.push_scope();
         let exit_l = self.cfg().fresh_label();
-        let ret_l = self.visit_expr(b.ret, dest_v, exit_l.clone());
+        let ret_l = self.visit_expr(b.ret, dest_v, exit_l.clone(), structs);
         let entry_l = b
             .stmts
             .into_iter()
             .rev()
-            .fold(ret_l, |dest_l, s| self.visit_stmt(s, dest_l));
+            .fold(ret_l, |dest_l, s| self.visit_stmt(s, dest_l, structs));
         let cfg = self.pop_scope();
         self.cfg().insert(Instr::Scope {
             cfg,
@@ -253,19 +277,29 @@ impl MIRer {
 
     /// Visits a statements, producing the CFG nodes and returning the label for
     /// the entry CFG node for that statement.
-    fn visit_stmt(&mut self, s: tast::Stmt, dest_l: CfgLabel) -> CfgLabel {
+    ///
+    /// Takes as arguments:
+    /// * The statement to visit.
+    /// * The label to jump at in the CFG after the execution of the statement.
+    /// * A map of structures declarations.
+    fn visit_stmt(
+        &mut self,
+        s: tast::Stmt,
+        dest_l: CfgLabel,
+        structs: &HashMap<String, Struct>,
+    ) -> CfgLabel {
         match s {
             tast::Stmt::Declare(vardef, expr) => {
-                let expr_l = self.visit_expr(expr, vardef.clone(), dest_l);
+                let expr_l = self.visit_expr(expr, vardef.clone(), dest_l, structs);
                 self.cfg().insert(Instr::Declare(vardef, expr_l))
             }
-            tast::Stmt::Assign(vardef, expr) => self.visit_expr(expr, vardef, dest_l),
+            tast::Stmt::Assign(vardef, expr) => self.visit_expr(expr, vardef, dest_l, structs),
             tast::Stmt::While { cond, body } => {
                 let loop_l = self.cfg().fresh_label();
 
                 // The block itself.
                 let trash_var = self.cfg().trash_var(UnitT);
-                let body_l = self.visit_block(body, trash_var, loop_l.clone());
+                let body_l = self.visit_block(body, trash_var, loop_l.clone(), structs);
 
                 // If statement
                 let cond_v = self.cfg().fresh_var(BoolT);
@@ -274,7 +308,7 @@ impl MIRer {
                     .insert(Instr::Branch(cond_v.name.clone(), body_l, dest_l));
 
                 // Compute the condition.
-                let cond_l: CfgLabel = self.visit_expr(cond, cond_v.clone(), if_l);
+                let cond_l: CfgLabel = self.visit_expr(cond, cond_v.clone(), if_l, structs);
                 self.cfg().insert_at(loop_l.clone(), Instr::Goto(cond_l));
 
                 // Declare the condition and loop
@@ -282,17 +316,17 @@ impl MIRer {
             }
             tast::Stmt::ExprS(e) => {
                 let trash_var = self.cfg().trash_var(UnitT);
-                self.visit_expr(e, trash_var, dest_l)
+                self.visit_expr(e, trash_var, dest_l, structs)
             }
         }
     }
 
     /// Visits a function.
-    fn visit_fun(&mut self, f: tast::Fun) -> Fun {
+    fn visit_fun(&mut self, f: tast::Fun, structs: &HashMap<String, Struct>) -> Fun {
         self.push_scope();
         let ret_l = self.cfg().fresh_label();
         let ret_v = self.cfg().fresh_var(f.ret_ty);
-        let entry_l = self.visit_block(f.body, ret_v.clone(), ret_l.clone());
+        let entry_l = self.visit_block(f.body, ret_v.clone(), ret_l.clone(), structs);
         let body = self.pop_scope();
 
         Fun {
@@ -312,11 +346,11 @@ impl MIRer {
         // Note: order is important.
         // We must visit structures first.
         Program {
-            structs,
             funs: funs
                 .into_iter()
-                .map(|(name, f)| (name, self.visit_fun(f)))
+                .map(|(name, f)| (name, self.visit_fun(f, &structs)))
                 .collect(),
+            structs,
         }
     }
 }

@@ -12,9 +12,7 @@ mod structures;
 mod while_loop;
 
 fn test(p: impl Into<Program>, output: impl AsRef<str>) {
-    assert_eq!(
-        crate::interp(crate::mir(crate::check(p.into()))),
-        output.as_ref(),
-        "Output mismatch"
-    );
+    let mir = crate::mir(crate::check(p.into()));
+    println!("MIR: {:#?}", mir);
+    assert_eq!(crate::interp(mir), output.as_ref(), "Output mismatch");
 }

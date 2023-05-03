@@ -252,7 +252,6 @@ impl<'a> Interpreter<'a> {
     /// Executes an expression, returning the first label that do not exist in
     /// the CFG. Often, this is the return/exit label.
     fn visit_cfg(&mut self, cfg: &'a Cfg, label: &'a CfgLabel) -> &'a CfgLabel {
-        //println!("{:?}", cfg.get(label));
         match cfg.get(label) {
             Some(Instr::Goto(target)) => self.visit_cfg(cfg, target),
             Some(Instr::Declare(v, target)) => {
@@ -273,11 +272,6 @@ impl<'a> Interpreter<'a> {
                 let args = args.iter().map(|v| self.get_var(v)).collect();
                 let stratum = self.get_var(destination).stratum;
                 let call_result = self.call(name, args, stratum);
-                println!(
-                    "assigning {:?} ({:?}) to {destination:?} after call to {name}",
-                    call_result,
-                    self.get_value(call_result)
-                );
                 self.set_var(&destination.name, call_result);
                 self.visit_cfg(cfg, target)
             }
@@ -314,16 +308,20 @@ impl<'a> Interpreter<'a> {
                 self.pop_scope(None);
                 self.visit_cfg(cfg, target)
             }
-            None => label,
-            /*
-            FieldE(box strukt, field) => {
-                let strukt = self.visit_expr(strukt);
-                if let StructV(_, fields) = self.get_value(strukt) {
-                    fields[field]
+            Some(Instr::Field {
+                strukt,
+                field,
+                destination,
+                target,
+            }) => {
+                if let StructV(_, fields) = self.get_var_value(strukt) {
+                    self.set_var(&destination.name, fields[field]);
+                    self.visit_cfg(cfg, target)
                 } else {
                     panic!("Runtime error: value should be a structure");
                 }
-            } */
+            }
+            None => label,
         }
     }
 }
