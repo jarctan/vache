@@ -3,8 +3,36 @@ use std::fmt;
 use super::Ty;
 
 /// A variable in the code.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Var(String);
+
+impl Var {
+    /// A control-flow graph variable.
+    ///
+    /// These are variables used internally by the CFG, that starts with `__cfg`
+    /// followed by a unique numeral ID.
+    pub(crate) fn cfg(number: u64) -> Var {
+        Var(format!("__cfg{number:?}"))
+    }
+
+    /// Returns an instantiation of the trash variable, the dummy variable is
+    /// never read.
+    ///
+    /// Similar to `/dev/null` on Unix systems.
+    pub(crate) fn trash() -> Var {
+        Var("__cfg_trash".to_string())
+    }
+
+    /// See the variable as a string.
+    pub fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+
+    /// Is it the trash variable (the dummy variable that is never read).
+    pub fn is_trash(&self) -> bool {
+        self.as_str() == "__cfg_trash"
+    }
+}
 
 impl AsRef<Var> for Var {
     fn as_ref(&self) -> &Var {
@@ -15,6 +43,12 @@ impl AsRef<Var> for Var {
 impl From<Var> for String {
     fn from(value: Var) -> Self {
         value.0
+    }
+}
+
+impl AsRef<str> for Var {
+    fn as_ref(&self) -> &str {
+        &self.0
     }
 }
 
@@ -30,6 +64,12 @@ impl From<String> for Var {
     }
 }
 
+impl fmt::Debug for Var {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "${}", self.0)
+    }
+}
+
 impl fmt::Display for Var {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -37,7 +77,7 @@ impl fmt::Display for Var {
 }
 
 /// A variable definition.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct VarDef {
     /// Variable name.
     pub(crate) name: Var,
@@ -45,9 +85,21 @@ pub struct VarDef {
     pub(crate) ty: Ty,
 }
 
+impl fmt::Debug for VarDef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}:{}", self.name, self.ty)
+    }
+}
+
 impl AsRef<Var> for VarDef {
     fn as_ref(&self) -> &Var {
         &self.name
+    }
+}
+
+impl From<VarDef> for Var {
+    fn from(vardef: VarDef) -> Self {
+        vardef.name
     }
 }
 

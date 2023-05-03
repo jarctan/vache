@@ -19,7 +19,11 @@
         "vache",
         "interp",
         "funs",
-        "strukt" // alternative orthograph to avoid the `struct` keyword
+        "strukt", // alternative orthograph to avoid the `struct` keyword
+        "rvalue",
+        "rval",
+        "cfgs",
+        "uninit",
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }

@@ -1,3 +1,5 @@
+//! Defining programs, the biggest units in the MIR.
+
 use std::collections::HashMap;
 
 use super::{Fun, Struct};

@@ -8,12 +8,15 @@
 #![warn(clippy::missing_docs_in_private_items)]
 
 use compile::Compiler;
+use miring::MIRer;
 use typing::Typer;
 
 pub mod ast;
 mod compile;
 pub mod examples;
 mod interpret;
+mod mir;
+mod miring;
 mod tast;
 #[cfg(test)]
 mod tests;
@@ -36,11 +39,20 @@ pub fn check(p: impl Into<ast::Program>) -> tast::Program {
     typer.check(p.into())
 }
 
+/// Computes the MIR output of a given program.
+///
+/// Under the hood, in charge of allocating a new `MIRer` and launching it on
+/// your program.
+pub fn mir(p: impl Into<tast::Program>) -> mir::Program {
+    let mut mirer = MIRer::new();
+    mirer.gen_mir(p.into())
+}
+
 /// Compiles a given program.
 ///
 /// Under the hood, in charge of allocating a new `Compiler` and launching it on
 /// your program.
-pub fn compile(p: impl Into<tast::Program>) -> String {
+pub fn compile(p: impl Into<mir::Program>) -> String {
     let mut compiler = Compiler::new();
     compiler.compile(p.into())
 }
@@ -50,6 +62,6 @@ pub fn compile(p: impl Into<tast::Program>) -> String {
 /// Under the hood, it will allocate a new `Interpreter` and launch it on your
 /// program. It will call the function `main` within your program and return the
 /// standard output of your program.
-pub fn interp(p: impl Into<tast::Program>) -> String {
+pub fn interp(p: impl Into<mir::Program>) -> String {
     interpret::interpret(p.into())
 }

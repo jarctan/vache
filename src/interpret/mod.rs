@@ -2,7 +2,7 @@
 
 use string_builder::Builder as StringBuilder;
 
-use crate::tast::Program;
+use crate::{mir::Program, tast::Stratum};
 
 mod env;
 mod interpreter;
@@ -18,11 +18,11 @@ use self::env::Env;
 pub fn interpret(p: Program) -> String {
     // Create the interpreter and run it.
     let mut i = Interpreter {
-        env: vec![Env::default()],
+        env: vec![Env::new(Stratum::static_stm())],
         fun_env: &p.funs,
         stdout: StringBuilder::default(),
     };
-    i.call("main", vec![]);
+    i.call("main", vec![], i.current_stratum());
 
     i.stdout()
 }

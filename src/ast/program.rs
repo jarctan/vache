@@ -31,3 +31,9 @@ impl From<Vec<Fun>> for Program {
         }
     }
 }
+
+impl From<Fun> for Program {
+    fn from(f: Fun) -> Self {
+        Program::from(vec![f])
+    }
+}

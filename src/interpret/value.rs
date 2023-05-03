@@ -3,9 +3,14 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use crate::tast::Stratum;
+
 /// Values in our language.
-#[derive(Debug)]
+#[derive(Default, Clone)]
 pub enum Value {
+    /// Uninit value.
+    #[default]
+    UninitV,
     /// Unit value.
     UnitV,
     /// Integer value.
@@ -24,13 +29,14 @@ pub enum Value {
 
 use Value::*;
 
-impl fmt::Display for Value {
+impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            UninitV => write!(f, "!"),
             UnitV => write!(f, "()"),
-            IntV(i) => write!(f, "{i}"),
-            StrV(s) => write!(f, "{s}"),
-            BoolV(b) => write!(f, "{b}"),
+            IntV(i) => fmt::Display::fmt(i, f),
+            StrV(s) => write!(f, "\"{s}\""),
+            BoolV(b) => fmt::Display::fmt(b, f),
             StructV(name, fields) => {
                 let mut display = f.debug_struct(name);
                 for (s, v) in fields {
@@ -38,6 +44,19 @@ impl fmt::Display for Value {
                 }
                 display.finish()
             }
+        }
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UninitV => panic!("Runtime error: Requested to display an uninitialized value"),
+            UnitV => write!(f, "()"),
+            IntV(i) => fmt::Display::fmt(i, f),
+            StrV(s) => fmt::Display::fmt(s, f),
+            BoolV(b) => fmt::Display::fmt(b, f),
+            StructV(name, _) => fmt::Display::fmt(name, f),
         }
     }
 }
@@ -51,13 +70,22 @@ impl Value {
             panic!("Runtime error: Requesting the truth value of something which is not a boolean")
         }
     }
+
+    /// Is the value the uninitialized value?
+    pub fn is_uninit(&self) -> bool {
+        if let UninitV = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 /// A reference to a value.
 #[derive(Clone, Copy, Debug)]
 pub struct ValueRef {
     /// Stratum/ environment number in which the value resides.
-    pub stratum: usize,
+    pub stratum: Stratum,
     /// Key in the slab of that environment.
     pub key: usize,
 }

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use rug::Integer;
 
 use super::{Block, Var};
@@ -25,7 +23,9 @@ pub enum Expr {
         /// Name (identifier).
         name: String,
         /// Collection of field names and values.
-        fields: HashMap<String, Expr>,
+        ///
+        /// Ordered because we need to specify here the evaluation order.
+        fields: Vec<(String, Expr)>,
     },
     /// A function call.
     CallE {

@@ -1,18 +1,17 @@
-//! Visiting the AST to execute the program.
+//! Visiting the CFG to execute the program.
 //!
-//! This is where the program is effectively being executed. This module ties
-//! all modules into one.
+//! This is where the program is effectively being executed. This module brings
+//! all other submodules together.
 
 use std::collections::HashMap;
 
 use string_builder::Builder as StringBuilder;
-use Expr::*;
-use Stmt::*;
 use Value::*;
 
 use super::env::Env;
 use super::value::{Value, ValueRef};
-use crate::tast::{Block, Expr, Fun, Stmt, Var};
+use crate::mir::{Cfg, CfgLabel, Fun, Instr, RValue, Var};
+use crate::tast::Stratum;
 
 /// Interpreter for our language.
 pub(crate) struct Interpreter<'a> {
@@ -31,30 +30,36 @@ impl<'a> Interpreter<'a> {
         &mut self,
         f: impl Fn(&rug::Integer, &rug::Integer) -> Value,
         args: &Vec<ValueRef>,
+        stratum: Stratum,
     ) -> Option<ValueRef> {
         let lhs = *args.get(0)?;
         let rhs = *args.get(1)?;
         match (self.get_value(lhs), self.get_value(rhs)) {
-            (IntV(lhs), IntV(rhs)) if args.len() == 2 => Some(self.add_value(f(lhs, rhs))),
+            (IntV(lhs), IntV(rhs)) if args.len() == 2 => Some(self.add_value(f(lhs, rhs), stratum)),
             _ => None,
         }
     }
 
     /// Checks if we can apply builtin functions to the call to
     /// `f_name(..args)`.
-    fn check_builtin(&mut self, f_name: &str, args: &Vec<ValueRef>) -> Option<ValueRef> {
+    fn check_builtin(
+        &mut self,
+        f_name: &str,
+        args: &Vec<ValueRef>,
+        stratum: Stratum,
+    ) -> Option<ValueRef> {
         match f_name {
-            "+" => self.int_binop(|x, y| IntV((x + y).into()), args),
-            "-" => self.int_binop(|x, y| IntV((x - y).into()), args),
-            "*" => self.int_binop(|x, y| IntV((x * y).into()), args),
-            "/" => self.int_binop(|x, y| IntV((x / y).into()), args),
-            "%" => self.int_binop(|x, y| IntV((x % y).into()), args),
-            "==" => self.int_binop(|x, y| BoolV(x == y), args),
-            "!=" => self.int_binop(|x, y| BoolV(x != y), args),
-            ">=" => self.int_binop(|x, y| BoolV(x >= y), args),
-            ">" => self.int_binop(|x, y| BoolV(x > y), args),
-            "<=" => self.int_binop(|x, y| BoolV(x <= y), args),
-            "<" => self.int_binop(|x, y| BoolV(x < y), args),
+            "+" => self.int_binop(|x, y| IntV((x + y).into()), args, stratum),
+            "-" => self.int_binop(|x, y| IntV((x - y).into()), args, stratum),
+            "*" => self.int_binop(|x, y| IntV((x * y).into()), args, stratum),
+            "/" => self.int_binop(|x, y| IntV((x / y).into()), args, stratum),
+            "%" => self.int_binop(|x, y| IntV((x % y).into()), args, stratum),
+            "==" => self.int_binop(|x, y| BoolV(x == y), args, stratum),
+            "!=" => self.int_binop(|x, y| BoolV(x != y), args, stratum),
+            ">=" => self.int_binop(|x, y| BoolV(x >= y), args, stratum),
+            ">" => self.int_binop(|x, y| BoolV(x > y), args, stratum),
+            "<=" => self.int_binop(|x, y| BoolV(x <= y), args, stratum),
+            "<" => self.int_binop(|x, y| BoolV(x < y), args, stratum),
             "print" => {
                 let mut args = args.iter();
                 // Special case for the first item, which may not have a space before.
@@ -69,18 +74,28 @@ impl<'a> Interpreter<'a> {
                 }
 
                 self.stdout.append("\n");
-                Some(self.add_value(UnitV))
+                Some(self.add_value(UnitV, self.current_stratum()))
             }
             _ => None,
         }
     }
 
+    /// Returns the id of the current stratum.
+    pub fn current_stratum(&self) -> Stratum {
+        Stratum::try_from(self.env.len() - 1).unwrap()
+    }
+
     /// Executes a call to a function in scope.
-    pub fn call(&mut self, f_name: impl AsRef<str>, args: Vec<ValueRef>) -> ValueRef {
+    pub fn call(
+        &mut self,
+        f_name: impl AsRef<str>,
+        args: Vec<ValueRef>,
+        stratum: Stratum,
+    ) -> ValueRef {
         let f_name = f_name.as_ref();
 
         // Override in case of builtin.
-        if let Some(res) = self.check_builtin(f_name, &args) {
+        if let Some(res) = self.check_builtin(f_name, &args, stratum) {
             res
         } else {
             self.push_scope();
@@ -99,21 +114,29 @@ impl<'a> Interpreter<'a> {
 
             // Introduce arguments in the typing context
             for (arg, value) in f.params.iter().zip(args.iter()) {
-                self.add_var(arg.name.clone(), *value);
+                self.add_var(arg.name.clone());
+                self.set_var(&arg.name, *value);
             }
 
-            let res = self.visit_block(&f.body).to_owned();
+            // Introduce return variable
+            self.add_var(f.ret_v.name.clone());
 
-            // Request our value back!
-            let value = self.pop_scope(res).unwrap();
+            let stuck_l = self.visit_cfg(&f.body, &f.entry_l).to_owned();
 
-            self.add_value(value)
+            assert_eq!(
+                stuck_l, f.ret_l,
+                "Runtime error: should not be stuck at label {stuck_l:?} in function {}",
+                f.name,
+            );
+
+            // Request the final value!
+            self.pop_scope(Some(self.get_var(&f.ret_v))).unwrap()
         }
     }
 
     /// Creates a new scope.
     fn push_scope(&mut self) {
-        self.env.push(Env::default());
+        self.env.push(Env::new(self.env.len().try_into().unwrap()));
     }
 
     /// Pops and removes the current scope.
@@ -121,74 +144,178 @@ impl<'a> Interpreter<'a> {
     /// Give as argument a value you want to retrieve before popping that scope,
     /// and it will give it back to you. Now or never to retrieve values in the
     /// scope, other will be freed!
-    fn pop_scope(&mut self, value: ValueRef) -> Option<Value> {
+    fn pop_scope(&mut self, value: Option<ValueRef>) -> Option<ValueRef> {
         // Refuse the pop the static environment
-        // And refuse to pop if the requested value is not in that scope.
-        if self.env.len() >= 2 && value.stratum == self.env.len() - 1 {
-            self.env.pop().map(|env| env.close(value))
-        } else {
-            None
-        }
+        assert!(self.env.len() >= 2);
+        let env = self.env.pop().unwrap();
+        value.map(|value| {
+            if let Some(value) = env.close(value) {
+                self.add_value(value, self.current_stratum())
+            } else {
+                value
+            }
+        })
     }
 
     /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<Var>) -> Option<ValueRef> {
+    fn get_var(&self, v: impl AsRef<Var>) -> ValueRef {
+        let v = v.as_ref();
+        if v.is_trash() {
+            // If reading the trash variable, return the reference to the uninit value
+            self.env
+                .last()
+                .expect("there should be at least one active environment")
+                .uninit_value()
+        } else {
+            // Iterate over environments in reverse (last declared first processed)
+            // order
+            // Returns the first environment that has that variable declared
+            self.env
+                .iter()
+                .rev()
+                .find_map(|e| e.get_var(v))
+                .copied()
+                .unwrap_or_else(|| panic!("Runtime error: variable {} should exist", v))
+        }
+    }
+
+    /// Gets a mutable reference into the value of a variable.
+    fn get_var_mut(&mut self, v: impl AsRef<Var>) -> &mut ValueRef {
         // Iterate over environments in reverse (last declared first processed)
         // order
         // Returns the first environment that has that variable declared
         let v = v.as_ref();
-        self.env.iter().rev().find_map(|e| e.get_var(v)).copied()
+        self.env
+            .iter_mut()
+            .rev()
+            .find_map(|e| e.get_var_mut(v))
+            .unwrap_or_else(|| panic!("Runtime error: variable {} should exist", v))
     }
 
     /// Declares a new variable in the context.
-    fn add_var(&mut self, name: impl Into<Var>, value: impl Into<ValueRef>) {
-        self.env.last_mut().unwrap().add_var(name.into(), value);
+    fn add_var(&mut self, name: impl Into<Var>) {
+        self.env.last_mut().unwrap().add_var(name.into());
+    }
+
+    /// Assigns a variable in the context.
+    fn set_var(&mut self, name: impl AsRef<Var>, value: impl Into<ValueRef>) {
+        let name = name.as_ref();
+        if !name.is_trash() {
+            *self.get_var_mut(name) = value.into();
+        }
     }
 
     /// Adds a value to the dynamic store/slab.
-    fn add_value(&mut self, value: Value) -> ValueRef {
-        ValueRef {
-            stratum: self.env.len() - 1,
-            key: self.env.last_mut().unwrap().add_value(value),
-        }
+    fn add_value(&mut self, value: Value, stratum: Stratum) -> ValueRef {
+        let stratum: usize = stratum.into();
+        self.env[stratum].add_value(value)
     }
 
     /// Gets a value from the dynamic store/slab.
     fn get_value(&self, value: ValueRef) -> &Value {
-        self.env[value.stratum].get_value(value.key).unwrap()
+        self.env[usize::from(value.stratum)]
+            .get_value(value.key)
+            .unwrap()
+    }
+
+    /// Gets the value of a variable.
+    fn get_var_value(&self, v: impl AsRef<Var>) -> &Value {
+        self.get_value(self.get_var(v))
     }
 
     /// Returns the final standard output of the execution of the program.
     pub fn stdout(self) -> String {
         self.stdout.string().unwrap()
     }
-}
 
-impl Interpreter<'_> {
-    /// Executes an expression.
-    fn visit_expr(&mut self, e: &Expr) -> ValueRef {
-        match e {
-            UnitE => self.add_value(UnitV),
-            IntegerE(i) => self.add_value(IntV(i.clone())),
-            StringE(s) => self.add_value(StrV(s.clone())),
-            VarE(v) => self
-                .get_var(v)
-                .unwrap_or_else(|| panic!("Runtime error: unknown variable {}", v.name)),
-            CallE { name, args } => {
-                let args = args.iter().map(|arg| self.visit_expr(arg)).collect();
-                self.call(name, args)
-            }
-            IfE(box cond, box iftrue, box iffalse) => {
-                let cond = self.visit_expr(cond);
-                if self.get_value(cond).truth() {
-                    self.visit_block(iftrue)
+    /// Visit a right-value.
+    fn visit_rvalue(&mut self, rvalue: &'a RValue, stratum: Stratum) -> ValueRef {
+        match rvalue {
+            RValue::Unit => self.add_value(UnitV, stratum),
+            RValue::Integer(i) => self.add_value(IntV(i.clone()), stratum),
+            RValue::String(s) => self.add_value(StrV(s.clone()), stratum),
+            RValue::Var(v) => {
+                let v_ref = self.get_var(v);
+                // Temporary solution when lifetime is too short: own the value
+                // TODO: change when own gets added to it.
+                let v_ref = if stratum >= v_ref.stratum {
+                    v_ref
                 } else {
-                    self.visit_block(iffalse)
+                    self.add_value(self.get_value(v_ref).clone(), stratum)
+                };
+                v_ref
+            }
+            RValue::Field(_, _) => todo!(),
+        }
+    }
+
+    /// Executes an expression, returning the first label that do not exist in
+    /// the CFG. Often, this is the return/exit label.
+    fn visit_cfg(&mut self, cfg: &'a Cfg, label: &'a CfgLabel) -> &'a CfgLabel {
+        //println!("{:?}", cfg.get(label));
+        match cfg.get(label) {
+            Some(Instr::Goto(target)) => self.visit_cfg(cfg, target),
+            Some(Instr::Declare(v, target)) => {
+                self.add_var(v.clone());
+                self.visit_cfg(cfg, target)
+            }
+            Some(Instr::Assign(v, rvalue, label)) => {
+                let value = self.visit_rvalue(rvalue, self.get_var(v).stratum);
+                self.set_var(v, value);
+                self.visit_cfg(cfg, label)
+            }
+            Some(Instr::Call {
+                name,
+                args,
+                destination,
+                target,
+            }) => {
+                let args = args.iter().map(|v| self.get_var(v)).collect();
+                let stratum = self.get_var(destination).stratum;
+                let call_result = self.call(name, args, stratum);
+                println!(
+                    "assigning {:?} ({:?}) to {destination:?} after call to {name}",
+                    call_result,
+                    self.get_value(call_result)
+                );
+                self.set_var(&destination.name, call_result);
+                self.visit_cfg(cfg, target)
+            }
+            Some(Instr::Struct {
+                name,
+                fields,
+                destination,
+                target,
+            }) => {
+                let fields = fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), self.get_var(v)))
+                    .collect();
+                let stratum = self.get_var(&destination.name).stratum;
+                let value = self.add_value(StructV(name.to_owned(), fields), stratum);
+                self.set_var(&destination.name, value);
+                self.visit_cfg(cfg, target)
+            }
+            Some(Instr::Branch(cond, iftrue, iffalse)) => {
+                if self.get_var_value(cond).truth() {
+                    self.visit_cfg(cfg, iftrue)
+                } else {
+                    self.visit_cfg(cfg, iffalse)
                 }
             }
-            BlockE(box e) => self.visit_block(e),
-            CopyE(box e) => self.visit_expr(e), // no-op
-            OwnE(box e) => self.visit_expr(e),
+            Some(Instr::Scope {
+                cfg: new_cfg,
+                entry_l,
+                exit_l,
+                target,
+            }) => {
+                self.push_scope();
+                assert_eq!(self.visit_cfg(new_cfg, entry_l), exit_l);
+                self.pop_scope(None);
+                self.visit_cfg(cfg, target)
+            }
+            None => label,
+            /*
             FieldE(box strukt, field) => {
                 let strukt = self.visit_expr(strukt);
                 if let StructV(_, fields) = self.get_value(strukt) {
@@ -196,43 +323,7 @@ impl Interpreter<'_> {
                 } else {
                     panic!("Runtime error: value should be a structure");
                 }
-            }
-            StructE { name, fields } => {
-                let fields = fields
-                    .iter()
-                    .map(|(k, v)| (k.clone(), self.visit_expr(v)))
-                    .collect();
-                self.add_value(StructV(name.to_owned(), fields))
-            }
-        }
-    }
-
-    /// Executes a block.
-    fn visit_block(&mut self, b: &Block) -> ValueRef {
-        for stmt in &b.stmts {
-            self.visit_stmt(stmt);
-        }
-        self.visit_expr(&b.ret)
-    }
-
-    /// Executes a statement.
-    fn visit_stmt(&mut self, s: &Stmt) {
-        match s {
-            Declare(v, e) | Assign(v, e) => {
-                let e = self.visit_expr(e);
-                self.add_var(v.name.clone(), e);
-            }
-            ExprS(e) => {
-                self.visit_expr(e);
-            }
-            WhileS { cond, body } => {
-                while {
-                    let e = self.visit_expr(cond);
-                    self.get_value(e).truth()
-                } {
-                    self.visit_block(body);
-                }
-            }
+            } */
         }
     }
 }

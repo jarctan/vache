@@ -1,4 +1,4 @@
-//! Abstract Syntax Tree for the language.
+//! Parser Abstract Syntax Tree for the language.
 //!
 //! Each node in the tree = one file.
 

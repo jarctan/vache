@@ -12,7 +12,7 @@ pub enum Stmt {
     /// An expression, whose final value is discarded.
     ExprS(Expr),
     /// A while statement.
-    WhileS {
+    While {
         /// Condition.
         cond: Expr,
         /// While body.

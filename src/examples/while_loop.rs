@@ -12,7 +12,7 @@ pub fn while_loop() -> impl Into<Program> {
             ret_ty: UnitT,
             body: stmts(vec![
                 Declare(vardef("n", IntT), int(10)),
-                WhileS {
+                While {
                     cond: binop(var("n"), ">=", int(5)),
                     body: stmts(vec![
                         print(vec![var("n")]),

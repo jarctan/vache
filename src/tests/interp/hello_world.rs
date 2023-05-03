@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn is_even() {
+fn hello_world() {
     test(
         vec![Fun {
             name: "main".to_string(),
