@@ -24,6 +24,7 @@
         "rval",
         "cfgs",
         "uninit",
+        "fixpoint",
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }
