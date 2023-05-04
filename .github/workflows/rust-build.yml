@@ -1,0 +1,45 @@
+name: Rust Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: rustlang/rust:nightly
+      options: --user=root
+    env:
+      CARGO_HOME: ${{ github.workspace }}/cargo
+    before_script:
+      - rustc --version && cargo --version
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Build and Test
+        run: |
+          cargo build --verbose --all
+          cargo test --verbose --all
+      - name: Format Check
+        run: cargo fmt --all --verbose --check
+      - name: Clippy Check
+        run: cargo clippy --all --verbose
+      - name: Generate Docs
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cargo doc --no-deps
+          cp -R target/doc/vache ${{ github.workspace }}/public
+        continue-on-error: true
+      - name: Upload Docs
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: docs
+          path: ${{ github.workspace }}/public
