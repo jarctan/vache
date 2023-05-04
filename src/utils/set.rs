@@ -4,8 +4,8 @@ use std::collections::HashSet;
 use std::fmt;
 use std::hash::Hash;
 use std::iter::Sum;
-use std::ops::AddAssign;
 use std::ops::{Add, Sub};
+use std::ops::{AddAssign, Deref};
 
 /// A set.
 ///
@@ -13,10 +13,11 @@ use std::ops::{Add, Sub};
 #[derive(PartialEq, Eq)]
 pub struct Set<T: Eq + Hash>(HashSet<T>);
 
-impl<T: Eq + Hash> Set<T> {
-    /// Returns the number of (unique) elements in that set.
-    pub fn len(&self) -> usize {
-        self.0.len()
+impl<T: Eq + Hash> Deref for Set<T> {
+    type Target = HashSet<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
