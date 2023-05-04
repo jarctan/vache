@@ -116,6 +116,7 @@ mod tests {
     use super::*;
     use crate::ast::var::vardef;
     use crate::ast::Ty;
+    use crate::borrowing::liveness;
 
     #[test]
     fn test_use() {
@@ -135,5 +136,51 @@ mod tests {
         );
 
         assert_eq!(Instr::Declare(x_def, label).uses().count(), 0);
+    }
+
+    #[test]
+    fn test_liveliness() {
+        // Labels
+        let l0 = CfgLabel::new(0);
+        let l1 = CfgLabel::new(1);
+        let l2 = CfgLabel::new(2);
+        let l3 = CfgLabel::new(3);
+        let l_exit = CfgLabel::new(4);
+
+        // Variables
+        let x = Var::from("x");
+        let x_def = vardef("x", Ty::IntT);
+        let y = Var::from("y");
+        let y_def = vardef("y", Ty::IntT);
+
+        let cfg: Cfg = [
+            (l0.clone(), Instr::Declare(y_def, l1.clone())),
+            (
+                l1,
+                Instr::Assign(y.clone(), RValue::Integer(42.into()), l2.clone()),
+            ),
+            (l2.clone(), Instr::Declare(x_def, l3.clone())),
+            (
+                l3.clone(),
+                Instr::Assign(x, RValue::Var(y.clone()), l_exit.clone()),
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        let analysis = liveness(&cfg, &l_exit);
+
+        // Entry and exit are trivial
+        assert_eq!(analysis[&l0].ins.len(), 0);
+        assert_eq!(analysis[&l_exit].ins.len(), 0);
+        assert_eq!(analysis[&l_exit].outs.len(), 0);
+
+        // During l2, we still need y
+        assert_eq!(analysis[&l2].ins, Set::from_iter([y.clone()]));
+        assert_eq!(analysis[&l2].outs, Set::from_iter([y.clone()]));
+
+        // During l3, we still need y but not afterwards anymore
+        assert_eq!(analysis[&l3].ins, Set::from_iter([y]));
+        assert_eq!(analysis[&l3].outs.len(), 0);
     }
 }
