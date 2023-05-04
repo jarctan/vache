@@ -3,36 +3,32 @@ name: Rust Build
 on:
   push:
     branches:
-      - main
+      - master
   pull_request:
     branches:
-      - main
+      - master
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   build:
     runs-on: ubuntu-latest
     container:
       image: rustlang/rust:nightly
-      options: --user=root
-    env:
-      CARGO_HOME: ${{ github.workspace }}/cargo
-    before_script:
-      - rustc --version && cargo --version
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Build and Test
-        run: |
-          cargo build --verbose --all
-          cargo test --verbose --all
+        uses: actions/checkout@v3
+      - name: Build
+        run: cargo build --verbose --all
+      - name: Run tests
+        run: cargo test --verbose --all
       - name: Format Check
         run: cargo fmt --all --verbose --check
       - name: Clippy Check
         run: cargo clippy --all --verbose
       - name: Generate Docs
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/master'
         run: |
           cargo doc --no-deps
           cp -R target/doc/vache ${{ github.workspace }}/public
@@ -43,4 +39,3 @@ jobs:
         with:
           name: docs
           path: ${{ github.workspace }}/public
-
