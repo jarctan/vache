@@ -77,6 +77,7 @@ impl CfgBuilder {
     }
 }
 
+/// Typed AST to MIR transformer.
 pub(crate) struct MIRer {
     /// Stack of control-flow graph builders.
     cfgs: Vec<CfgBuilder>,
@@ -93,14 +94,17 @@ impl MIRer {
         self.visit_program(p)
     }
 
+    /// Introduces a new scope, ie a new CFG.
     fn push_scope(&mut self) {
         self.cfgs.push(CfgBuilder::default());
     }
 
+    /// Pops the current scope, returning the resulting CFG of that scope.
     fn pop_scope(&mut self) -> Cfg {
         self.cfgs.pop().unwrap().finish()
     }
 
+    /// Returns a mutable reference into the *current* CFG.
     fn cfg(&mut self) -> &mut CfgBuilder {
         self.cfgs.last_mut().unwrap()
     }

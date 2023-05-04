@@ -25,6 +25,7 @@
         "cfgs",
         "uninit",
         "fixpoint",
+        "Hasher"
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }

@@ -4,7 +4,7 @@ use super::{Cfg, CfgLabel};
 use crate::mir::VarDef;
 
 /// A function in the parser AST.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Fun {
     /// Name of that function.
     pub name: String,

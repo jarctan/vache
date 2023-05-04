@@ -7,11 +7,13 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
+use borrowing::BorrowChecker;
 use compile::Compiler;
 use miring::MIRer;
 use typing::Typer;
 
 pub mod ast;
+mod borrowing;
 mod compile;
 pub mod examples;
 mod interpret;
@@ -37,6 +39,19 @@ extern crate quote;
 pub fn check(p: impl Into<ast::Program>) -> tast::Program {
     let mut typer = Typer::new();
     typer.check(p.into())
+}
+
+/// Borrow-checks a given program.
+///
+/// If it returns successfully, the program borrow-checked. Otherwise, it will
+/// panic (note: temporary behavior, there should of course be no panicking in
+/// the future, only `Result`s).
+///
+/// Under the hood, this function is in charge of allocating a new
+/// `BorrowChecker` and launching it on your program.
+pub fn borrow_check(p: impl AsRef<mir::Program>) {
+    let mut borrow_checker = BorrowChecker::new();
+    borrow_checker.check(p.as_ref());
 }
 
 /// Computes the MIR output of a given program.
