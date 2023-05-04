@@ -3,11 +3,12 @@
 //! As a end user, you will mainly want to use the `BorrowChecker` on your
 //! program.
 
-mod analysis;
 mod borrow;
 mod checker;
+mod flow;
+mod ledger;
 mod liveness;
 
-use analysis::Analysis;
 pub use checker::BorrowChecker;
+use flow::{Flow, Flowable};
 use liveness::liveness;

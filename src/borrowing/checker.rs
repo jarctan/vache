@@ -5,7 +5,7 @@
 //! * then `borrow_checker.check(&your_program)`
 
 use super::liveness;
-use crate::mir::{Fun, Program};
+use crate::mir::{Fun, Instr, Program};
 
 /// The borrow-checker.
 pub struct BorrowChecker {}
@@ -23,7 +23,10 @@ impl BorrowChecker {
 
     /// Borrow-checks a function.
     fn visit_fun(&mut self, f: &Fun) {
-        println!("{:?}", liveness(&f.body, &f.ret_l));
+        println!(
+            "{:?}",
+            liveness(&f.body, &f.ret_l, Instr::defs, Instr::uses)
+        );
     }
 
     /// Borrow-checks a program.

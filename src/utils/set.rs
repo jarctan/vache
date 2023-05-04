@@ -4,8 +4,8 @@ use std::collections::HashSet;
 use std::fmt;
 use std::hash::Hash;
 use std::iter::Sum;
-use std::ops::{Add, Sub};
-use std::ops::{AddAssign, Deref};
+use std::ops::{Add, AddAssign, Deref, DerefMut};
+use std::ops::{BitOr, BitOrAssign, Sub};
 
 /// A set.
 ///
@@ -18,6 +18,12 @@ impl<T: Eq + Hash> Deref for Set<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl<T: Eq + Hash> DerefMut for Set<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -51,7 +57,7 @@ impl<T: Eq + Hash + Clone> Clone for Set<T> {
     }
 }
 
-impl<T: Eq + Hash> Add for Set<T> {
+impl<'a, T: Eq + Hash> Add for Set<T> {
     type Output = Set<T>;
 
     fn add(mut self, rhs: Self) -> Self {
@@ -66,10 +72,25 @@ impl<T: Eq + Hash> AddAssign<T> for Set<T> {
     }
 }
 
-impl<T: Eq + Hash> Sub for Set<T> {
+impl<'a, T: Eq + Hash> BitOr for Set<T> {
     type Output = Set<T>;
 
-    fn sub(mut self, rhs: Self) -> Self {
+    fn bitor(mut self, rhs: Self) -> Self {
+        self.0.extend(rhs.0);
+        self
+    }
+}
+
+impl<T: Eq + Hash> BitOrAssign<T> for Set<T> {
+    fn bitor_assign(&mut self, rhs: T) {
+        self.0.insert(rhs);
+    }
+}
+
+impl<'a, T: Eq + Hash> Sub<&'a Set<T>> for Set<T> {
+    type Output = Set<T>;
+
+    fn sub(mut self, rhs: &Self) -> Self {
         for i in &rhs.0 {
             self.0.remove(i);
         }
@@ -104,5 +125,11 @@ impl<T: Eq + Hash> IntoIterator for Set<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+impl<T: Eq + Hash, const N: usize> From<[T; N]> for Set<T> {
+    fn from(arr: [T; N]) -> Self {
+        Self::from_iter(arr)
     }
 }

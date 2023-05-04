@@ -6,27 +6,21 @@ use super::borrow::{Borrow, Borrows};
 use crate::mir::Var;
 use crate::utils::set::Set;
 
-/// A borrow analysis.
+/// A loan ledger.
 #[derive(Debug, PartialEq, Eq)]
-pub struct Analysis {
+pub struct Ledger {
     /// Map between variables defined in this environment and their borrows.
     ///
     /// Invariant: these are _deep_ borrows, i.e. all borrow variables are
     /// variables defined _outside_ the scope.
-    pub borrows: HashMap<Var, Borrows>,
-    /// Set of variables.
-    pub ins: Set<Var>,
-    /// Outs.
-    pub outs: Set<Var>,
+    borrows: HashMap<Var, Borrows>,
 }
 
-impl Analysis {
-    /// Creates a new, empty environment.
+impl Ledger {
+    /// Creates a new, empty ledger.
     pub fn new() -> Self {
         Self {
             borrows: HashMap::new(),
-            ins: Set::new(),
-            outs: Set::new(),
         }
     }
 
@@ -68,7 +62,7 @@ impl Analysis {
     }
 }
 
-impl Default for Analysis {
+impl Default for Ledger {
     fn default() -> Self {
         Self::new()
     }
