@@ -76,6 +76,7 @@ pub fn liveness(cfg: &Cfg, exit_l: &CfgLabel) -> HashMap<CfgLabel, Analysis> {
     analyses.insert(exit_l.clone(), Analysis::default());
 
     // Compute the fixpoint, iteratively.
+    let mut runs = 0;
     loop {
         let old_analyses = core::mem::take(&mut analyses);
         analyses.insert(exit_l.clone(), Analysis::default());
@@ -91,7 +92,7 @@ pub fn liveness(cfg: &Cfg, exit_l: &CfgLabel) -> HashMap<CfgLabel, Analysis> {
             analyses.insert(
                 label.clone(),
                 Analysis {
-                    ins: defs + (outs.clone() - uses),
+                    ins: uses + (outs.clone() - defs),
                     outs: instr
                         .successors()
                         .map(|l| old_analyses[&l].ins.clone())
@@ -100,11 +101,39 @@ pub fn liveness(cfg: &Cfg, exit_l: &CfgLabel) -> HashMap<CfgLabel, Analysis> {
                 },
             );
         }
+        runs += 1;
         if old_analyses == analyses {
             break;
         }
     }
-    println!("{:#?}", analyses);
+    println!("In {runs} runs: {:#?}", analyses);
 
     analyses
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::var::vardef;
+    use crate::ast::Ty;
+
+    #[test]
+    fn test_use() {
+        // Labels
+        let label = CfgLabel::new(0);
+
+        // Variables
+        let x = Var::from("x");
+        let x_def = vardef("x", Ty::IntT);
+        let y = Var::from("y");
+
+        assert_eq!(Instr::Goto(label.clone()).uses().count(), 0);
+
+        assert_eq!(
+            Set::from_iter(Instr::Assign(x, RValue::Var(y.clone()), label.clone()).uses()),
+            Set::from_iter([y])
+        );
+
+        assert_eq!(Instr::Declare(x_def, label).uses().count(), 0);
+    }
 }
