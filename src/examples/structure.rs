@@ -1,9 +1,11 @@
-//! Declaring a structure and instantiating it.
+//! What happens if we get the value of a field, and change that value? Should
+//! it propagate back into the original structure declaration? As it stands in
+//! the semantics of the language, the answer is no.
 #![allow(missing_docs)]
 
 use super::*;
 
-pub fn struct_instantiation() -> impl Into<Program> {
+pub fn get_field_and_mutate() -> impl Into<Program> {
     Program::new(
         vec![Struct {
             name: "Person".to_string(),
@@ -32,7 +34,8 @@ pub fn struct_instantiation() -> impl Into<Program> {
                     ),
                 ),
                 Declare(vardef("n", StrT), field(var("john"), "name")),
-                print(vec![var("n")]),
+                Assign(Var::from("n"), string("12")),
+                print(vec![var("n"), field(var("john"), "name")]),
             ]),
         }],
     )

@@ -42,3 +42,8 @@ fn simple_field_access() {
         "doe\n",
     );
 }
+
+#[test]
+fn get_field_and_mutate() {
+    test(examples::get_field_and_mutate(), "12 doe\n");
+}
