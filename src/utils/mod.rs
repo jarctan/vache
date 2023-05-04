@@ -4,6 +4,8 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+pub mod set;
+
 /// Checks if the keys match a list (more precisely, an iterator) of keys.
 ///
 /// [inspired from here](https://stackoverflow.com/questions/58615910/checking-two-hashmaps-for-identical-keyset-in-rust)
