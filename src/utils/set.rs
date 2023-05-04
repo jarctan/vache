@@ -14,6 +14,13 @@ use std::ops::{Add, Sub};
 pub struct Set<T: Eq + Hash>(HashSet<T>);
 
 impl<T: Eq + Hash> Set<T> {
+    /// Returns the number of (unique) elements in that set.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl<T: Eq + Hash> Set<T> {
     /// Creates an empty HashSet.
     /// The set is initialized with 0 entries.
     pub fn new() -> Self {
