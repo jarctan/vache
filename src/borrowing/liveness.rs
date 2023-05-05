@@ -6,12 +6,15 @@ use super::{Flow, Flowable};
 use crate::mir::{Cfg, CfgLabel, Instr, RValue, Var};
 use crate::utils::set::Set;
 
+/// Alias for the result of the variable liveness analysis.
+pub type VarLiveliness = HashMap<CfgLabel, Flow<Set<Var>>>;
+
 impl Instr {
     /// Returns the "list" of variables that are used (needed) in that
     /// instruction.
     ///
     /// Used for the liveness analysis algorithm, for instance.
-    pub fn uses(&self) -> Set<Var> {
+    fn var_uses(&self) -> Set<Var> {
         let mut raw: Set<Var> = match self {
             Instr::Goto(_)
             | Instr::Declare(..)
@@ -45,7 +48,7 @@ impl Instr {
     /// instruction.
     ///
     /// Used for the liveness analysis algorithm, for instance.
-    pub fn defs(&self) -> Set<Var> {
+    fn var_defs(&self) -> Set<Var> {
         let mut raw: Set<Var> = match self {
             Instr::Goto(_) | Instr::Scope { .. } | Instr::Branch(_, _, _) => Set::default(),
             Instr::Declare(v, _) => Set::from([v.name.clone()]),
@@ -68,8 +71,8 @@ impl Instr {
 /// * The exit label in that CFG.
 ///
 /// Returns live variables on each label in the graph.
-pub fn var_liveness(cfg: &Cfg, exit_l: &CfgLabel) -> HashMap<CfgLabel, Flow<Set<Var>>> {
-    liveness(cfg, exit_l, Instr::defs, Instr::uses)
+pub fn var_liveness(cfg: &Cfg, exit_l: &CfgLabel) -> VarLiveliness {
+    liveness(cfg, exit_l, |_, i, _| i.var_defs(), |_, i, _| i.var_uses())
 }
 
 /// Liveness analysis.
@@ -86,8 +89,8 @@ pub fn var_liveness(cfg: &Cfg, exit_l: &CfgLabel) -> HashMap<CfgLabel, Flow<Set<
 pub fn liveness<S: Flowable>(
     cfg: &Cfg,
     exit_l: &CfgLabel,
-    defs: impl Fn(&Instr) -> S,
-    uses: impl Fn(&Instr) -> S,
+    defs: impl Fn(&CfgLabel, &Instr, &S) -> S,
+    uses: impl Fn(&CfgLabel, &Instr, &S) -> S,
 ) -> HashMap<CfgLabel, Flow<S>> {
     // Bootstrap with empty environments.
     let mut analyses: HashMap<CfgLabel, Flow<_>> = cfg
@@ -98,28 +101,17 @@ pub fn liveness<S: Flowable>(
     // One for the return label too.
     analyses.insert(exit_l.clone(), Flow::default());
 
-    let defs: HashMap<CfgLabel, S> = cfg
-        .iter()
-        .map(|(l, instr)| (l.clone(), defs(instr)))
-        .collect();
-
-    let uses: HashMap<CfgLabel, S> = cfg
-        .iter()
-        .map(|(l, instr)| (l.clone(), uses(instr)))
-        .collect();
-
     // Compute the fixpoint, iteratively.
-    let mut runs = 0;
     loop {
         let old_analyses: HashMap<CfgLabel, Flow<S>> = core::mem::take(&mut analyses);
         analyses.insert(exit_l.clone(), Flow::default());
         for (label, instr) in cfg {
-            let Flow { ins: _, outs }: &Flow<S> = &old_analyses[label];
+            let Flow { ins, outs }: &Flow<S> = &old_analyses[label];
 
             analyses.insert(
                 label.clone(),
                 Flow {
-                    ins: uses[label].clone() | (outs.clone() - &defs[label]),
+                    ins: uses(label, instr, ins) | (outs.clone() - &defs(label, instr, ins)),
                     outs: instr
                         .successors()
                         .map(|l| old_analyses[&l].ins.clone())
@@ -127,12 +119,10 @@ pub fn liveness<S: Flowable>(
                 },
             );
         }
-        runs += 1;
         if old_analyses == analyses {
             break;
         }
     }
-    println!("In {runs} runs: {:#?}", analyses);
 
     analyses
 }
@@ -153,14 +143,14 @@ mod tests {
         let x_def = vardef("x", Ty::IntT);
         let y = Var::from("y");
 
-        assert!(Instr::Goto(label.clone()).uses().is_empty());
+        assert!(Instr::Goto(label.clone()).var_uses().is_empty());
 
         assert_eq!(
-            Set::from_iter(Instr::Assign(x, RValue::Var(y.clone()), label.clone()).uses()),
+            Set::from_iter(Instr::Assign(x, RValue::Var(y.clone()), label.clone()).var_uses()),
             Set::from_iter([y])
         );
 
-        assert!(Instr::Declare(x_def, label).uses().is_empty());
+        assert!(Instr::Declare(x_def, label).var_uses().is_empty());
     }
 
     #[test]

@@ -2,13 +2,16 @@
 
 use std::collections::HashMap;
 use std::iter::Sum;
-use std::ops::{BitOr, Sub};
+use std::ops::{BitOr, Deref, DerefMut, Sub};
 
 use super::borrow::{Borrow, Borrows};
 use super::flow::Flow;
 use super::liveness::liveness;
-use crate::mir::{Cfg, CfgLabel, Instr, Var};
+use crate::mir::{Cfg, CfgLabel, Instr, RValue, Var};
 use crate::utils::set::Set;
+
+/// Alias for the result of the loan liveness analysis.
+pub type LoanLiveliness = HashMap<CfgLabel, Flow<Ledger>>;
 
 /// A loan ledger.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +101,99 @@ impl Sum for Ledger {
     }
 }
 
+impl Deref for Ledger {
+    type Target = HashMap<Var, Borrows>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.borrows
+    }
+}
+
+impl DerefMut for Ledger {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.borrows
+    }
+}
+
+impl Instr {
+    /// Returns the ledger of loans that are used/needed for the
+    /// instruction.
+    ///
+    /// The final, fixpoint ledger is processed iteratively. To do that, you
+    /// must provide a `ins` parameter which is the current computation of
+    /// the ledger at the entry of this instruction.
+    ///
+    /// You must also provide the map of variables that go out of scope during
+    /// that time. This can be computed using the variable analysis.
+    ///
+    /// Used for the loan analysis algorithm.
+    fn loan_uses(&self, ins: &Ledger, out_of_scope: &HashMap<CfgLabel, Set<Var>>) -> Ledger {
+        match self {
+            Instr::Goto(_) | Instr::Declare(_, _) | Instr::Branch(_, _, _) => Ledger::default(),
+            Instr::Assign(lhs, RValue::Var(rhs), _) => {
+                let mut ledger = Ledger::default();
+                ledger.add_var(lhs.clone(), [Borrow::from(rhs.clone())]);
+                ledger
+            }
+            Instr::Assign(_, _, _) => Ledger::default(),
+            Instr::Call {
+                args, destination, ..
+            } => {
+                let mut ledger = Ledger::default();
+                let borrows: Borrows = args.iter().map(|v| ins[v].clone()).sum();
+                ledger.add_var(destination.clone(), borrows);
+                ledger
+            }
+            Instr::Struct {
+                fields,
+                destination,
+                ..
+            } => {
+                let mut ledger = Ledger::default();
+                let borrows: Borrows = fields.values().map(|v| ins[v].clone()).sum();
+                ledger.add_var(destination.clone(), borrows);
+                ledger
+            }
+            Instr::Field {
+                strukt,
+                destination,
+                ..
+            } => {
+                let mut ledger = Ledger::default();
+                ledger.add_var(destination.clone(), [Borrow::from(strukt.clone())]);
+                ledger
+            }
+            Instr::Scope {
+                cfg,
+                entry_l,
+                exit_l,
+                ..
+            } => {
+                loan_liveness(cfg, exit_l, out_of_scope)
+                    .remove(entry_l) // Get the liveness analysis of the entry_l
+                    .unwrap() // It should be there
+                    .ins
+            }
+        }
+    }
+
+    /// Returns the ledger for borrows that are removed during that instruction.
+    ///
+    /// The final, fixpoint ledger is processed iteratively. To do that, you
+    /// must provide a `ins` parameter which is the current computation of
+    /// the ledger at the entry of this instruction.
+    ///
+    /// You must also provide the map of variables that go out of scope during
+    /// that time. This can be computed using the variable analysis.
+    ///
+    /// Used for the loan analysis algorithm.
+    fn loan_discard(&self, ins: &Ledger, out_of_scope: &Set<Var>) -> Ledger {
+        let mut ledger = ins.clone();
+        ledger.retain(|var, _| out_of_scope.contains(var));
+        ledger
+    }
+}
+
 /// Loan liveness analysis.
 ///
 /// Takes as arguments:
@@ -105,8 +201,15 @@ impl Sum for Ledger {
 /// * The exit label in that CFG.
 ///
 /// Returns live loans for each label in the graph.
-pub fn loan_liveness(cfg: &Cfg, exit_l: &CfgLabel) -> HashMap<CfgLabel, Flow<Ledger>> {
-    let defs = |i: &Instr| Ledger::default();
-    let uses = |i: &Instr| Ledger::default();
-    liveness(cfg, exit_l, defs, uses)
+pub fn loan_liveness(
+    cfg: &Cfg,
+    exit_l: &CfgLabel,
+    out_of_scope: &HashMap<CfgLabel, Set<Var>>,
+) -> LoanLiveliness {
+    liveness(
+        cfg,
+        exit_l,
+        |l, i, ins| i.loan_discard(ins, &out_of_scope[l]),
+        |_, i, ins| i.loan_uses(ins, out_of_scope),
+    )
 }
