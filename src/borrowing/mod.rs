@@ -11,4 +11,4 @@ mod liveness;
 
 pub use checker::BorrowChecker;
 use flow::{Flow, Flowable};
-use liveness::liveness;
+use liveness::var_liveness;

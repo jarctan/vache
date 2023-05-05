@@ -1,13 +1,17 @@
 //! Declaring here the annotations to the CFG we compute during the analysis.
 
 use std::collections::HashMap;
+use std::iter::Sum;
+use std::ops::{BitOr, Sub};
 
 use super::borrow::{Borrow, Borrows};
-use crate::mir::Var;
+use super::flow::Flow;
+use super::liveness::liveness;
+use crate::mir::{Cfg, CfgLabel, Instr, Var};
 use crate::utils::set::Set;
 
 /// A loan ledger.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ledger {
     /// Map between variables defined in this environment and their borrows.
     ///
@@ -66,4 +70,43 @@ impl Default for Ledger {
     fn default() -> Self {
         Self::new()
     }
+}
+
+impl BitOr for Ledger {
+    type Output = Ledger;
+
+    fn bitor(mut self, rhs: Self) -> Self {
+        self.borrows.extend(rhs.borrows);
+        self
+    }
+}
+
+impl<'a> Sub<&'a Ledger> for Ledger {
+    type Output = Ledger;
+
+    fn sub(mut self, rhs: &Self) -> Self {
+        for key in rhs.borrows.keys() {
+            self.borrows.remove(key);
+        }
+        self
+    }
+}
+
+impl Sum for Ledger {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.reduce(|acc, el| acc | el).unwrap_or_default()
+    }
+}
+
+/// Loan liveness analysis.
+///
+/// Takes as arguments:
+/// * The CFG.
+/// * The exit label in that CFG.
+///
+/// Returns live loans for each label in the graph.
+pub fn loan_liveness(cfg: &Cfg, exit_l: &CfgLabel) -> HashMap<CfgLabel, Flow<Ledger>> {
+    let defs = |i: &Instr| Ledger::default();
+    let uses = |i: &Instr| Ledger::default();
+    liveness(cfg, exit_l, defs, uses)
 }

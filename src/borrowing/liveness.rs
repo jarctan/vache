@@ -31,7 +31,7 @@ impl Instr {
                 exit_l,
                 ..
             } => {
-                liveness(cfg, exit_l, Instr::defs, Instr::uses)
+                var_liveness(cfg, exit_l)
                     .remove(entry_l) // Get the liveness analysis of the entry_l
                     .unwrap() // It should be there
                     .ins
@@ -48,26 +48,46 @@ impl Instr {
     pub fn defs(&self) -> Set<Var> {
         let mut raw: Set<Var> = match self {
             Instr::Goto(_) | Instr::Scope { .. } | Instr::Branch(_, _, _) => Set::default(),
-            Instr::Declare(v, _) => [v.name.clone()].into_iter().collect(),
-            Instr::Assign(v, _, _) => [v.clone()].into_iter().collect(),
+            Instr::Declare(v, _) => Set::from([v.name.clone()]),
+            Instr::Assign(v, _, _) => Set::from([v.clone()]),
             Instr::Call { destination, .. }
             | Instr::Struct { destination, .. }
-            | Instr::Field { destination, .. } => [destination.name.clone()].into_iter().collect(),
+            | Instr::Field { destination, .. } => Set::from([destination.name.clone()]),
         };
         raw.retain(|v| !v.is_trash());
         raw
     }
 }
 
-/// Liveliness analysis.
+/// Variable liveness analysis.
 ///
-/// Takes a cfg, the exit label in that CFG, and returns a map of annotations on
-/// each label in the graph.
+/// This is the standard liveness analysis.
+///
+/// Takes as arguments:
+/// * The CFG.
+/// * The exit label in that CFG.
+///
+/// Returns live variables on each label in the graph.
+pub fn var_liveness(cfg: &Cfg, exit_l: &CfgLabel) -> HashMap<CfgLabel, Flow<Set<Var>>> {
+    liveness(cfg, exit_l, Instr::defs, Instr::uses)
+}
+
+/// Liveness analysis.
+///
+/// Takes as arguments:
+/// * A generic `S: Flowable` argument. Take `S` as something like a set.
+/// * The CFG.
+/// * The exit label in that CFG.
+/// * A way to compute "sets" of definitions for a given instruction (you may
+///   capture your environment to provide additional information since it's a
+///   closure you're giving us).
+/// * A way to compute "sets" of uses for a given instruction.
+/// Returns a map of annotations on each label in the graph.
 pub fn liveness<S: Flowable>(
     cfg: &Cfg,
     exit_l: &CfgLabel,
-    mut defs: impl FnMut(&Instr) -> S,
-    mut uses: impl FnMut(&Instr) -> S,
+    defs: impl Fn(&Instr) -> S,
+    uses: impl Fn(&Instr) -> S,
 ) -> HashMap<CfgLabel, Flow<S>> {
     // Bootstrap with empty environments.
     let mut analyses: HashMap<CfgLabel, Flow<_>> = cfg
@@ -77,6 +97,16 @@ pub fn liveness<S: Flowable>(
 
     // One for the return label too.
     analyses.insert(exit_l.clone(), Flow::default());
+
+    let defs: HashMap<CfgLabel, S> = cfg
+        .iter()
+        .map(|(l, instr)| (l.clone(), defs(instr)))
+        .collect();
+
+    let uses: HashMap<CfgLabel, S> = cfg
+        .iter()
+        .map(|(l, instr)| (l.clone(), uses(instr)))
+        .collect();
 
     // Compute the fixpoint, iteratively.
     let mut runs = 0;
@@ -89,7 +119,7 @@ pub fn liveness<S: Flowable>(
             analyses.insert(
                 label.clone(),
                 Flow {
-                    ins: uses(instr) | (outs.clone() - &defs(instr)),
+                    ins: uses[label].clone() | (outs.clone() - &defs[label]),
                     outs: instr
                         .successors()
                         .map(|l| old_analyses[&l].ins.clone())
@@ -112,7 +142,6 @@ mod tests {
     use super::*;
     use crate::ast::var::vardef;
     use crate::ast::Ty;
-    use crate::borrowing::liveness;
 
     #[test]
     fn test_use() {
@@ -164,7 +193,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        let analysis = liveness(&cfg, &l_exit, Instr::defs, Instr::uses);
+        let analysis = var_liveness(&cfg, &l_exit);
 
         // Entry and exit are trivial
         assert_eq!(analysis[&l0].ins.len(), 0);

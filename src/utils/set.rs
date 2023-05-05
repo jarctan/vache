@@ -72,7 +72,7 @@ impl<T: Eq + Hash> AddAssign<T> for Set<T> {
     }
 }
 
-impl<'a, T: Eq + Hash> BitOr for Set<T> {
+impl<T: Eq + Hash> BitOr for Set<T> {
     type Output = Set<T>;
 
     fn bitor(mut self, rhs: Self) -> Self {
