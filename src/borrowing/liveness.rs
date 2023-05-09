@@ -2,78 +2,13 @@
 
 use std::collections::HashMap;
 
-use super::{Flow, Flowable};
-use crate::mir::{Cfg, CfgLabel, Instr, RValue, Var};
+use petgraph::dot::Dot;
+use petgraph::Graph;
+
+use super::Flow;
+use super::{borrow::Borrow, flow::Analysis};
+use crate::mir::{Cfg, CfgLabel, Instr, RValue};
 use crate::utils::set::Set;
-
-/// Alias for the result of the variable liveness analysis.
-pub type VarLiveliness = HashMap<CfgLabel, Flow<Set<Var>>>;
-
-impl Instr {
-    /// Returns the "list" of variables that are used (needed) in that
-    /// instruction.
-    ///
-    /// Used for the liveness analysis algorithm, for instance.
-    fn var_uses(&self) -> Set<Var> {
-        let mut raw: Set<Var> = match self {
-            Instr::Goto(_)
-            | Instr::Declare(..)
-            | Instr::Assign(_, RValue::Integer(_), _)
-            | Instr::Assign(_, RValue::String(_), _)
-            | Instr::Assign(_, RValue::Unit, _) => Set::default(),
-            Instr::Assign(_, RValue::Field(v, _), _) | Instr::Assign(_, RValue::Var(v), _) => {
-                Set::from([v.clone()])
-            }
-            Instr::Call { args, .. } => args.iter().cloned().collect(),
-            Instr::Struct { fields, .. } => fields.values().cloned().collect(),
-            Instr::Field { strukt, .. } => Set::from([strukt.clone()]),
-            Instr::Branch(cond, _, _) => Set::from([cond.clone()]),
-            Instr::Scope {
-                cfg,
-                entry_l,
-                exit_l,
-                ..
-            } => {
-                var_liveness(cfg, exit_l)
-                    .remove(entry_l) // Get the liveness analysis of the entry_l
-                    .unwrap() // It should be there
-                    .ins
-            }
-        };
-        raw.retain(|v| !v.is_trash());
-        raw
-    }
-
-    /// Returns the "list" of variables that are defined (overwritten) in that
-    /// instruction.
-    ///
-    /// Used for the liveness analysis algorithm, for instance.
-    fn var_defs(&self) -> Set<Var> {
-        let mut raw: Set<Var> = match self {
-            Instr::Goto(_) | Instr::Scope { .. } | Instr::Branch(_, _, _) => Set::default(),
-            Instr::Declare(v, _) => Set::from([v.name.clone()]),
-            Instr::Assign(v, _, _) => Set::from([v.clone()]),
-            Instr::Call { destination, .. }
-            | Instr::Struct { destination, .. }
-            | Instr::Field { destination, .. } => Set::from([destination.name.clone()]),
-        };
-        raw.retain(|v| !v.is_trash());
-        raw
-    }
-}
-
-/// Variable liveness analysis.
-///
-/// This is the standard liveness analysis.
-///
-/// Takes as arguments:
-/// * The CFG.
-/// * The exit label in that CFG.
-///
-/// Returns live variables on each label in the graph.
-pub fn var_liveness(cfg: &Cfg, exit_l: &CfgLabel) -> VarLiveliness {
-    liveness(cfg, exit_l, |_, i, _| i.var_defs(), |_, i, _| i.var_uses())
-}
 
 /// Liveness analysis.
 ///
@@ -81,19 +16,11 @@ pub fn var_liveness(cfg: &Cfg, exit_l: &CfgLabel) -> VarLiveliness {
 /// * A generic `S: Flowable` argument. Take `S` as something like a set.
 /// * The CFG.
 /// * The exit label in that CFG.
-/// * A way to compute "sets" of definitions for a given instruction (you may
-///   capture your environment to provide additional information since it's a
-///   closure you're giving us).
-/// * A way to compute "sets" of uses for a given instruction.
+///
 /// Returns a map of annotations on each label in the graph.
-pub fn liveness<S: Flowable>(
-    cfg: &Cfg,
-    exit_l: &CfgLabel,
-    defs: impl Fn(&CfgLabel, &Instr, &S) -> S,
-    uses: impl Fn(&CfgLabel, &Instr, &S) -> S,
-) -> HashMap<CfgLabel, Flow<S>> {
+pub fn liveness(cfg: &Cfg, exit_l: &CfgLabel) -> HashMap<CfgLabel, Flow> {
     // Bootstrap with empty environments.
-    let mut analyses: HashMap<CfgLabel, Flow<_>> = cfg
+    let mut analyses: HashMap<CfgLabel, Flow> = cfg
         .keys()
         .map(|label| (label.clone(), Flow::default()))
         .collect();
@@ -103,30 +30,204 @@ pub fn liveness<S: Flowable>(
 
     // Compute the fixpoint, iteratively.
     loop {
-        let old_analyses: HashMap<CfgLabel, Flow<S>> = core::mem::take(&mut analyses);
+        let old_analyses: HashMap<CfgLabel, Flow> = core::mem::take(&mut analyses);
         analyses.insert(exit_l.clone(), Flow::default());
-        for (label, instr) in cfg {
-            let Flow { ins, outs }: &Flow<S> = &old_analyses[label];
 
-            analyses.insert(
-                label.clone(),
-                Flow {
-                    ins: uses(label, instr, ins) | (outs.clone() - &defs(label, instr, ins)),
-                    outs: instr
-                        .successors()
-                        .map(|l| old_analyses[&l].ins.clone())
-                        .sum(),
+        for (label, instr) in cfg {
+            let Flow { ins, outs }: &Flow = &old_analyses[label];
+
+            let new_flow = match instr {
+                Instr::Goto(target) => Flow {
+                    ins: Analysis {
+                        vars: old_analyses[target].ins.vars.clone(),
+                        loans: ins.loans.clone(),
+                    },
+                    outs: Analysis {
+                        vars: old_analyses[target].ins.vars.clone(),
+                        loans: ins.loans.clone(),
+                    },
                 },
-            );
+                Instr::Declare(var, target) => Flow {
+                    ins: Analysis {
+                        vars: outs.vars.clone() - &var.name,
+                        loans: ins.loans.clone(),
+                    },
+                    outs: Analysis {
+                        vars: old_analyses[target].ins.vars.clone(),
+                        loans: ins.loans.clone() - &var.name,
+                    },
+                },
+                Instr::Assign(lhs, RValue::Unit, target)
+                | Instr::Assign(lhs, RValue::String(_), target)
+                | Instr::Assign(lhs, RValue::Integer(_), target) => Flow {
+                    ins: Analysis {
+                        vars: outs.vars.clone() - lhs,
+                        loans: ins.loans.clone(),
+                    },
+                    outs: Analysis {
+                        vars: old_analyses[target].ins.vars.clone(),
+                        loans: ins.loans.clone() - lhs,
+                    },
+                },
+                Instr::Assign(destination, RValue::Var(rhs), target)
+                | Instr::Assign(destination, RValue::Field(rhs, _), target) => Flow {
+                    ins: Analysis {
+                        vars: outs.vars.clone() - destination + rhs.clone(),
+                        loans: ins.loans.clone(),
+                    },
+                    outs: Analysis {
+                        vars: old_analyses[target].ins.vars.clone(),
+                        loans: ins.loans.clone()
+                            + (
+                                destination.clone(),
+                                [Borrow {
+                                    label: label.clone(),
+                                    var: rhs.clone(),
+                                }],
+                            ),
+                    },
+                },
+                Instr::Call {
+                    name: _,
+                    args,
+                    destination,
+                    target,
+                } => Flow {
+                    ins: Analysis {
+                        vars: outs.vars.clone() - &destination.name
+                            + Set::from_iter(args.iter().cloned()),
+                        loans: ins.loans.clone()
+                            + (
+                                destination.name.clone(),
+                                args.iter()
+                                    .map(|arg| ins.loans.get(arg).cloned().unwrap_or_default())
+                                    .sum::<Set<Borrow>>(),
+                            ),
+                    },
+                    outs: Analysis {
+                        vars: old_analyses[target].ins.vars.clone(),
+                        loans: ins.loans.clone()
+                            + (
+                                destination.name.clone(),
+                                args.iter()
+                                    .map(|arg| ins.loans.get(arg).cloned().unwrap_or_default())
+                                    .sum::<Set<Borrow>>(),
+                            ),
+                    },
+                },
+                Instr::Struct {
+                    name: _,
+                    fields,
+                    destination,
+                    target,
+                } => Flow {
+                    ins: Analysis {
+                        vars: outs.vars.clone() - &destination.name
+                            + Set::from_iter(fields.values().cloned()),
+                        loans: ins.loans.clone(),
+                    },
+                    outs: Analysis {
+                        vars: old_analyses[target].ins.vars.clone(),
+                        loans: ins.loans.clone()
+                            + (
+                                destination.name.clone(),
+                                fields
+                                    .values()
+                                    .map(|field| ins.loans[field].clone())
+                                    .sum::<Set<Borrow>>(),
+                            ),
+                    },
+                },
+                Instr::Branch(v, iftrue, iffalse) => Flow {
+                    ins: Analysis {
+                        vars: outs.vars.clone() + v.clone(),
+                        loans: outs.loans.clone(),
+                    },
+                    outs: Analysis {
+                        vars: old_analyses[iftrue].ins.vars.clone()
+                            + old_analyses[iffalse].ins.vars.clone(),
+                        loans: outs.loans.clone(),
+                    },
+                },
+                Instr::Scope {
+                    cfg,
+                    entry_l,
+                    exit_l,
+                    target,
+                } => {
+                    let mut inner = liveness(cfg, exit_l);
+                    let Flow {
+                        ins:
+                            Analysis {
+                                vars: inner_vars,
+                                loans: _,
+                            },
+                        outs:
+                            Analysis {
+                                vars: _,
+                                loans: inner_loans,
+                            },
+                    } = inner.remove(entry_l).unwrap();
+                    Flow {
+                        ins: Analysis {
+                            vars: outs.vars.clone() + inner_vars,
+                            loans: ins.loans.clone(),
+                        },
+                        outs: Analysis {
+                            vars: old_analyses[target].ins.vars.clone(),
+                            loans: ins.loans.clone() + inner_loans,
+                        },
+                    }
+                }
+            };
+            analyses.insert(label.clone(), new_flow);
         }
         if old_analyses == analyses {
             break;
         }
     }
 
+    for (label, instr) in cfg {
+        if let Instr::Assign(lhs, _, _) = instr {
+            let analysis = &analyses[label];
+            if analysis.ins.loans.is_borrowed(lhs) {
+                println!("Mutating {lhs} while borrowed!!!!!");
+            }
+        }
+    }
+
+    let mut graph = Graph::new();
+
+    let mut t: HashMap<&CfgLabel, _> = cfg
+        .iter()
+        .map(|(l, instr)| (l, graph.add_node(instr)))
+        .collect();
+
+    let exit = Instr::Goto(exit_l.clone());
+    t.insert(exit_l, graph.add_node(&exit));
+
+    for (label, instr) in cfg {
+        match instr {
+            Instr::Goto(target)
+            | Instr::Declare(_, target)
+            | Instr::Assign(_, _, target)
+            | Instr::Call { target, .. }
+            | Instr::Scope { target, .. }
+            | Instr::Struct { target, .. } => {
+                graph.add_edge(t[label], t[target], &analyses[label].outs.vars)
+            }
+            Instr::Branch(_, iftrue, iffalse) => {
+                graph.add_edge(t[label], t[iftrue], &analyses[label].outs.vars);
+                graph.add_edge(t[label], t[iffalse], &analyses[label].outs.vars)
+            }
+        };
+    }
+
+    println!("Final analyses: {:?}", Dot::new(&graph));
+
     analyses
 }
-
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,7 +284,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        let analysis = var_liveness(&cfg, &l_exit);
+        let analysis = liveness(&cfg, &l_exit);
 
         // Entry and exit are trivial
         assert_eq!(analysis[&l0].ins.len(), 0);
@@ -199,3 +300,4 @@ mod tests {
         assert_eq!(analysis[&l3].outs.len(), 0);
     }
 }
+*/

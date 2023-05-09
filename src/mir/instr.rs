@@ -36,17 +36,6 @@ pub enum Instr {
         /// Target label to jump afterward.
         target: CfgLabel,
     },
-    /// Field access.
-    Field {
-        /// Structure whose field we want.
-        strukt: Var,
-        /// Field in that structure to access.
-        field: String,
-        /// Destination variable to hold the value of the accessed field.
-        destination: VarDef,
-        /// Target label to jump afterward.
-        target: CfgLabel,
-    },
     /// Based on the truthiness of the first argument, jumps either to the 2nd
     /// argument (if true) or the 3rd one (if false)
     Branch(Var, CfgLabel, CfgLabel),
@@ -90,12 +79,6 @@ impl fmt::Debug for Instr {
                 res.finish()?;
                 write!(f, " --> {target:?}")
             }
-            Instr::Field {
-                strukt,
-                field,
-                destination,
-                target,
-            } => write!(f, "{destination:?} = {strukt}.{field} --> {target:?}"),
             Instr::Branch(cond, iftrue, iffalse) => {
                 write!(f, "{cond:?} ? {iftrue:?} : {iffalse:?}")
             }
@@ -120,7 +103,6 @@ impl Instr {
             | Instr::Assign(_, _, target)
             | Instr::Call { target, .. }
             | Instr::Struct { target, .. }
-            | Instr::Field { target, .. }
             | Instr::Scope { target, .. } => boxed(std::iter::once(target.clone())),
             Instr::Branch(_, iftrue, iffalse) => {
                 boxed([iftrue.clone(), iffalse.clone()].into_iter())

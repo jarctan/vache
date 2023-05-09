@@ -308,19 +308,6 @@ impl<'a> Interpreter<'a> {
                 self.pop_scope(None);
                 self.visit_cfg(cfg, target)
             }
-            Some(Instr::Field {
-                strukt,
-                field,
-                destination,
-                target,
-            }) => {
-                if let StructV(_, fields) = self.get_var_value(strukt) {
-                    self.set_var(&destination.name, fields[field]);
-                    self.visit_cfg(cfg, target)
-                } else {
-                    panic!("Runtime error: value should be a structure");
-                }
-            }
             None => label,
         }
     }

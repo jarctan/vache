@@ -1,28 +1,37 @@
 //! Providing the general abstractions for the liveness analysis through the
 //! definition of flows.
 use std::fmt::Debug;
-use std::iter::Sum;
-use std::ops::{BitOr, Sub};
+use std::ops::Add;
 
-/// Elements that can be used a containers for flows.
-///
-/// Overall, somethings that behaves like a set: we can bit or, sum, subtract
-/// between (same) implementers of that trait.
-pub trait Flowable = Sized
-    + Debug
-    + Clone
-    + Default
-    + PartialEq
-    + Eq
-    + Sum
-    + BitOr<Output = Self>
-    + for<'a> Sub<&'a Self, Output = Self>;
+use super::ledger::Ledger;
+use crate::mir::Var;
+use crate::utils::set::Set;
 
-/// A flow point: a collection of inputs, and a collection of outputs.
+/// Liveliness analysis result at a point in time.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Flow<S: Flowable> {
-    /// Set of variables.
-    pub ins: S,
+pub struct Analysis {
+    /// Set of live variables.
+    pub vars: Set<Var>,
+    /// Ledger of active loans.
+    pub loans: Ledger,
+}
+
+impl Add for Analysis {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self::Output {
+        Self {
+            vars: self.vars + other.vars,
+            loans: self.loans + other.loans,
+        }
+    }
+}
+
+/// An analysis flow.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Flow {
+    /// Ins.
+    pub ins: Analysis,
     /// Outs.
-    pub outs: S,
+    pub outs: Analysis,
 }

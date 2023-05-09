@@ -197,12 +197,11 @@ impl MIRer {
                 if let StructT(name) = &s.ty {
                     let field_ty = structs.get(name).unwrap().get_field(&field).clone();
                     let struct_var = self.cfg().fresh_var(field_ty);
-                    let dest_l = self.cfg().insert(Instr::Field {
-                        strukt: struct_var.name.clone(),
-                        field,
-                        destination: dest_v,
-                        target: dest_l,
-                    });
+                    let dest_l = self.cfg().insert(Instr::Assign(
+                        dest_v.name,
+                        RValue::Field(struct_var.name.clone(), field),
+                        dest_l,
+                    ));
                     let dest_l = self.visit_expr(s, struct_var.clone(), dest_l, structs);
                     self.cfg().insert(Instr::Declare(struct_var, dest_l))
                 } else {

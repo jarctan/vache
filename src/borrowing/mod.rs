@@ -10,6 +10,5 @@ mod ledger;
 mod liveness;
 
 pub use checker::BorrowChecker;
-use flow::{Flow, Flowable};
-use ledger::loan_liveness;
-use liveness::var_liveness;
+use flow::Flow;
+use liveness::liveness;

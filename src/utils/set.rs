@@ -66,6 +66,15 @@ impl<'a, T: Eq + Hash> Add for Set<T> {
     }
 }
 
+impl<'a, T: Eq + Hash> Add<T> for Set<T> {
+    type Output = Set<T>;
+
+    fn add(mut self, rhs: T) -> Self {
+        self.0.insert(rhs);
+        self
+    }
+}
+
 impl<T: Eq + Hash> AddAssign<T> for Set<T> {
     fn add_assign(&mut self, rhs: T) {
         self.0.insert(rhs);
@@ -94,6 +103,15 @@ impl<'a, T: Eq + Hash> Sub<&'a Set<T>> for Set<T> {
         for i in &rhs.0 {
             self.0.remove(i);
         }
+        self
+    }
+}
+
+impl<'a, T: Eq + Hash> Sub<&'a T> for Set<T> {
+    type Output = Set<T>;
+
+    fn sub(mut self, rhs: &T) -> Self {
+        self.0.remove(rhs);
         self
     }
 }
