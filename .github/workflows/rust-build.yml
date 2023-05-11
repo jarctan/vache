@@ -30,6 +30,7 @@ jobs:
       - name: Generate Docs
         if: github.ref == 'refs/heads/master'
         run: |
+          rm -rf ./docs
           cargo doc --no-deps
-          cp -R target/doc/vache ${{ github.workspace }}/docs
-        continue-on-error: true
+          echo "<meta http-equiv=\"refresh\" content=\"0; url=vache\">" > target/doc/index.html
+          cp -r target/doc ./docs
