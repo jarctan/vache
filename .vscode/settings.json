@@ -27,7 +27,8 @@
         "fixpoint",
         "Hasher",
         "Flowable",
-        "preneighbors"
+        "preneighbors",
+        "Deque",
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }
