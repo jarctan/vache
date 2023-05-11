@@ -119,13 +119,20 @@ impl fmt::Debug for Instr {
                 name,
                 args,
                 destination,
-            } => write!(f, "{destination:?} = {name}({args:?})"),
+            } => {
+                if let Some(destination) = destination {
+                    write!(f, "{destination:?} = ")?;
+                }
+                write!(f, "{name}({args:?})")
+            }
             Instr::Struct {
                 name,
                 fields,
                 destination,
             } => {
-                write!(f, "{destination:?} = ")?;
+                if let Some(destination) = destination {
+                    write!(f, "{destination:?} = ")?;
+                }
                 let mut res = f.debug_struct(name);
                 for (name, var) in fields {
                     res.field(name, var);

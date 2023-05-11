@@ -92,12 +92,12 @@ impl<'a> Interpreter<'a> {
         f_name: impl AsRef<str>,
         args: Vec<ValueRef>,
         stratum: Stratum,
-    ) -> ValueRef {
+    ) -> Option<ValueRef> {
         let f_name = f_name.as_ref();
 
         // Override in case of builtin.
         if let Some(res) = self.check_builtin(f_name, &args, stratum) {
-            res
+            Some(res)
         } else {
             self.push_scope();
             let f = self
@@ -125,10 +125,10 @@ impl<'a> Interpreter<'a> {
             }
 
             self.visit_cfg(&f.body, &f.entry_l);
+            println!("ok, return value is {:?}", f.ret_v);
 
             // Request the final value (if the function returns a value, of course)
             self.pop_scope(f.ret_v.as_ref().map(|ret_v| self.get_var(ret_v)))
-                .unwrap()
         }
     }
 
@@ -233,7 +233,14 @@ impl<'a> Interpreter<'a> {
                 };
                 v_ref
             }
-            RValue::Field(_, _) => todo!(),
+            RValue::Field(strukt, field) => {
+                let value = self.get_var_value(strukt);
+                if let StructV(_, strukt) = value {
+                    strukt[field]
+                } else {
+                    panic!("Runtime error: field access should only be on structs")
+                }
+            }
         }
     }
 
@@ -262,7 +269,12 @@ impl<'a> Interpreter<'a> {
                     .map_or(self.current_stratum(), |dest| self.get_var(dest).stratum);
                 let call_result = self.call(name, args, stratum);
                 if let Some(destination) = destination {
-                    self.set_var(destination, call_result);
+                    self.set_var(
+                        destination,
+                        call_result.expect(
+                            "if the destination is set, then the function should return a value",
+                        ),
+                    );
                 }
                 DefaultB
             }
