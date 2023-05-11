@@ -1,3 +1,5 @@
+//! Defining stratums: ids of lifetime frames in the IR.
+
 use core::fmt;
 
 /// Stratum/scope identifier.

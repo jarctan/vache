@@ -1,6 +1,4 @@
 //! Visiting the AST, consuming it at the same time.
-//!
-//! See `Visitor` if you _don't_ want to consume the AST.
 
 use super::{Block, Expr, Fun, Program, Stmt, Struct};
 

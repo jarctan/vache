@@ -1,6 +1,12 @@
-//! Typed AST for the language.
+//! Medium Intermediate Representation for the language.
 //!
-//! Each node in the tree = one file. Some parts are re-exported from the parser
+//! This representation is the first destructured, control flow-graph
+//! representation.
+//!
+//! It goes after the typed AST, and before the final backend version in the
+//! compilation process.
+//!
+//! Each node in the tree = one file. Some parts are re-exported from the typed
 //! AST.
 
 pub mod fun;

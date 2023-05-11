@@ -1,3 +1,5 @@
+//! Defining typed expressions.
+
 use rug::Integer;
 
 use super::{Block, Stratum, Ty, VarDef};

@@ -1,4 +1,5 @@
-//! Defining instructions, which are the basic units in the MIR.
+//! Defining instructions and branches, which are the basic units in the
+//! MIR/CFG.
 
 use std::collections::HashMap;
 

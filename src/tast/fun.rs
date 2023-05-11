@@ -1,6 +1,8 @@
+//! Defining typed functions.
+
 use super::{Block, Ty, VarDef};
 
-/// A function in the parser AST.
+/// A function in the typed AST.
 #[derive(Debug, Clone)]
 pub struct Fun {
     /// Name of that function.

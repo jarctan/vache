@@ -1,3 +1,5 @@
+//! Defining programs, the biggest unit in the Typed AST.
+
 use std::collections::HashMap;
 
 use super::{Fun, Struct};

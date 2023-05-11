@@ -1,4 +1,4 @@
-//! All the stuff for user-friendlier sets in Rust.
+//! Representing control flow graphs.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -8,6 +8,7 @@ use std::ops::{Deref, IndexMut};
 
 use super::{Branch, Instr};
 
+/// A node index in the graph.
 #[derive(Clone, Default, PartialEq, Eq, Hash)]
 pub struct NodeIx(u64);
 
@@ -17,9 +18,10 @@ impl fmt::Debug for NodeIx {
     }
 }
 
-/// A label in the control flow graph.
+/// Type alias for a label (node index) in the control flow graph.
 pub type CfgLabel = NodeIx;
 
+/// An edge index in the graph.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
 struct EdgeIx(u64);
 
@@ -29,17 +31,27 @@ impl fmt::Debug for EdgeIx {
     }
 }
 
+/// A node in the graph.
 #[derive(PartialEq, Eq, Debug)]
 struct Node<N> {
+    /// Value/weight of that node.
     value: N,
+    /// List of ingoing edges, indexed by their weight.
     ins: HashMap<Branch, EdgeIx>,
+    /// List of outgoing edges, indexed by their weight.
     outs: HashMap<Branch, EdgeIx>,
 }
 
+/// An edge in the graph.
+///
+/// All edges are directed.
 #[derive(PartialEq, Eq, Debug)]
 struct Edge<E> {
-    from: CfgLabel,
-    to: CfgLabel,
+    /// Node index of the origin of the edge.
+    from: NodeIx,
+    /// Node index of the target of the edge.
+    to: NodeIx,
+    /// Weight of the edge.
     weight: E,
 }
 
@@ -61,16 +73,26 @@ impl<N> From<N> for Node<N> {
     }
 }
 
-/// A control flow graph. It's a graph, tailored to our needs.
+/// A control flow graph. It's a basically graph, tailored to our needs.
+///
+/// Generic parameters:
+/// * `N` is the type of nodes weights
+/// * `E` is the type of edges weights
 #[derive(PartialEq, Eq, Default)]
 pub struct Cfg<N = Instr, E = ()> {
+    /// Map of node indexes to node data.
     node_map: HashMap<NodeIx, Node<N>>,
+    /// Map of edge indexes to the edge data.
     edge_map: HashMap<EdgeIx, Edge<E>>,
+    /// Fresh node index counter.
     node_ix_counter: u64,
+    /// Fresh edge index counter.
     edge_ix_counter: u64,
 }
 
 impl<N, E> Cfg<N, E> {
+    /// Starting from a node, takes a given branch/path. Returns the target
+    /// node, if any.
     pub fn take_branch(&self, node: &CfgLabel, branch: &Branch) -> Option<&CfgLabel> {
         self.node_map[node]
             .outs
@@ -78,6 +100,7 @@ impl<N, E> Cfg<N, E> {
             .map(|e| &self.edge_map[e].to)
     }
 
+    /// Adds a new node to the graph, returning its label in the CFG.
     pub fn add_node(&mut self, node: N) -> CfgLabel {
         let label = NodeIx(self.node_ix_counter);
         self.node_ix_counter = self.node_ix_counter.checked_add(1).unwrap();
@@ -85,6 +108,8 @@ impl<N, E> Cfg<N, E> {
         label
     }
 
+    /// Adds a new edge between `from` and `to` in the graph with weight
+    /// `branch` and extra weight `E`.
     pub fn add_edge(&mut self, from: CfgLabel, to: CfgLabel, branch: Branch, weight: E) {
         let edge = Edge { from, to, weight };
         let ix = EdgeIx(self.edge_ix_counter);
@@ -136,6 +161,10 @@ impl<N, E> Cfg<N, E> {
         Dfs::new(self, start)
     }
 
+    /// Maps into a new CFG.
+    ///
+    /// You must provide a mapping for nodes, and one for edges. Use `map_ref`
+    /// if you only have a reference into the CFG.
     pub fn map<F, G, N2, E2>(self, mut node_map: F, mut edge_map: G) -> Cfg<N2, E2>
     where
         F: FnMut(NodeIx, N) -> N2,
@@ -175,6 +204,11 @@ impl<N, E> Cfg<N, E> {
         }
     }
 
+    /// Maps into a new CFG.
+    ///
+    /// You must provide a mapping for nodes, and one for edges. Only needs a
+    /// self reference, will clone items that are needed from the original
+    /// CFG. Prefer to use `map()` whenever possible.
     pub fn map_ref<'a, F, G, N2, E2>(&'a self, mut node_map: F, mut edge_map: G) -> Cfg<N2, E2>
     where
         F: FnMut(NodeIx, &'a N) -> N2,

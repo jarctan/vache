@@ -1,6 +1,8 @@
+//! Defining typed blocks.
+
 use super::{Expr, Stmt};
 
-/// A block in the parser AST.
+/// A block in the typed AST.
 ///
 /// A block is a list of ordered statements, followed by a final expression.
 #[derive(Debug, Clone)]

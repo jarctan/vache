@@ -1,3 +1,5 @@
+//! Defining statements.
+
 use super::{Block, Expr, VarDef};
 
 /// A statement.
