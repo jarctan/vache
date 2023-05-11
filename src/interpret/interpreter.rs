@@ -120,12 +120,15 @@ impl<'a> Interpreter<'a> {
             }
 
             // Introduce return variable
-            self.add_var(f.ret_v.name.clone());
+            if let Some(ret_v) = &f.ret_v {
+                self.add_var(ret_v.name.clone());
+            }
 
             self.visit_cfg(&f.body, &f.entry_l);
 
-            // Request the final value!
-            self.pop_scope(Some(self.get_var(&f.ret_v))).unwrap()
+            // Request the final value (if the function returns a value, of course)
+            self.pop_scope(f.ret_v.as_ref().map(|ret_v| self.get_var(ret_v)))
+                .unwrap()
         }
     }
 
@@ -155,23 +158,15 @@ impl<'a> Interpreter<'a> {
     /// Gets the definition of a variable.
     fn get_var(&self, v: impl AsRef<Var>) -> ValueRef {
         let v = v.as_ref();
-        if v.is_trash() {
-            // If reading the trash variable, return the reference to the uninit value
-            self.env
-                .last()
-                .expect("there should be at least one active environment")
-                .uninit_value()
-        } else {
-            // Iterate over environments in reverse (last declared first processed)
-            // order
-            // Returns the first environment that has that variable declared
-            self.env
-                .iter()
-                .rev()
-                .find_map(|e| e.get_var(v))
-                .copied()
-                .unwrap_or_else(|| panic!("Runtime error: variable {} should exist", v))
-        }
+        // Iterate over environments in reverse (last declared first processed)
+        // order
+        // Returns the first environment that has that variable declared
+        self.env
+            .iter()
+            .rev()
+            .find_map(|e| e.get_var(v))
+            .copied()
+            .unwrap_or_else(|| panic!("Runtime error: variable {} should exist", v))
     }
 
     /// Gets a mutable reference into the value of a variable.
@@ -195,9 +190,7 @@ impl<'a> Interpreter<'a> {
     /// Assigns a variable in the context.
     fn set_var(&mut self, name: impl AsRef<Var>, value: impl Into<ValueRef>) {
         let name = name.as_ref();
-        if !name.is_trash() {
-            *self.get_var_mut(name) = value.into();
-        }
+        *self.get_var_mut(name) = value.into();
     }
 
     /// Adds a value to the dynamic store/slab.
@@ -264,9 +257,13 @@ impl<'a> Interpreter<'a> {
                 destination,
             } => {
                 let args = args.iter().map(|v| self.get_var(v)).collect();
-                let stratum = self.get_var(destination).stratum;
+                let stratum = destination
+                    .as_ref()
+                    .map_or(self.current_stratum(), |dest| self.get_var(dest).stratum);
                 let call_result = self.call(name, args, stratum);
-                self.set_var(&destination.name, call_result);
+                if let Some(destination) = destination {
+                    self.set_var(destination, call_result);
+                }
                 DefaultB
             }
             Instr::Struct {
@@ -278,9 +275,13 @@ impl<'a> Interpreter<'a> {
                     .iter()
                     .map(|(k, v)| (k.clone(), self.get_var(v)))
                     .collect();
-                let stratum = self.get_var(&destination.name).stratum;
+                let stratum = destination
+                    .as_ref()
+                    .map_or(self.current_stratum(), |dest| self.get_var(dest).stratum);
                 let value = self.add_value(StructV(name.to_owned(), fields), stratum);
-                self.set_var(&destination.name, value);
+                if let Some(destination) = destination {
+                    self.set_var(destination, value);
+                }
                 DefaultB
             }
             Instr::Branch(cond) => {

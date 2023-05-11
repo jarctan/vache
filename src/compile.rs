@@ -19,7 +19,6 @@ impl Compiler {
     fn prelude() -> TokenStream {
         quote!(
             #![allow(clippy::needless_late_init)]
-            #![allow(clippy::unused_unit)]
             #![allow(unused_mut)]
 
             extern crate rug;
@@ -233,7 +232,13 @@ impl Compiler {
                 args,
                 destination,
             } => {
-                let destination = format_ident!("{}", destination.name.as_str());
+                let prefix = destination
+                    .as_ref()
+                    .map(|dest| {
+                        let destination = format_ident!("{}", dest.as_str());
+                        quote!(#destination = )
+                    })
+                    .unwrap_or_default();
                 if name == "print" {
                     let mut builder = StringBuilder::default();
 
@@ -248,7 +253,7 @@ impl Compiler {
 
                     let args = args.iter().map(|arg| self.visit_var(arg.clone()));
                     let fmt_str = builder.string().unwrap();
-                    quote!(let #destination = println!(#fmt_str, #(#args),*);)
+                    quote!(#prefix println!(#fmt_str, #(#args),*);)
                 } else {
                     let args = args.iter().map(|arg| self.visit_var(arg.clone()));
                     let name = match name.as_str() {
@@ -266,7 +271,7 @@ impl Compiler {
                         _ => name.to_string(),
                     };
                     let name = format_ident!("{name}");
-                    quote!(let #destination = #name(#(#args),*);)
+                    quote!(#prefix #name(#(#args),*);)
                 }
             }
             crate::mir::Instr::Struct { .. } => todo!(),
@@ -298,24 +303,48 @@ impl Compiler {
             .bfs(&f.entry_l)
             .map(|(_, instr)| self.visit_instr(instr))
             .collect();
-        let ty = self.translate_type(&f.ret_v.ty, true);
 
-        let ret_v = format_ident!("{}", f.ret_v.name.as_str());
+        let ret_ty = f
+            .ret_v
+            .as_ref()
+            .map(|v| {
+                let ty = self.translate_type(&v.ty, true);
+                quote!(-> #ty)
+            })
+            .unwrap_or_default();
+
+        let ret_vardef = f
+            .ret_v
+            .as_ref()
+            .map(|v| {
+                let vardef = format_ident!("{}", v.name.as_str());
+                quote!(let mut #vardef;)
+            })
+            .unwrap_or_default();
+
+        let final_return = f
+            .ret_v
+            .as_ref()
+            .map(|v| {
+                let v = format_ident!("{}", v.name.as_str());
+                quote!(#v)
+            })
+            .unwrap_or_default();
 
         if params.is_empty() {
             quote! {
-                pub fn #name(#(#params),*) -> #ty {
-                    let #ret_v;
+                pub fn #name(#(#params),*) #ret_ty {
+                    #ret_vardef
                     #body;
-                    #ret_v
+                    #final_return
                 }
             }
         } else {
             quote! {
-                pub fn #name<'a>(#(#params),*) -> #ty {
-                    let #ret_v;
+                pub fn #name<'a>(#(#params),*) #ret_ty {
+                    #ret_vardef
                     #body;
-                    #ret_v
+                    #final_return
                 }
             }
         }

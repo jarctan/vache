@@ -98,11 +98,6 @@ impl Env {
             None
         }
     }
-
-    /// Returns the reference to the uninitialized value.
-    pub const fn uninit_value(&self) -> ValueRef {
-        self.uninit
-    }
 }
 
 impl fmt::Debug for Env {

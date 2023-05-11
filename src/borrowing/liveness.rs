@@ -42,7 +42,7 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                     args,
                     destination,
                 } => {
-                    outs.clone() - &destination.name
+                    outs.clone() - destination.as_ref()
                         + Set::from_iter(args.iter().map(|arg| &arg.var).cloned())
                 }
                 Instr::Struct {
@@ -50,7 +50,7 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                     fields,
                     destination,
                 } => {
-                    outs.clone() - &destination.name
+                    outs.clone() - destination.as_ref()
                         + Set::from_iter(fields.values().map(|arg| &arg.var).cloned())
                 }
                 Instr::Branch(v) => outs.clone() + v.clone(),
@@ -109,11 +109,11 @@ fn loan_liveness(
                 Instr::Call {
                     name: _,
                     args,
-                    destination,
+                    destination: Some(destination),
                 } => {
-                    ins.clone() - &destination.name
+                    ins.clone() - destination
                         + (
-                            destination.name.clone(),
+                            destination.clone(),
                             args.iter()
                                 .map(|arg| ins.borrow(arg.var.clone(), label.clone()))
                                 .sum::<Set<Borrow>>(),
@@ -122,18 +122,24 @@ fn loan_liveness(
                 Instr::Struct {
                     name: _,
                     fields,
-                    destination,
+                    destination: Some(destination),
                 } => {
-                    ins.clone() - &destination.name
+                    ins.clone() - destination
                         + (
-                            destination.name.clone(),
+                            destination.clone(),
                             fields
                                 .values()
                                 .map(|field| ins.borrow(field.var.clone(), label.clone()))
                                 .sum::<Set<Borrow>>(),
                         )
                 }
-                Instr::Branch(_) => ins.clone(),
+                Instr::Branch(_)
+                | Instr::Call {
+                    destination: None, ..
+                }
+                | Instr::Struct {
+                    destination: None, ..
+                } => ins.clone(),
             } - &out_of_scope[label];
 
             let flow = Flow { ins, outs };

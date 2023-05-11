@@ -12,7 +12,9 @@ pub struct Fun {
     /// and stratum.
     pub params: Vec<VarDef>,
     /// Return variable. The variable in which the return value is written.
-    pub ret_v: VarDef,
+    ///
+    /// If `None`, the function returns nothing.
+    pub ret_v: Option<VarDef>,
     /// Entry label in the CFG.
     pub entry_l: CfgLabel,
     /// Return label in the CFG.

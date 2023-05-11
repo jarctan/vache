@@ -43,7 +43,7 @@ pub enum Instr {
         /// Arguments to that function.
         args: Vec<VarMode>,
         /// Destination variable to hold the result.
-        destination: VarDef,
+        destination: Option<Var>,
     },
     /// Structure instantiation.
     Struct {
@@ -52,7 +52,7 @@ pub enum Instr {
         /// Name of the structure to instantiate.
         fields: HashMap<String, VarMode>,
         /// Destination variable to hold the instantiated structure.
-        destination: VarDef,
+        destination: Option<Var>,
     },
     /// Asks for the truthiness of the first argument.
     Branch(Var),
@@ -72,9 +72,8 @@ impl Instr {
     pub fn mutated_var(&self) -> Option<&Var> {
         match self {
             Instr::Noop | Instr::Branch(_) | Instr::PushScope | Instr::PopScope => None,
-            Instr::Declare(v)
-            | Instr::Call { destination: v, .. }
-            | Instr::Struct { destination: v, .. } => Some(&v.name),
+            Instr::Declare(v) => Some(&v.name),
+            Instr::Call { destination: v, .. } | Instr::Struct { destination: v, .. } => v.as_ref(),
             Instr::Assign(v, _) => Some(v),
         }
     }

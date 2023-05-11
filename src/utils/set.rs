@@ -107,6 +107,17 @@ impl<'a, T: Eq + Hash> Sub<&'a Set<T>> for Set<T> {
     }
 }
 
+impl<'a, T: Eq + Hash> Sub<Option<&'a T>> for Set<T> {
+    type Output = Set<T>;
+
+    fn sub(mut self, rhs: Option<&T>) -> Self {
+        if let Some(rhs) = rhs {
+            self.0.remove(rhs);
+        }
+        self
+    }
+}
+
 impl<'a, T: Eq + Hash> Sub<&'a T> for Set<T> {
     type Output = Set<T>;
 

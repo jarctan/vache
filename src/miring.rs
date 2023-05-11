@@ -23,18 +23,6 @@ struct CfgBuilder {
 }
 
 impl CfgBuilder {
-    /// Generates a trash variable with a given type.
-    ///
-    /// Trash variables are never read. This fact allows for some optimizations
-    /// in the backend.
-    #[must_use]
-    pub fn trash_var(&mut self, ty: Ty) -> VarDef {
-        VarDef {
-            name: Var::trash(),
-            ty,
-        }
-    }
-
     /// Generates a fresh variable, that has never been used in *any* CFG.
     #[must_use]
     pub fn fresh_var(&mut self, ty: Ty) -> VarDef {
@@ -119,32 +107,50 @@ impl MIRer {
     fn visit_expr(
         &mut self,
         e: tast::Expr,
-        dest_v: VarDef,
+        dest_v: Option<VarDef>,
         dest_l: CfgLabel,
         structs: &HashMap<String, Struct>,
     ) -> CfgLabel {
         match e.raw {
-            tast::RawExpr::UnitE => self.cfg.insert(
-                Instr::Assign(dest_v.name, RValue::Unit),
-                [(DefaultB, dest_l)],
-            ),
-            tast::RawExpr::IntegerE(i) => self.cfg.insert(
-                Instr::Assign(dest_v.name, RValue::Integer(i)),
-                [(DefaultB, dest_l)],
-            ),
-            tast::RawExpr::StringE(s) => self.cfg.insert(
-                Instr::Assign(dest_v.name, RValue::String(s)),
-                [(DefaultB, dest_l)],
-            ),
-            tast::RawExpr::VarE(v) => {
-                if dest_v == v {
-                    // If the rhs and lhs are the same variable, that's a no-op we can optimize away
-                    dest_l
+            tast::RawExpr::UnitE => {
+                if let Some(dest_v) = dest_v {
+                    self.cfg.insert(
+                        Instr::Assign(dest_v.name, RValue::Unit),
+                        [(DefaultB, dest_l)],
+                    )
                 } else {
+                    dest_l
+                }
+            }
+            tast::RawExpr::IntegerE(i) => {
+                if let Some(dest_v) = dest_v {
+                    self.cfg.insert(
+                        Instr::Assign(dest_v.name, RValue::Integer(i)),
+                        [(DefaultB, dest_l)],
+                    )
+                } else {
+                    dest_l
+                }
+            }
+            tast::RawExpr::StringE(s) => {
+                if let Some(dest_v) = dest_v {
+                    self.cfg.insert(
+                        Instr::Assign(dest_v.name, RValue::String(s)),
+                        [(DefaultB, dest_l)],
+                    )
+                } else {
+                    dest_l
+                }
+            }
+            tast::RawExpr::VarE(v) => {
+                if let Some(dest_v) = dest_v && dest_v != v {
+                    // Only do the assignment if the rhs and lhs are not the same! Otherwise optimize it away
                     self.cfg.insert(
                         Instr::Assign(dest_v.name, RValue::Var(VarMode::refed(v.name))),
                         [(DefaultB, dest_l)],
                     )
+                } else {
+                    dest_l
                 }
             }
             tast::RawExpr::CallE { name, args } => {
@@ -161,7 +167,7 @@ impl MIRer {
                     Instr::Call {
                         name,
                         args: arg_vars.clone().into_iter().map(VarMode::refed).collect(),
-                        destination: dest_v,
+                        destination: dest_v.map(|dest| dest.name),
                     },
                     [(DefaultB, dest_l)],
                 );
@@ -172,7 +178,7 @@ impl MIRer {
                     .rev()
                     .zip(arg_vars.iter().rev().cloned())
                     .fold(call_l, |dest_l, (arg_expr, arg_var)| {
-                        self.visit_expr(arg_expr, arg_var, dest_l, structs)
+                        self.visit_expr(arg_expr, Some(arg_var), dest_l, structs)
                     });
 
                 // Declaration of the arguments
@@ -193,7 +199,7 @@ impl MIRer {
                 );
 
                 // Evaluate the condition
-                self.visit_expr(cond, cond_var, cond_l, structs)
+                self.visit_expr(cond, Some(cond_var), cond_l, structs)
             }
             tast::RawExpr::BlockE(box e) => self.visit_block(e, dest_v, dest_l, structs),
             tast::RawExpr::FieldE(box s, field) => {
@@ -202,12 +208,12 @@ impl MIRer {
                     let struct_var = self.cfg.fresh_var(field_ty);
                     let dest_l = self.cfg.insert(
                         Instr::Assign(
-                            dest_v.name,
+                            dest_v.unwrap().name,
                             RValue::Field(VarMode::refed(struct_var.name.clone()), field),
                         ),
                         [(DefaultB, dest_l)],
                     );
-                    let dest_l = self.visit_expr(s, struct_var.clone(), dest_l, structs);
+                    let dest_l = self.visit_expr(s, Some(struct_var.clone()), dest_l, structs);
                     self.cfg
                         .insert(Instr::Declare(struct_var), [(DefaultB, dest_l)])
                 } else {
@@ -234,7 +240,7 @@ impl MIRer {
                             .into_iter()
                             .map(|(field, var)| (field, VarMode::refed(var.name)))
                             .collect(),
-                        destination: dest_v,
+                        destination: dest_v.map(|dest_v| dest_v.name),
                     },
                     [(DefaultB, dest_l)],
                 );
@@ -244,7 +250,7 @@ impl MIRer {
                     .into_iter()
                     .rev()
                     .fold(struct_l, |dest_l, (field, expr)| {
-                        self.visit_expr(expr, field_vars[&field].clone(), dest_l, structs)
+                        self.visit_expr(expr, Some(field_vars[&field].clone()), dest_l, structs)
                     });
 
                 field_vars.into_values().fold(compute_l, |dest_l, var| {
@@ -265,7 +271,7 @@ impl MIRer {
     fn visit_block(
         &mut self,
         b: tast::Block,
-        dest_v: VarDef,
+        dest_v: Option<VarDef>,
         dest_l: CfgLabel,
         structs: &HashMap<String, Struct>,
     ) -> CfgLabel {
@@ -291,17 +297,18 @@ impl MIRer {
     ) -> CfgLabel {
         match s {
             tast::Stmt::Declare(vardef, expr) => {
-                let expr_l = self.visit_expr(expr, vardef.clone(), dest_l, structs);
+                let expr_l = self.visit_expr(expr, Some(vardef.clone()), dest_l, structs);
                 self.cfg
                     .insert(Instr::Declare(vardef), [(DefaultB, expr_l)])
             }
-            tast::Stmt::Assign(vardef, expr) => self.visit_expr(expr, vardef, dest_l, structs),
+            tast::Stmt::Assign(vardef, expr) => {
+                self.visit_expr(expr, Some(vardef), dest_l, structs)
+            }
             tast::Stmt::While { cond, body } => {
                 let loop_l = self.cfg.fresh_label();
 
                 // The block itself.
-                let trash_var = self.cfg.trash_var(UnitT);
-                let body_l = self.visit_block(body, trash_var, loop_l.clone(), structs);
+                let body_l = self.visit_block(body, None, loop_l.clone(), structs);
 
                 // If statement
                 let cond_v = self.cfg.fresh_var(BoolT);
@@ -311,7 +318,7 @@ impl MIRer {
                 );
 
                 // Compute the condition.
-                let cond_l: CfgLabel = self.visit_expr(cond, cond_v.clone(), if_l, structs);
+                let cond_l: CfgLabel = self.visit_expr(cond, Some(cond_v.clone()), if_l, structs);
                 self.cfg
                     .insert_at(loop_l.clone(), Instr::Noop, [(DefaultB, cond_l)]);
 
@@ -319,17 +326,19 @@ impl MIRer {
                 self.cfg
                     .insert(Instr::Declare(cond_v), [(DefaultB, loop_l)])
             }
-            tast::Stmt::ExprS(e) => {
-                let trash_var = self.cfg.trash_var(UnitT);
-                self.visit_expr(e, trash_var, dest_l, structs)
-            }
+            tast::Stmt::ExprS(e) => self.visit_expr(e, None, dest_l, structs),
         }
     }
 
     /// Visits a function.
     fn visit_fun(&mut self, f: tast::Fun, structs: &HashMap<String, Struct>) -> Fun {
         let ret_l = self.cfg.fresh_label();
-        let ret_v = self.cfg.fresh_var(f.ret_ty);
+        // Reserve a fresh variable for the output, only if it's not the unit type
+        let ret_v = if f.ret_ty != UnitT {
+            Some(self.cfg.fresh_var(f.ret_ty))
+        } else {
+            None
+        };
         let entry_l = self.visit_block(f.body, ret_v.clone(), ret_l.clone(), structs);
         let body = std::mem::take(&mut self.cfg).finish();
 

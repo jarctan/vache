@@ -15,22 +15,9 @@ impl Var {
         Var(format!("__cfg{number:?}"))
     }
 
-    /// Returns an instantiation of the trash variable, the dummy variable is
-    /// never read.
-    ///
-    /// Similar to `/dev/null` on Unix systems.
-    pub(crate) fn trash() -> Var {
-        Var("__cfg_trash".to_string())
-    }
-
     /// See the variable as a string.
     pub fn as_str(&self) -> &str {
         self.as_ref()
-    }
-
-    /// Is it the trash variable (the dummy variable that is never read).
-    pub fn is_trash(&self) -> bool {
-        self.as_str() == "__cfg_trash"
     }
 }
 
