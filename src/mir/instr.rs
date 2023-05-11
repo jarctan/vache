@@ -40,7 +40,7 @@ pub enum Instr {
         /// Name of the function to call.
         name: String,
         /// Arguments to that function.
-        args: Vec<Var>,
+        args: Vec<VarMode>,
         /// Destination variable to hold the result.
         destination: VarDef,
     },
@@ -49,7 +49,7 @@ pub enum Instr {
         /// Name of the structure to instantiate.
         name: String,
         /// Name of the structure to instantiate.
-        fields: HashMap<String, Var>,
+        fields: HashMap<String, VarMode>,
         /// Destination variable to hold the instantiated structure.
         destination: VarDef,
     },
@@ -68,13 +68,43 @@ pub enum Instr {
 impl Instr {
     /// If this instruction mutates a variable, returns it.
     /// Otherwise, returns `None`.
-    pub fn is_mutating(&self) -> Option<&Var> {
+    pub fn mutated_var(&self) -> Option<&Var> {
         match self {
             Instr::Noop | Instr::Branch(_) | Instr::PushScope | Instr::PopScope => None,
             Instr::Declare(v)
             | Instr::Call { destination: v, .. }
             | Instr::Struct { destination: v, .. } => Some(&v.name),
             Instr::Assign(v, _) => Some(v),
+        }
+    }
+
+    /// If this instruction mutates variable `v`, it will modify its ownership
+    /// modality as "owned".
+    pub fn state_as_owned(&mut self, v: &Var) {
+        match self {
+            Instr::Noop
+            | Instr::Branch(_)
+            | Instr::PushScope
+            | Instr::PopScope
+            | Instr::Declare(_) => {
+                panic!("{v:?} not found in this instruction, cannot make it owned")
+            }
+            Instr::Call { args, .. } => {
+                let var = args.iter_mut().find(|arg| &arg.var == v).unwrap();
+                var.owned = true;
+            }
+            Instr::Struct { fields, .. } => {
+                let var = fields.values_mut().find(|arg| &arg.var == v).unwrap();
+                var.owned = true;
+            }
+            Instr::Assign(_, RValue::Var(rhs)) | Instr::Assign(_, RValue::Field(rhs, _))
+                if &rhs.var == v =>
+            {
+                rhs.owned = true;
+            }
+            Instr::Assign(_, _) => {
+                panic!("{v:?} not found in this instruction, cannot make it owned")
+            }
         }
     }
 }

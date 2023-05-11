@@ -136,7 +136,46 @@ impl<N, E> Cfg<N, E> {
         Dfs::new(self, start)
     }
 
-    pub fn map<'a, F, G, N2, E2>(&'a self, mut node_map: F, mut edge_map: G) -> Cfg<N2, E2>
+    pub fn map<F, G, N2, E2>(self, mut node_map: F, mut edge_map: G) -> Cfg<N2, E2>
+    where
+        F: FnMut(NodeIx, N) -> N2,
+        G: FnMut(E) -> E2,
+    {
+        Cfg {
+            node_map: self
+                .node_map
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        Node {
+                            value: node_map(k, v.value),
+                            ins: v.ins,
+                            outs: v.outs,
+                        },
+                    )
+                })
+                .collect(),
+            edge_map: self
+                .edge_map
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        Edge {
+                            weight: edge_map(v.weight),
+                            from: v.from,
+                            to: v.to,
+                        },
+                    )
+                })
+                .collect(),
+            node_ix_counter: self.node_ix_counter,
+            edge_ix_counter: self.edge_ix_counter,
+        }
+    }
+
+    pub fn map_ref<'a, F, G, N2, E2>(&'a self, mut node_map: F, mut edge_map: G) -> Cfg<N2, E2>
     where
         F: FnMut(NodeIx, &'a N) -> N2,
         G: FnMut(&'a E) -> E2,
@@ -161,7 +200,7 @@ impl<N, E> Cfg<N, E> {
                 .iter()
                 .map(|(k, v)| {
                     (
-                        k.clone(),
+                        *k,
                         Edge {
                             weight: edge_map(&v.weight),
                             from: v.from.clone(),

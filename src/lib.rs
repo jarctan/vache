@@ -50,9 +50,9 @@ pub fn check(p: impl Into<ast::Program>) -> tast::Program {
 ///
 /// Under the hood, this function is in charge of allocating a new
 /// `BorrowChecker` and launching it on your program.
-pub fn borrow_check(p: impl AsRef<mir::Program>) {
+pub fn borrow_check(p: impl Into<mir::Program>) -> mir::Program {
     let mut borrow_checker = BorrowChecker::new();
-    borrow_checker.check(p.as_ref());
+    borrow_checker.check(p.into())
 }
 
 /// Computes the MIR output of a given program.

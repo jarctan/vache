@@ -142,7 +142,7 @@ impl MIRer {
                     dest_l
                 } else {
                     self.cfg.insert(
-                        Instr::Assign(dest_v.name, RValue::Var(v.name)),
+                        Instr::Assign(dest_v.name, RValue::Var(VarMode::refed(v.name))),
                         [(DefaultB, dest_l)],
                     )
                 }
@@ -160,7 +160,7 @@ impl MIRer {
                 let call_l = self.cfg.insert(
                     Instr::Call {
                         name,
-                        args: arg_vars.clone().into_iter().map(|x| x.into()).collect(),
+                        args: arg_vars.clone().into_iter().map(VarMode::refed).collect(),
                         destination: dest_v,
                     },
                     [(DefaultB, dest_l)],
@@ -201,7 +201,10 @@ impl MIRer {
                     let field_ty = structs.get(name).unwrap().get_field(&field).clone();
                     let struct_var = self.cfg.fresh_var(field_ty);
                     let dest_l = self.cfg.insert(
-                        Instr::Assign(dest_v.name, RValue::Field(struct_var.name.clone(), field)),
+                        Instr::Assign(
+                            dest_v.name,
+                            RValue::Field(VarMode::refed(struct_var.name.clone()), field),
+                        ),
                         [(DefaultB, dest_l)],
                     );
                     let dest_l = self.visit_expr(s, struct_var.clone(), dest_l, structs);
@@ -229,7 +232,7 @@ impl MIRer {
                         fields: field_vars
                             .clone()
                             .into_iter()
-                            .map(|(field, var)| (field, var.name))
+                            .map(|(field, var)| (field, VarMode::refed(var.name)))
                             .collect(),
                         destination: dest_v,
                     },
@@ -266,7 +269,7 @@ impl MIRer {
         dest_l: CfgLabel,
         structs: &HashMap<String, Struct>,
     ) -> CfgLabel {
-        let ret_l = self.visit_expr(b.ret, dest_v, dest_l.clone(), structs);
+        let ret_l = self.visit_expr(b.ret, dest_v, dest_l, structs);
         b.stmts
             .into_iter()
             .rev()

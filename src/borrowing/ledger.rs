@@ -38,15 +38,9 @@ impl Ledger {
     /// Returns iff a variable is borrowed by somebody.
     pub fn is_borrowed(&self, var: impl AsRef<Var>) -> Option<&Borrow> {
         let var = var.as_ref();
-        self.borrows.values().find_map(|s| {
-            s.iter().find_map(|borrow| {
-                if &borrow.var == var {
-                    Some(borrow)
-                } else {
-                    None
-                }
-            })
-        })
+        self.borrows
+            .values()
+            .find_map(|s| s.iter().find(|borrow| &borrow.var == var))
     }
 }
 
