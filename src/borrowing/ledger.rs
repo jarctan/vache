@@ -6,7 +6,6 @@ use std::ops::{Add, BitOr, Deref, DerefMut, Sub};
 
 use super::borrow::{Borrow, Borrows};
 use crate::mir::{CfgLabel, Var};
-use crate::utils::set::Set;
 
 /// A loan ledger.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,31 +27,11 @@ impl Ledger {
         self.borrows.insert(var.into(), borrows.into());
     }
 
+    /// Returns the complete (deep, nested) list of all borrows resulting from
+    /// the borrow of `var` at CFG label `label`.
     pub fn borrow(&self, var: impl Into<Var>, label: CfgLabel) -> Borrows {
         let var = var.into();
         self.get(&var).cloned().unwrap_or_default() + Borrow { var, label }
-    }
-
-    pub fn is_borrowed(&self, var: impl AsRef<Var>) -> bool {
-        let var = var.as_ref();
-        self.borrows
-            .values()
-            .any(|s| s.iter().any(|borrow| &borrow.var == var))
-    }
-
-    pub fn close(self, vars: impl Iterator<Item = Var>) -> Set<Var> {
-        // Compute the union of the deep borrows of all the variables.
-        let mut res: Set<Var> = Set::new();
-        for var in vars {
-            if let Some(borrows) = self.borrows.get(&var) {
-                for borrow in borrows {
-                    res += borrow.var.clone();
-                }
-            } else {
-                res += var;
-            }
-        }
-        res
     }
 }
 

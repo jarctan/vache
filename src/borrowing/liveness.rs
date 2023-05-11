@@ -7,7 +7,7 @@ use crate::examples::Var;
 use crate::mir::{Cfg, CfgLabel, Instr, RValue};
 use crate::utils::set::Set;
 
-/// Liveness analysis.
+/// Variable liveness analysis.
 ///
 /// Takes as arguments:
 /// * The CFG.
@@ -61,12 +61,13 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
     var_flow
 }
 
-/// Liveness analysis.
+/// Loan liveness analysis.
 ///
 /// Takes as arguments:
 /// * The CFG.
 /// * The entry label in the CFG.
 /// * The exit label in the CFG.
+/// * The variable liveliness analysis for that CFG.
 ///
 /// Returns a map of live loans at the entry and exit of each node in the
 /// CFG.
@@ -142,11 +143,18 @@ fn loan_liveness(
     loan_flow
 }
 
-pub fn liveness(cfg: &Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Flow<Set<Var>>> {
+/// Liveness analysis.
+///
+/// Takes as arguments:
+/// * The CFG.
+/// * The entry label in the CFG.
+/// * The exit label in the CFG.
+///
+/// Performs liveliness analysis, determining which borrows are invalidated.
+pub fn liveness(cfg: &Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) {
     let var_flow = var_liveness(cfg, entry_l, exit_l);
     println!("{:?}", var_flow);
     loan_liveness(cfg, entry_l, exit_l, &var_flow);
-    var_flow
 }
 /*
 #[cfg(test)]

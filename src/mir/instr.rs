@@ -4,10 +4,22 @@ use std::collections::HashMap;
 
 use super::*;
 
+/// Branch = label on CFG edges.
+///
+/// A branch is label that indicates the conditions to follow that path/jump to
+/// the target node of that edge.
+///
+/// Example: an If statement has an outgoing edge to two other nodes. One of
+/// them is labeled wit `TrueB`, the other `FalseB`.
+///
+/// The unconditional jump is `DefaultB`.
 #[derive(Debug, PartialEq, Eq, Default, Hash, Clone)]
 pub enum Branch {
+    /// Branch if true.
     TrueB,
+    /// Branch if false.
     FalseB,
+    /// Default, always branch.
     #[default]
     DefaultB,
 }
@@ -43,7 +55,13 @@ pub enum Instr {
     },
     /// Asks for the truthiness of the first argument.
     Branch(Var),
+    /// Pushes a new scope.
+    ///
+    /// It is the result of flattening nested scopes in the original AST, while
+    /// still annotating the start and end of scope. These markers may prove
+    /// useful in the final compilation.
     PushScope,
+    /// Pops a new scope.
     PopScope,
 }
 
