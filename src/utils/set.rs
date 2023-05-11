@@ -57,7 +57,7 @@ impl<T: Eq + Hash + Clone> Clone for Set<T> {
     }
 }
 
-impl<'a, T: Eq + Hash> Add for Set<T> {
+impl<T: Eq + Hash> Add for Set<T> {
     type Output = Set<T>;
 
     fn add(mut self, rhs: Self) -> Self {
@@ -66,7 +66,7 @@ impl<'a, T: Eq + Hash> Add for Set<T> {
     }
 }
 
-impl<'a, T: Eq + Hash> Add<T> for Set<T> {
+impl<T: Eq + Hash> Add<T> for Set<T> {
     type Output = Set<T>;
 
     fn add(mut self, rhs: T) -> Self {

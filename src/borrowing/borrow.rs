@@ -1,7 +1,6 @@
 //! Defining the notion of borrows.
 
 use std::fmt;
-use std::fmt::format;
 use std::hash::Hash;
 
 use crate::mir::{CfgLabel, Var};

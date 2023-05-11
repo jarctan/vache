@@ -1,21 +1,17 @@
 //! Declaring here the annotations to the CFG we compute during the analysis.
 
 use std::collections::HashMap;
-use std::fmt;
 use std::iter::Sum;
 use std::ops::{Add, BitOr, Deref, DerefMut, Sub};
 
-use super::borrow::Borrows;
-use crate::mir::Var;
+use super::borrow::{Borrow, Borrows};
+use crate::mir::{CfgLabel, Var};
 use crate::utils::set::Set;
 
 /// A loan ledger.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ledger {
     /// Map between variables defined in this environment and their borrows.
-    ///
-    /// Invariant: these are _deep_ borrows, i.e. all borrow variables are
-    /// variables defined _outside_ the scope.
     borrows: HashMap<Var, Borrows>,
 }
 
@@ -29,19 +25,12 @@ impl Ledger {
 
     /// Defines a new variable in the context, stating its borrows.
     pub fn add_var(&mut self, var: impl Into<Var>, borrows: impl Into<Borrows>) {
-        // Compute the set of deep borrows: borrows whose variable were defined OUTSIDE
-        // this environment
-        let mut deep_set = Set::new();
-        for borrow in borrows.into().into_iter() {
-            if let Some(borrows_lvl2) = self.borrows.get(&borrow.var) {
-                for borrow_lvl2 in borrows_lvl2 {
-                    deep_set += borrow_lvl2.clone();
-                }
-            } else {
-                deep_set += borrow;
-            }
-        }
-        self.borrows.insert(var.into(), deep_set);
+        self.borrows.insert(var.into(), borrows.into());
+    }
+
+    pub fn borrow(&self, var: impl Into<Var>, label: CfgLabel) -> Borrows {
+        let var = var.into();
+        self.get(&var).cloned().unwrap_or_default() + Borrow { var, label }
     }
 
     pub fn is_borrowed(&self, var: impl AsRef<Var>) -> bool {
@@ -67,17 +56,11 @@ impl Ledger {
     }
 }
 
-impl fmt::Debug for Ledger {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_map().entries(&self.borrows).finish()
-    }
-}
-
 impl<B: Into<Borrows>> Add<(Var, B)> for Ledger {
     type Output = Ledger;
 
     fn add(mut self, (lhs, borrows): (Var, B)) -> Self {
-        self.insert(lhs, borrows.into());
+        self.add_var(lhs, borrows);
         self
     }
 }
@@ -121,6 +104,17 @@ impl<'a> Sub<&'a Var> for Ledger {
 
     fn sub(mut self, var: &Var) -> Self {
         self.borrows.remove(var);
+        self
+    }
+}
+
+impl<'a, I: IntoIterator<Item = &'a Var>> Sub<I> for Ledger {
+    type Output = Ledger;
+
+    fn sub(mut self, iter: I) -> Self {
+        for var in iter {
+            self.borrows.remove(var);
+        }
         self
     }
 }

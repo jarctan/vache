@@ -1,231 +1,152 @@
 //! Implementing the liveness analysis algorithm.
 
-use std::collections::HashMap;
-
-use petgraph::dot::Dot;
-use petgraph::Graph;
-
-use super::Flow;
-use super::{borrow::Borrow, flow::Analysis};
+use super::flow::Flow;
+use crate::borrowing::borrow::Borrow;
+use crate::borrowing::ledger::Ledger;
+use crate::examples::Var;
 use crate::mir::{Cfg, CfgLabel, Instr, RValue};
 use crate::utils::set::Set;
 
 /// Liveness analysis.
 ///
 /// Takes as arguments:
-/// * A generic `S: Flowable` argument. Take `S` as something like a set.
 /// * The CFG.
-/// * The exit label in that CFG.
+/// * The entry label in the CFG.
+/// * The exit label in the CFG.
 ///
-/// Returns a map of annotations on each label in the graph.
-pub fn liveness(cfg: &Cfg, exit_l: &CfgLabel) -> HashMap<CfgLabel, Flow> {
+/// Returns a map of live variables at the entry and exit of each node in the
+/// CFG.
+pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Flow<Set<Var>>> {
     // Bootstrap with empty environments.
-    let mut analyses: HashMap<CfgLabel, Flow> = cfg
-        .keys()
-        .map(|label| (label.clone(), Flow::default()))
-        .collect();
+    let mut var_flow: Cfg<Flow<Set<Var>>> = cfg.map(|_, _| Flow::default(), |_| ());
 
-    // One for the return label too.
-    analyses.insert(exit_l.clone(), Flow::default());
+    let mut propagate = true;
 
     // Compute the fixpoint, iteratively.
-    loop {
-        let old_analyses: HashMap<CfgLabel, Flow> = core::mem::take(&mut analyses);
-        analyses.insert(exit_l.clone(), Flow::default());
+    while propagate {
+        propagate = false;
 
-        for (label, instr) in cfg {
-            let Flow { ins, outs }: &Flow = &old_analyses[label];
-
-            let new_flow = match instr {
-                Instr::Goto(target) => Flow {
-                    ins: Analysis {
-                        vars: old_analyses[target].ins.vars.clone(),
-                        loans: ins.loans.clone(),
-                    },
-                    outs: Analysis {
-                        vars: old_analyses[target].ins.vars.clone(),
-                        loans: ins.loans.clone(),
-                    },
-                },
-                Instr::Declare(var, target) => Flow {
-                    ins: Analysis {
-                        vars: outs.vars.clone() - &var.name,
-                        loans: ins.loans.clone(),
-                    },
-                    outs: Analysis {
-                        vars: old_analyses[target].ins.vars.clone(),
-                        loans: ins.loans.clone() - &var.name,
-                    },
-                },
-                Instr::Assign(lhs, RValue::Unit, target)
-                | Instr::Assign(lhs, RValue::String(_), target)
-                | Instr::Assign(lhs, RValue::Integer(_), target) => Flow {
-                    ins: Analysis {
-                        vars: outs.vars.clone() - lhs,
-                        loans: ins.loans.clone(),
-                    },
-                    outs: Analysis {
-                        vars: old_analyses[target].ins.vars.clone(),
-                        loans: ins.loans.clone() - lhs,
-                    },
-                },
-                Instr::Assign(destination, RValue::Var(rhs), target)
-                | Instr::Assign(destination, RValue::Field(rhs, _), target) => Flow {
-                    ins: Analysis {
-                        vars: outs.vars.clone() - destination + rhs.clone(),
-                        loans: ins.loans.clone(),
-                    },
-                    outs: Analysis {
-                        vars: old_analyses[target].ins.vars.clone(),
-                        loans: ins.loans.clone()
-                            + (
-                                destination.clone(),
-                                [Borrow {
-                                    label: label.clone(),
-                                    var: rhs.clone(),
-                                }],
-                            ),
-                    },
-                },
+        for (label, instr) in cfg.bfs(exit_l) {
+            let successors = cfg.neighbors(label);
+            let outs: Set<Var> = successors.map(|x| var_flow[x].ins.clone()).sum();
+            let ins: Set<Var> = match instr {
+                Instr::Noop | Instr::PushScope | Instr::PopScope => outs.clone(),
+                Instr::Declare(var) => outs.clone() - &var.name,
+                Instr::Assign(lhs, RValue::Unit)
+                | Instr::Assign(lhs, RValue::String(_))
+                | Instr::Assign(lhs, RValue::Integer(_)) => outs.clone() - lhs,
+                Instr::Assign(lhs, RValue::Var(rhs))
+                | Instr::Assign(lhs, RValue::Field(rhs, _)) => outs.clone() - lhs + rhs.clone(),
                 Instr::Call {
                     name: _,
                     args,
                     destination,
-                    target,
-                } => Flow {
-                    ins: Analysis {
-                        vars: outs.vars.clone() - &destination.name
-                            + Set::from_iter(args.iter().cloned()),
-                        loans: ins.loans.clone()
-                            + (
-                                destination.name.clone(),
-                                args.iter()
-                                    .map(|arg| ins.loans.get(arg).cloned().unwrap_or_default())
-                                    .sum::<Set<Borrow>>(),
-                            ),
-                    },
-                    outs: Analysis {
-                        vars: old_analyses[target].ins.vars.clone(),
-                        loans: ins.loans.clone()
-                            + (
-                                destination.name.clone(),
-                                args.iter()
-                                    .map(|arg| ins.loans.get(arg).cloned().unwrap_or_default())
-                                    .sum::<Set<Borrow>>(),
-                            ),
-                    },
-                },
+                } => outs.clone() - &destination.name + Set::from_iter(args.iter().cloned()),
                 Instr::Struct {
                     name: _,
                     fields,
                     destination,
-                    target,
-                } => Flow {
-                    ins: Analysis {
-                        vars: outs.vars.clone() - &destination.name
-                            + Set::from_iter(fields.values().cloned()),
-                        loans: ins.loans.clone(),
-                    },
-                    outs: Analysis {
-                        vars: old_analyses[target].ins.vars.clone(),
-                        loans: ins.loans.clone()
-                            + (
-                                destination.name.clone(),
-                                fields
-                                    .values()
-                                    .map(|field| ins.loans[field].clone())
-                                    .sum::<Set<Borrow>>(),
-                            ),
-                    },
-                },
-                Instr::Branch(v, iftrue, iffalse) => Flow {
-                    ins: Analysis {
-                        vars: outs.vars.clone() + v.clone(),
-                        loans: outs.loans.clone(),
-                    },
-                    outs: Analysis {
-                        vars: old_analyses[iftrue].ins.vars.clone()
-                            + old_analyses[iffalse].ins.vars.clone(),
-                        loans: outs.loans.clone(),
-                    },
-                },
-                Instr::Scope {
-                    cfg,
-                    entry_l,
-                    exit_l,
-                    target,
-                } => {
-                    let mut inner = liveness(cfg, exit_l);
-                    let Flow {
-                        ins:
-                            Analysis {
-                                vars: inner_vars,
-                                loans: _,
-                            },
-                        outs:
-                            Analysis {
-                                vars: _,
-                                loans: inner_loans,
-                            },
-                    } = inner.remove(entry_l).unwrap();
-                    Flow {
-                        ins: Analysis {
-                            vars: outs.vars.clone() + inner_vars,
-                            loans: ins.loans.clone(),
-                        },
-                        outs: Analysis {
-                            vars: old_analyses[target].ins.vars.clone(),
-                            loans: ins.loans.clone() + inner_loans,
-                        },
-                    }
-                }
+                } => outs.clone() - &destination.name + Set::from_iter(fields.values().cloned()),
+                Instr::Branch(v) => outs.clone() + v.clone(),
             };
-            analyses.insert(label.clone(), new_flow);
-        }
-        if old_analyses == analyses {
-            break;
-        }
-    }
 
-    for (label, instr) in cfg {
-        if let Instr::Assign(lhs, _, _) = instr {
-            let analysis = &analyses[label];
-            if analysis.ins.loans.is_borrowed(lhs) {
-                println!("Mutating {lhs} while borrowed!!!!!");
+            let flow = Flow { ins, outs };
+            if var_flow[label] != flow {
+                var_flow[label] = flow;
+                propagate = true;
             }
         }
     }
 
-    let mut graph = Graph::new();
+    var_flow
+}
 
-    let mut t: HashMap<&CfgLabel, _> = cfg
-        .iter()
-        .map(|(l, instr)| (l, graph.add_node(instr)))
-        .collect();
+/// Liveness analysis.
+///
+/// Takes as arguments:
+/// * The CFG.
+/// * The entry label in the CFG.
+/// * The exit label in the CFG.
+///
+/// Returns a map of live loans at the entry and exit of each node in the
+/// CFG.
+fn loan_liveness(
+    cfg: &Cfg,
+    entry_l: &CfgLabel,
+    _exit_l: &CfgLabel,
+    var_flow: &Cfg<Flow<Set<Var>>>,
+) -> Cfg<Flow<Ledger>> {
+    let out_of_scope = var_flow.map(|_, flow| flow.outs.clone() - &flow.ins, |_| ());
 
-    let exit = Instr::Goto(exit_l.clone());
-    t.insert(exit_l, graph.add_node(&exit));
+    // Same, for loans.
+    let mut loan_flow: Cfg<Flow<Ledger>> = cfg.map(|_, _| Flow::default(), |_| ());
 
-    for (label, instr) in cfg {
-        match instr {
-            Instr::Goto(target)
-            | Instr::Declare(_, target)
-            | Instr::Assign(_, _, target)
-            | Instr::Call { target, .. }
-            | Instr::Scope { target, .. }
-            | Instr::Struct { target, .. } => {
-                graph.add_edge(t[label], t[target], &analyses[label].outs.vars)
+    let mut propagate = true;
+
+    while propagate {
+        propagate = false;
+
+        for (label, instr) in cfg.bfs(entry_l) {
+            let predecessors = cfg.preneighbors(label);
+            let ins: Ledger = predecessors.map(|x| loan_flow[x].outs.clone()).sum();
+            let outs: Ledger = match instr {
+                Instr::Noop | Instr::PushScope | Instr::PopScope => ins.clone(),
+                Instr::Declare(var) => ins.clone() - &var.name,
+                Instr::Assign(lhs, RValue::Unit)
+                | Instr::Assign(lhs, RValue::String(_))
+                | Instr::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs,
+                Instr::Assign(lhs, RValue::Var(rhs))
+                | Instr::Assign(lhs, RValue::Field(rhs, _)) => {
+                    ins.clone() - lhs + (lhs.clone(), ins.borrow(rhs.clone(), label.clone()))
+                }
+                Instr::Call {
+                    name: _,
+                    args,
+                    destination,
+                } => {
+                    ins.clone() - &destination.name
+                        + (
+                            destination.name.clone(),
+                            args.iter()
+                                .map(|arg| ins.borrow(arg.clone(), label.clone()))
+                                .sum::<Set<Borrow>>(),
+                        )
+                }
+                Instr::Struct {
+                    name: _,
+                    fields,
+                    destination,
+                } => {
+                    ins.clone() - &destination.name
+                        + (
+                            destination.name.clone(),
+                            fields
+                                .values()
+                                .map(|field| ins.borrow(field.clone(), label.clone()))
+                                .sum::<Set<Borrow>>(),
+                        )
+                }
+                Instr::Branch(_) => ins.clone(),
+            } - &out_of_scope[label];
+
+            let flow = Flow { ins, outs };
+            if loan_flow[label] != flow {
+                loan_flow[label] = flow;
+                propagate = true;
             }
-            Instr::Branch(_, iftrue, iffalse) => {
-                graph.add_edge(t[label], t[iftrue], &analyses[label].outs.vars);
-                graph.add_edge(t[label], t[iffalse], &analyses[label].outs.vars)
-            }
-        };
+        }
     }
 
-    println!("Final analyses: {:?}", Dot::new(&graph));
+    println!("{:?}", loan_flow);
 
-    analyses
+    loan_flow
+}
+
+pub fn liveness(cfg: &Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Flow<Set<Var>>> {
+    let var_flow = var_liveness(cfg, entry_l, exit_l);
+    println!("{:?}", var_flow);
+    loan_liveness(cfg, entry_l, exit_l, &var_flow);
+    var_flow
 }
 /*
 #[cfg(test)]
@@ -255,7 +176,7 @@ mod tests {
     }
 
     #[test]
-    fn test_liveliness() {
+    fn test_liveness() {
         // Labels
         let l0 = CfgLabel::new(0);
         let l1 = CfgLabel::new(1);

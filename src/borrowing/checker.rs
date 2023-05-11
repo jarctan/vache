@@ -23,8 +23,7 @@ impl BorrowChecker {
 
     /// Borrow-checks a function.
     fn visit_fun(&mut self, f: &Fun) {
-        let liveliness = liveness(&f.body, &f.ret_l);
-        println!("Var liveliness: {:?}", liveliness);
+        liveness(&f.body, &f.entry_l, &f.ret_l);
     }
 
     /// Borrow-checks a program.

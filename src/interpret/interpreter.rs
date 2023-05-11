@@ -6,11 +6,12 @@
 use std::collections::HashMap;
 
 use string_builder::Builder as StringBuilder;
+use Branch::*;
 use Value::*;
 
 use super::env::Env;
 use super::value::{Value, ValueRef};
-use crate::mir::{Cfg, CfgLabel, Fun, Instr, RValue, Var};
+use crate::mir::{Branch, Cfg, CfgLabel, Fun, Instr, RValue, Var};
 use crate::tast::Stratum;
 
 /// Interpreter for our language.
@@ -121,13 +122,7 @@ impl<'a> Interpreter<'a> {
             // Introduce return variable
             self.add_var(f.ret_v.name.clone());
 
-            let stuck_l = self.visit_cfg(&f.body, &f.entry_l).to_owned();
-
-            assert_eq!(
-                stuck_l, f.ret_l,
-                "Runtime error: should not be stuck at label {stuck_l:?} in function {}",
-                f.name,
-            );
+            self.visit_cfg(&f.body, &f.entry_l);
 
             // Request the final value!
             self.pop_scope(Some(self.get_var(&f.ret_v))).unwrap()
@@ -251,36 +246,34 @@ impl<'a> Interpreter<'a> {
 
     /// Executes an expression, returning the first label that do not exist in
     /// the CFG. Often, this is the return/exit label.
-    fn visit_cfg(&mut self, cfg: &'a Cfg, label: &'a CfgLabel) -> &'a CfgLabel {
-        match cfg.get(label) {
-            Some(Instr::Goto(target)) => self.visit_cfg(cfg, target),
-            Some(Instr::Declare(v, target)) => {
+    fn visit_cfg(&mut self, cfg: &'a Cfg, label: &CfgLabel) {
+        let branch = match &cfg[label] {
+            Instr::Noop => DefaultB,
+            Instr::Declare(v) => {
                 self.add_var(v.clone());
-                self.visit_cfg(cfg, target)
+                DefaultB
             }
-            Some(Instr::Assign(v, rvalue, label)) => {
+            Instr::Assign(v, rvalue) => {
                 let value = self.visit_rvalue(rvalue, self.get_var(v).stratum);
                 self.set_var(v, value);
-                self.visit_cfg(cfg, label)
+                DefaultB
             }
-            Some(Instr::Call {
+            Instr::Call {
                 name,
                 args,
                 destination,
-                target,
-            }) => {
+            } => {
                 let args = args.iter().map(|v| self.get_var(v)).collect();
                 let stratum = self.get_var(destination).stratum;
                 let call_result = self.call(name, args, stratum);
                 self.set_var(&destination.name, call_result);
-                self.visit_cfg(cfg, target)
+                DefaultB
             }
-            Some(Instr::Struct {
+            Instr::Struct {
                 name,
                 fields,
                 destination,
-                target,
-            }) => {
+            } => {
                 let fields = fields
                     .iter()
                     .map(|(k, v)| (k.clone(), self.get_var(v)))
@@ -288,27 +281,26 @@ impl<'a> Interpreter<'a> {
                 let stratum = self.get_var(&destination.name).stratum;
                 let value = self.add_value(StructV(name.to_owned(), fields), stratum);
                 self.set_var(&destination.name, value);
-                self.visit_cfg(cfg, target)
+                DefaultB
             }
-            Some(Instr::Branch(cond, iftrue, iffalse)) => {
+            Instr::Branch(cond) => {
                 if self.get_var_value(cond).truth() {
-                    self.visit_cfg(cfg, iftrue)
+                    TrueB
                 } else {
-                    self.visit_cfg(cfg, iffalse)
+                    FalseB
                 }
             }
-            Some(Instr::Scope {
-                cfg: new_cfg,
-                entry_l,
-                exit_l,
-                target,
-            }) => {
+            Instr::PushScope => {
                 self.push_scope();
-                assert_eq!(self.visit_cfg(new_cfg, entry_l), exit_l);
-                self.pop_scope(None);
-                self.visit_cfg(cfg, target)
+                DefaultB
             }
-            None => label,
+            Instr::PopScope => {
+                self.pop_scope(None);
+                DefaultB
+            }
+        };
+        if let Some(next) = cfg.take_branch(label, &branch) {
+            self.visit_cfg(cfg, next)
         }
     }
 }
