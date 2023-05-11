@@ -65,6 +65,20 @@ pub enum Instr {
     PopScope,
 }
 
+impl Instr {
+    /// If this instruction mutates a variable, returns it.
+    /// Otherwise, returns `None`.
+    pub fn is_mutating(&self) -> Option<&Var> {
+        match self {
+            Instr::Noop | Instr::Branch(_) | Instr::PushScope | Instr::PopScope => None,
+            Instr::Declare(v)
+            | Instr::Call { destination: v, .. }
+            | Instr::Struct { destination: v, .. } => Some(&v.name),
+            Instr::Assign(v, _) => Some(v),
+        }
+    }
+}
+
 impl fmt::Debug for Instr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

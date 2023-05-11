@@ -138,7 +138,13 @@ fn loan_liveness(
         }
     }
 
-    println!("{:?}", loan_flow);
+    for (label, instr) in cfg.bfs(entry_l) {
+        if let Some(lhs) = instr.is_mutating() {
+            if let Some(borrow) = loan_flow[label].ins.is_borrowed(lhs) {
+                println!("Mutating {lhs} with borrow {borrow:?} active!");
+            }
+        }
+    }
 
     loan_flow
 }
@@ -156,6 +162,7 @@ pub fn liveness(cfg: &Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) {
     println!("{:?}", var_flow);
     loan_liveness(cfg, entry_l, exit_l, &var_flow);
 }
+
 /*
 #[cfg(test)]
 mod tests {

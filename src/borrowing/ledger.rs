@@ -22,7 +22,8 @@ impl Ledger {
         }
     }
 
-    /// Defines a new variable in the context, stating its borrows.
+    /// Defines a new variable in the context, stating its borrows (variables it
+    /// depends on).
     pub fn add_var(&mut self, var: impl Into<Var>, borrows: impl Into<Borrows>) {
         self.borrows.insert(var.into(), borrows.into());
     }
@@ -32,6 +33,20 @@ impl Ledger {
     pub fn borrow(&self, var: impl Into<Var>, label: CfgLabel) -> Borrows {
         let var = var.into();
         self.get(&var).cloned().unwrap_or_default() + Borrow { var, label }
+    }
+
+    /// Returns iff a variable is borrowed by somebody.
+    pub fn is_borrowed(&self, var: impl AsRef<Var>) -> Option<&Borrow> {
+        let var = var.as_ref();
+        self.borrows.values().find_map(|s| {
+            s.iter().find_map(|borrow| {
+                if &borrow.var == var {
+                    Some(borrow)
+                } else {
+                    None
+                }
+            })
+        })
     }
 }
 
