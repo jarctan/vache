@@ -1,3 +1,5 @@
+//! Parsing structs, and defining their representation in the AST.
+
 use std::collections::HashMap;
 
 use super::Ty;

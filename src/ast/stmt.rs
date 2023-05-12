@@ -1,3 +1,5 @@
+//! Parsing statements, and defining their representation in the AST.
+
 use super::{Block, Expr, Var, VarDef};
 use crate::utils::boxed;
 

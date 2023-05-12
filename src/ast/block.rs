@@ -1,3 +1,5 @@
+//! Parsing blocks, and defining their representation in the AST.
+
 use super::{Expr, Stmt};
 
 /// A block in the parser AST.

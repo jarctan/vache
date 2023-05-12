@@ -1,3 +1,5 @@
+//! Parsing types, and defining their representation in the AST.
+
 use std::fmt;
 
 /// Types in our language.

@@ -1,3 +1,5 @@
+//! Parsing expressions, and defining their representation in the AST.
+
 use rug::Integer;
 
 use super::{Block, Var};

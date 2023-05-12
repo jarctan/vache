@@ -1,3 +1,5 @@
+//! Parsing functions, and defining their representation in the AST.
+
 use std::vec;
 
 use Ty::*;
