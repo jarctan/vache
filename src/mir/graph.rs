@@ -116,20 +116,22 @@ impl<N, E> Cfg<N, E> {
         self.edge_ix_counter = self.edge_ix_counter.checked_add(1).unwrap();
 
         // Add at `from` and `to`
-        assert!(self
-            .node_map
-            .get_mut(&edge.from)
-            .unwrap()
-            .outs
-            .insert(branch.clone(), ix)
-            .is_none());
-        assert!(self
-            .node_map
+        assert!(
+            self.node_map
+                .get_mut(&edge.from)
+                .unwrap()
+                .outs
+                .insert(branch.clone(), ix)
+                .is_none(),
+            "there is already an outgoing edge between {:?} and {:?} for branch {branch:?}",
+            edge.from,
+            edge.to
+        );
+        self.node_map
             .get_mut(&edge.to)
             .unwrap()
             .ins
-            .insert(branch, ix)
-            .is_none());
+            .insert(branch, ix);
 
         // Add the edge in itself
         self.edge_map.insert(ix, edge);
@@ -253,7 +255,7 @@ impl<N: fmt::Debug, E: fmt::Debug> fmt::Debug for Cfg<N, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "digraph G {{")?;
         for (ix, Node { value, .. }) in &self.node_map {
-            writeln!(f, "\tn{} [label=\"{:?}\"];", ix.0, value)?;
+            writeln!(f, "\tn{} [label=\"#{} {:?}\"];", ix.0, ix.0, value)?;
         }
         for Edge { from, to, weight } in self.edge_map.values() {
             writeln!(f, "\tn{} -> n{} [label=\"{:?}\"];", from.0, to.0, weight)?;
