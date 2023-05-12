@@ -12,26 +12,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  deploy-docs:
-    name: Deploy docs
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      - name: Generate Docs
-        if: github.ref == 'refs/heads/master'
-        run: |
-          rm -rf ./docs
-          cargo doc --no-deps
-          echo "<meta http-equiv=\"refresh\" content=\"0; url=vache\">" > target/doc/index.html
-          cp -r target/doc ./docs
-      - name: Deploy documentation
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: ./docs
   build:
     runs-on: ubuntu-latest
     container:
