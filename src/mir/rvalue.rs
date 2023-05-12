@@ -23,6 +23,14 @@ impl VarMode {
             owned: false,
         }
     }
+
+    /// A var that is takes ownership of the value by cloning it.
+    pub fn owned(var: impl Into<Var>) -> Self {
+        Self {
+            var: var.into(),
+            owned: true,
+        }
+    }
 }
 
 impl fmt::Debug for VarMode {

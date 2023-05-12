@@ -224,14 +224,12 @@ impl<'a> Interpreter<'a> {
             RValue::String(s) => self.add_value(StrV(s.clone()), stratum),
             RValue::Var(v) => {
                 let v_ref = self.get_var(v);
-                // Temporary solution when lifetime is too short: own the value
-                // TODO: change when own gets added to it.
-                let v_ref = if stratum >= v_ref.stratum {
-                    v_ref
-                } else {
+                if v.owned {
                     self.add_value(self.get_value(v_ref).clone(), stratum)
-                };
-                v_ref
+                } else {
+                    assert!(stratum >= v_ref.stratum, "Runtime error: ownership addressing should be specified as owned if moving variable out of its stratum");
+                    v_ref
+                }
             }
             RValue::Field(strukt, field) => {
                 let value = self.get_var_value(strukt);

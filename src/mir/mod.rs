@@ -23,6 +23,4 @@ pub use instr::{Branch, Instr};
 pub use program::Program;
 pub use rvalue::{RValue, VarMode};
 
-pub use crate::ast::structure::Struct;
-pub use crate::ast::ty::Ty;
-pub use crate::ast::var::{Var, VarDef};
+pub use crate::tast::{Struct, Ty, Var, VarDef};

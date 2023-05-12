@@ -16,7 +16,7 @@ use crate::utils::{boxed, keys_match};
 /// Contains definitions for variables and functions.
 struct Env {
     /// Map between vars and their definitions.
-    var_env: HashMap<ast::Var, ast::VarDef>,
+    var_env: HashMap<Var, ast::VarDef>,
 }
 
 impl Env {
@@ -28,7 +28,7 @@ impl Env {
     }
 
     /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<ast::Var>) -> Option<&ast::VarDef> {
+    fn get_var(&self, v: impl AsRef<Var>) -> Option<&ast::VarDef> {
         self.var_env.get(v.as_ref())
     }
 
@@ -114,7 +114,7 @@ impl Typer {
     ///
     /// It will return a reference into that definition, and the id of the
     /// stratum in which the variables resides.
-    fn get_var(&self, v: impl AsRef<ast::Var>) -> Option<(&ast::VarDef, Stratum)> {
+    fn get_var(&self, v: impl AsRef<Var>) -> Option<(&ast::VarDef, Stratum)> {
         // Iterate over environments in reverse (last declared first processed)
         // order
         // Returns the first environment that has that variable declared
@@ -191,7 +191,11 @@ impl SelfVisitor for Typer {
                 let (vardef, stm) = self
                     .get_var(&v)
                     .unwrap_or_else(|| panic!("{v} does not exist in this context"));
-                Expr::new(VarE(vardef.clone()), vardef.ty.clone(), stm)
+                Expr::new(
+                    VarE(VarDef::with_stratum(vardef.clone(), stm)),
+                    vardef.ty.clone(),
+                    stm,
+                )
             }
             // Make a special case for `print` until we get generic functions so that we
             // can express `print` more elegantly with the other builtin functions.
@@ -216,7 +220,7 @@ impl SelfVisitor for Typer {
                 );
 
                 // Check type of arguments.
-                for (i, (Expr { ty: arg_ty, .. }, VarDef { ty: param_ty, .. })) in
+                for (i, (Expr { ty: arg_ty, .. }, ast::VarDef { ty: param_ty, .. })) in
                     args.iter().zip(fun.params.iter()).enumerate()
                 {
                     assert_eq!(
@@ -330,6 +334,7 @@ impl SelfVisitor for Typer {
     }
 
     fn visit_fun(&mut self, f: ast::Fun) -> Fun {
+        let stm = self.current_stratum();
         // Introduce arguments in the typing context
         for arg in &f.params {
             self.check_ty(&arg.ty);
@@ -346,7 +351,11 @@ impl SelfVisitor for Typer {
 
         Fun {
             name: f.name,
-            params: f.params,
+            params: f
+                .params
+                .into_iter()
+                .map(|param| VarDef::with_stratum(param, stm))
+                .collect(),
             ret_ty: f.ret_ty,
             body,
         }
@@ -356,6 +365,7 @@ impl SelfVisitor for Typer {
         use Stmt::*;
         match s {
             ast::Stmt::Declare(vardef, expr) => {
+                let stm = self.current_stratum();
                 self.add_var(vardef.clone());
                 let expr = self.visit_expr(expr);
                 let expr_ty = &expr.ty;
@@ -370,12 +380,12 @@ impl SelfVisitor for Typer {
                     vardef.ty
                 );
 
-                Declare(vardef, expr)
+                Declare(VarDef::with_stratum(vardef, stm), expr)
             }
             ast::Stmt::Assign(var, expr) => {
                 let expr = self.visit_expr(expr);
                 let expr_ty = &expr.ty;
-                let (vardef, _) = self
+                let (vardef, stm) = self
                     .get_var(&var)
                     .unwrap_or_else(|| panic!("Assigning to an undeclared variable {var}"));
 
@@ -385,6 +395,7 @@ impl SelfVisitor for Typer {
                     VarDef {
                         name: var,
                         ty: vardef.ty.clone(),
+                        stm,
                     },
                     expr,
                 )
