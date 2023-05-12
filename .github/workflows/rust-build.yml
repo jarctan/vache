@@ -47,10 +47,3 @@ jobs:
         run: cargo fmt --all --verbose --check
       - name: Clippy Check
         run: cargo clippy --all --verbose
-      - name: Generate Docs
-        if: github.ref == 'refs/heads/master'
-        run: |
-          rm -rf ./docs
-          cargo doc --no-deps
-          echo "<meta http-equiv=\"refresh\" content=\"0; url=vache\">" > target/doc/index.html
-          cp -r target/doc ./docs
