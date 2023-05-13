@@ -19,8 +19,8 @@ use std::fmt;
 
 pub use fun::Fun;
 pub use graph::{Cfg, CfgLabel};
-pub use instr::{Branch, Instr};
+pub use instr::{Branch, Instr, InstrKind};
 pub use program::Program;
 pub use rvalue::{RValue, VarMode};
 
-pub use crate::tast::{Struct, Ty, Var, VarDef};
+pub use crate::tast::{Stratum, Struct, Ty, Var, VarDef};

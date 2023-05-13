@@ -4,7 +4,7 @@ use super::flow::Flow;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
 use crate::examples::Var;
-use crate::mir::{Cfg, CfgLabel, Instr, RValue};
+use crate::mir::{Cfg, CfgLabel, InstrKind, RValue};
 use crate::utils::set::Set;
 
 /// Variable liveness analysis.
@@ -29,15 +29,17 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
         for (label, instr) in cfg.bfs(exit_l) {
             let successors = cfg.neighbors(label);
             let outs: Set<Var> = successors.map(|x| var_flow[x].ins.clone()).sum();
-            let ins: Set<Var> = match instr {
-                Instr::Noop | Instr::PushScope | Instr::PopScope => outs.clone(),
-                Instr::Declare(var) => outs.clone() - &var.name,
-                Instr::Assign(lhs, RValue::Unit)
-                | Instr::Assign(lhs, RValue::String(_))
-                | Instr::Assign(lhs, RValue::Integer(_)) => outs.clone() - lhs,
-                Instr::Assign(lhs, RValue::Var(rhs))
-                | Instr::Assign(lhs, RValue::Field(rhs, _)) => outs.clone() - lhs + rhs.var.clone(),
-                Instr::Call {
+            let ins: Set<Var> = match &instr.kind {
+                InstrKind::Noop => outs.clone(),
+                InstrKind::Declare(var) => outs.clone() - &var.name,
+                InstrKind::Assign(lhs, RValue::Unit)
+                | InstrKind::Assign(lhs, RValue::String(_))
+                | InstrKind::Assign(lhs, RValue::Integer(_)) => outs.clone() - lhs,
+                InstrKind::Assign(lhs, RValue::Var(rhs))
+                | InstrKind::Assign(lhs, RValue::Field(rhs, _)) => {
+                    outs.clone() - lhs + rhs.var.clone()
+                }
+                InstrKind::Call {
                     name: _,
                     args,
                     destination,
@@ -45,7 +47,7 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                     outs.clone() - destination.as_ref()
                         + Set::from_iter(args.iter().map(|arg| &arg.var).cloned())
                 }
-                Instr::Struct {
+                InstrKind::Struct {
                     name: _,
                     fields,
                     destination,
@@ -53,7 +55,7 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                     outs.clone() - destination.as_ref()
                         + Set::from_iter(fields.values().map(|arg| &arg.var).cloned())
                 }
-                Instr::Branch(v) => outs.clone() + v.clone(),
+                InstrKind::Branch(v) => outs.clone() + v.clone(),
             };
 
             let flow = Flow { ins, outs };
@@ -96,17 +98,17 @@ fn loan_liveness(
         for (label, instr) in cfg.bfs(entry_l) {
             let predecessors = cfg.preneighbors(label);
             let ins: Ledger = predecessors.map(|x| loan_flow[x].outs.clone()).sum();
-            let outs: Ledger = match instr {
-                Instr::Noop | Instr::PushScope | Instr::PopScope => ins.clone(),
-                Instr::Declare(var) => ins.clone() - &var.name,
-                Instr::Assign(lhs, RValue::Unit)
-                | Instr::Assign(lhs, RValue::String(_))
-                | Instr::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs,
-                Instr::Assign(lhs, RValue::Var(rhs))
-                | Instr::Assign(lhs, RValue::Field(rhs, _)) => {
+            let outs: Ledger = match &instr.kind {
+                InstrKind::Noop => ins.clone(),
+                InstrKind::Declare(var) => ins.clone() - &var.name,
+                InstrKind::Assign(lhs, RValue::Unit)
+                | InstrKind::Assign(lhs, RValue::String(_))
+                | InstrKind::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs,
+                InstrKind::Assign(lhs, RValue::Var(rhs))
+                | InstrKind::Assign(lhs, RValue::Field(rhs, _)) => {
                     ins.clone() - lhs + (lhs.clone(), ins.borrow(rhs.var.clone(), label.clone()))
                 }
-                Instr::Call {
+                InstrKind::Call {
                     name: _,
                     args,
                     destination: Some(destination),
@@ -119,7 +121,7 @@ fn loan_liveness(
                                 .sum::<Set<Borrow>>(),
                         )
                 }
-                Instr::Struct {
+                InstrKind::Struct {
                     name: _,
                     fields,
                     destination: Some(destination),
@@ -133,11 +135,11 @@ fn loan_liveness(
                                 .sum::<Set<Borrow>>(),
                         )
                 }
-                Instr::Branch(_)
-                | Instr::Call {
+                InstrKind::Branch(_)
+                | InstrKind::Call {
                     destination: None, ..
                 }
-                | Instr::Struct {
+                | InstrKind::Struct {
                     destination: None, ..
                 } => ins.clone(),
             } - &out_of_scope[label];

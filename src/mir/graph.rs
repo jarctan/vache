@@ -78,7 +78,7 @@ impl<N> From<N> for Node<N> {
 /// Generic parameters:
 /// * `N` is the type of nodes weights
 /// * `E` is the type of edges weights
-#[derive(PartialEq, Eq, Default)]
+#[derive(PartialEq, Eq)]
 pub struct Cfg<N = Instr, E = ()> {
     /// Map of node indexes to node data.
     node_map: HashMap<NodeIx, Node<N>>,
@@ -247,6 +247,17 @@ impl<N, E> Cfg<N, E> {
                 .collect(),
             node_ix_counter: self.node_ix_counter,
             edge_ix_counter: self.edge_ix_counter,
+        }
+    }
+}
+
+impl<N, E> Default for Cfg<N, E> {
+    fn default() -> Self {
+        Self {
+            node_map: HashMap::new(),
+            edge_map: HashMap::new(),
+            node_ix_counter: 0,
+            edge_ix_counter: 0,
         }
     }
 }

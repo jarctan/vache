@@ -16,17 +16,26 @@ use crate::tast::Stratum;
 /// can access a variable created in one CFG from another CFG).
 pub static VAR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Control-flow graph builder.
-#[derive(Debug, Default)]
-struct CfgBuilder {
+/// Typed AST to MIR transformer.
+pub(crate) struct MIRer {
     /// The WIP CFG for the current function.
     cfg: Cfg,
+    /// Current stratum.
+    stm: Stratum,
 }
 
-impl CfgBuilder {
+impl MIRer {
+    /// Creates a new MIR processor.
+    pub fn new() -> Self {
+        Self {
+            cfg: Cfg::default(),
+            stm: Stratum::static_stm(),
+        }
+    }
+
     /// Generates a fresh variable, that has never been used in *any* CFG.
     #[must_use]
-    pub fn fresh_var(&mut self, ty: Ty, stm: Stratum) -> VarDef {
+    fn fresh_var(&mut self, ty: Ty, stm: Stratum) -> VarDef {
         let old_value = VAR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         VarDef {
             name: Var::cfg(old_value),
@@ -37,13 +46,24 @@ impl CfgBuilder {
 
     /// Generates a fresh CFG label, that has never been used in that CFG.
     #[must_use]
-    pub fn fresh_label(&mut self) -> CfgLabel {
-        self.cfg.add_node(Instr::default())
+    fn fresh_label(&mut self) -> CfgLabel {
+        self.cfg.add_node(Instr {
+            kind: InstrKind::default(),
+            scope: self.stm,
+        })
+    }
+
+    /// Generates an instruction with the right stratum.
+    fn instr(&self, kind: InstrKind) -> Instr {
+        Instr {
+            kind,
+            scope: self.stm,
+        }
     }
 
     /// Inserts an instruction in the CFG, returning its label in the graph.
     #[must_use]
-    pub fn insert(
+    fn insert(
         &mut self,
         instr: Instr,
         branches: impl IntoIterator<Item = (Branch, CfgLabel)>,
@@ -59,7 +79,7 @@ impl CfgBuilder {
     ///
     /// # Panics
     /// Panics if the node labeled by that `label` already exists.
-    pub fn insert_at(
+    fn insert_at(
         &mut self,
         label: CfgLabel,
         instr: Instr,
@@ -68,30 +88,6 @@ impl CfgBuilder {
         self.cfg[&label] = instr;
         for (b, to) in branches {
             self.cfg.add_edge(label.clone(), to, b, ());
-        }
-    }
-
-    /// Finishes the construction and returns the resulting CFG.
-    #[must_use]
-    pub fn finish(self) -> Cfg {
-        self.cfg
-    }
-}
-
-/// Typed AST to MIR transformer.
-pub(crate) struct MIRer {
-    /// Current CFG builder.
-    cfg: CfgBuilder,
-    /// Current stratum.
-    stm: Stratum,
-}
-
-impl MIRer {
-    /// Creates a new MIR processor.
-    pub fn new() -> Self {
-        Self {
-            cfg: CfgBuilder::default(),
-            stm: Stratum::static_stm(),
         }
     }
 
@@ -145,8 +141,8 @@ impl MIRer {
         match e.raw {
             tast::RawExpr::UnitE => {
                 if let Some(dest_v) = dest_v {
-                    self.cfg.insert(
-                        Instr::Assign(dest_v.name, RValue::Unit),
+                    self.insert(
+                        self.instr(InstrKind::Assign(dest_v.name, RValue::Unit)),
                         [(DefaultB, dest_l)],
                     )
                 } else {
@@ -155,8 +151,8 @@ impl MIRer {
             }
             tast::RawExpr::IntegerE(i) => {
                 if let Some(dest_v) = dest_v {
-                    self.cfg.insert(
-                        Instr::Assign(dest_v.name, RValue::Integer(i)),
+                    self.insert(
+                        self.instr(InstrKind::Assign(dest_v.name, RValue::Integer(i))),
                         [(DefaultB, dest_l)],
                     )
                 } else {
@@ -165,8 +161,8 @@ impl MIRer {
             }
             tast::RawExpr::StringE(s) => {
                 if let Some(dest_v) = dest_v {
-                    self.cfg.insert(
-                        Instr::Assign(dest_v.name, RValue::String(s)),
+                    self.insert(
+                        self.instr(InstrKind::Assign(dest_v.name, RValue::String(s))),
                         [(DefaultB, dest_l)],
                     )
                 } else {
@@ -177,8 +173,8 @@ impl MIRer {
                 if let Some(dest_v) = dest_v && dest_v != v {
                     let var_ref = Self::visit_var_ref(v, Some(&dest_v));
                     // Only do the assignment if the rhs and lhs are not the same! Otherwise optimize it away
-                    self.cfg.insert(
-                        Instr::Assign(dest_v.name, RValue::Var(var_ref)),
+                    self.insert(
+                        self.instr(InstrKind::Assign(dest_v.name, RValue::Var(var_ref))),
                         [(DefaultB, dest_l)],
                     )
                 } else {
@@ -191,12 +187,12 @@ impl MIRer {
                 let arg_vars: Vec<VarDef> = args
                     .clone()
                     .into_iter()
-                    .map(|param| self.cfg.fresh_var(param.ty, self.stm))
+                    .map(|param| self.fresh_var(param.ty, self.stm))
                     .collect();
 
                 // The call itself in the CFG
-                let call_l = self.cfg.insert(
-                    Instr::Call {
+                let call_l = self.insert(
+                    self.instr(InstrKind::Call {
                         name,
                         args: arg_vars
                             .clone()
@@ -204,7 +200,7 @@ impl MIRer {
                             .map(|arg| Self::visit_var_ref(arg, dest_v.as_ref()))
                             .collect(),
                         destination: dest_v.map(|dest| dest.name),
-                    },
+                    }),
                     [(DefaultB, dest_l)],
                 );
 
@@ -219,7 +215,7 @@ impl MIRer {
 
                 // Declaration of the arguments
                 arg_vars.into_iter().rev().fold(compute_l, |dest_l, v| {
-                    self.cfg.insert(Instr::Declare(v), [(DefaultB, dest_l)])
+                    self.insert(self.instr(InstrKind::Declare(v)), [(DefaultB, dest_l)])
                 })
             }
             tast::RawExpr::IfE(box cond, box iftrue, box iffalse) => {
@@ -228,9 +224,9 @@ impl MIRer {
                 let iffalse_l = self.visit_block(iffalse, dest_v, dest_l, structs);
 
                 // The switch
-                let cond_var = self.cfg.fresh_var(BoolT, self.stm);
-                let cond_l = self.cfg.insert(
-                    Instr::Branch(cond_var.name.clone()),
+                let cond_var = self.fresh_var(BoolT, self.stm);
+                let cond_l = self.insert(
+                    self.instr(InstrKind::Branch(cond_var.name.clone())),
                     [(TrueB, iftrue_l), (FalseB, iffalse_l)],
                 );
 
@@ -241,19 +237,24 @@ impl MIRer {
             tast::RawExpr::FieldE(box s, field) => {
                 if let StructT(name) = &s.ty {
                     let field_ty = structs[name].get_field(&field).clone();
-                    let struct_var = self.cfg.fresh_var(field_ty, self.stm);
+                    let struct_var = self.fresh_var(field_ty, self.stm);
                     let var_ref = Self::visit_var_ref(struct_var.clone(), dest_v.as_ref());
                     let dest_l = if let Some(dest_v) = dest_v {
-                        self.cfg.insert(
-                            Instr::Assign(dest_v.name, RValue::Field(var_ref, field)),
+                        self.insert(
+                            self.instr(InstrKind::Assign(
+                                dest_v.name,
+                                RValue::Field(var_ref, field),
+                            )),
                             [(DefaultB, dest_l)],
                         )
                     } else {
                         dest_l
                     };
                     let dest_l = self.visit_expr(s, Some(struct_var.clone()), dest_l, structs);
-                    self.cfg
-                        .insert(Instr::Declare(struct_var), [(DefaultB, dest_l)])
+                    self.insert(
+                        self.instr(InstrKind::Declare(struct_var)),
+                        [(DefaultB, dest_l)],
+                    )
                 } else {
                     panic!("Cannot get a field of something which is not a struct");
                 }
@@ -266,12 +267,12 @@ impl MIRer {
                 // field
                 let field_vars: HashMap<String, VarDef> = fields
                     .iter()
-                    .map(|(name, e)| (name.clone(), self.cfg.fresh_var(e.ty.clone(), self.stm)))
+                    .map(|(name, e)| (name.clone(), self.fresh_var(e.ty.clone(), self.stm)))
                     .collect();
 
                 // Struct instantiation in the CFG
-                let struct_l = self.cfg.insert(
-                    Instr::Struct {
+                let struct_l = self.insert(
+                    self.instr(InstrKind::Struct {
                         name: s_name,
                         fields: field_vars
                             .clone()
@@ -279,7 +280,7 @@ impl MIRer {
                             .map(|(field, var)| (field, Self::visit_var_ref(var, dest_v.as_ref())))
                             .collect(),
                         destination: dest_v.map(|dest_v| dest_v.name),
-                    },
+                    }),
                     [(DefaultB, dest_l)],
                 );
 
@@ -292,7 +293,7 @@ impl MIRer {
                     });
 
                 field_vars.into_values().fold(compute_l, |dest_l, var| {
-                    self.cfg.insert(Instr::Declare(var), [(DefaultB, dest_l)])
+                    self.insert(self.instr(InstrKind::Declare(var)), [(DefaultB, dest_l)])
                 })
             }
         }
@@ -340,33 +341,34 @@ impl MIRer {
         match s {
             tast::Stmt::Declare(vardef, expr) => {
                 let expr_l = self.visit_expr(expr, Some(vardef.clone()), dest_l, structs);
-                self.cfg
-                    .insert(Instr::Declare(vardef), [(DefaultB, expr_l)])
+                self.insert(self.instr(InstrKind::Declare(vardef)), [(DefaultB, expr_l)])
             }
             tast::Stmt::Assign(vardef, expr) => {
                 self.visit_expr(expr, Some(vardef), dest_l, structs)
             }
             tast::Stmt::While { cond, body } => {
-                let loop_l = self.cfg.fresh_label();
+                let loop_l = self.fresh_label();
 
                 // The block itself.
                 let body_l = self.visit_block(body, None, loop_l.clone(), structs);
 
                 // If statement
-                let cond_v = self.cfg.fresh_var(BoolT, self.stm);
-                let if_l = self.cfg.insert(
-                    Instr::Branch(cond_v.name.clone()),
+                let cond_v = self.fresh_var(BoolT, self.stm);
+                let if_l = self.insert(
+                    self.instr(InstrKind::Branch(cond_v.name.clone())),
                     [(TrueB, body_l), (FalseB, dest_l)],
                 );
 
                 // Compute the condition.
                 let cond_l: CfgLabel = self.visit_expr(cond, Some(cond_v.clone()), if_l, structs);
-                self.cfg
-                    .insert_at(loop_l.clone(), Instr::Noop, [(DefaultB, cond_l)]);
+                self.insert_at(
+                    loop_l.clone(),
+                    self.instr(InstrKind::Noop),
+                    [(DefaultB, cond_l)],
+                );
 
                 // Declare the condition and loop
-                self.cfg
-                    .insert(Instr::Declare(cond_v), [(DefaultB, loop_l)])
+                self.insert(self.instr(InstrKind::Declare(cond_v)), [(DefaultB, loop_l)])
             }
             tast::Stmt::ExprS(e) => self.visit_expr(e, None, dest_l, structs),
         }
@@ -374,15 +376,15 @@ impl MIRer {
 
     /// Visits a function.
     fn visit_fun(&mut self, f: tast::Fun, structs: &HashMap<String, Struct>) -> Fun {
-        let ret_l = self.cfg.fresh_label();
+        let ret_l = self.fresh_label();
         // Reserve a fresh variable for the output, only if it's not the unit type
         let ret_v = if f.ret_ty != UnitT {
-            Some(self.cfg.fresh_var(f.ret_ty, self.stm))
+            Some(self.fresh_var(f.ret_ty, self.stm))
         } else {
             None
         };
         let entry_l = self.visit_block(f.body, ret_v.clone(), ret_l.clone(), structs);
-        let body = std::mem::take(&mut self.cfg).finish();
+        let body = std::mem::take(&mut self.cfg);
 
         Fun {
             name: f.name,

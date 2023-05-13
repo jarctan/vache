@@ -2,7 +2,9 @@
 //! MIR/CFG.
 
 use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 
+use super::Stratum;
 use super::*;
 
 /// Branch = label on CFG edges.
@@ -26,8 +28,34 @@ pub enum Branch {
 }
 
 /// Instructions in the MIR (nodes in the CFG).
+///
+/// Instruction = scope + kind of instruction.
+#[derive(Debug)]
+pub struct Instr {
+    /// Scope id of the instruction.
+    ///
+    /// This is the stratum/scope in which it is.
+    pub scope: Stratum,
+    /// Instruction kind.
+    pub kind: InstrKind,
+}
+
+impl Deref for Instr {
+    type Target = InstrKind;
+
+    fn deref(&self) -> &Self::Target {
+        &self.kind
+    }
+}
+impl DerefMut for Instr {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.kind
+    }
+}
+
+/// Instructions in the MIR (nodes in the CFG).
 #[derive(Default)]
-pub enum Instr {
+pub enum InstrKind {
     /// No-op instruction.
     #[default]
     Noop,
@@ -56,25 +84,19 @@ pub enum Instr {
     },
     /// Asks for the truthiness of the first argument.
     Branch(Var),
-    /// Pushes a new scope.
-    ///
-    /// It is the result of flattening nested scopes in the original AST, while
-    /// still annotating the start and end of scope. These markers may prove
-    /// useful in the final compilation.
-    PushScope,
-    /// Pops a new scope.
-    PopScope,
 }
 
-impl Instr {
+impl InstrKind {
     /// If this instruction mutates a variable, returns it.
     /// Otherwise, returns `None`.
     pub fn mutated_var(&self) -> Option<&Var> {
         match self {
-            Instr::Noop | Instr::Branch(_) | Instr::PushScope | Instr::PopScope => None,
-            Instr::Declare(v) => Some(&v.name),
-            Instr::Call { destination: v, .. } | Instr::Struct { destination: v, .. } => v.as_ref(),
-            Instr::Assign(v, _) => Some(v),
+            InstrKind::Noop | InstrKind::Branch(_) => None,
+            InstrKind::Declare(v) => Some(&v.name),
+            InstrKind::Call { destination: v, .. } | InstrKind::Struct { destination: v, .. } => {
+                v.as_ref()
+            }
+            InstrKind::Assign(v, _) => Some(v),
         }
     }
 
@@ -82,40 +104,37 @@ impl Instr {
     /// modality as "owned".
     pub fn state_as_owned(&mut self, v: &Var) {
         match self {
-            Instr::Noop
-            | Instr::Branch(_)
-            | Instr::PushScope
-            | Instr::PopScope
-            | Instr::Declare(_) => {
+            InstrKind::Noop | InstrKind::Branch(_) | InstrKind::Declare(_) => {
                 panic!("{v:?} not found in this instruction, cannot make it owned")
             }
-            Instr::Call { args, .. } => {
+            InstrKind::Call { args, .. } => {
                 let var = args.iter_mut().find(|arg| &arg.var == v).unwrap();
                 var.owned = true;
             }
-            Instr::Struct { fields, .. } => {
+            InstrKind::Struct { fields, .. } => {
                 let var = fields.values_mut().find(|arg| &arg.var == v).unwrap();
                 var.owned = true;
             }
-            Instr::Assign(_, RValue::Var(rhs)) | Instr::Assign(_, RValue::Field(rhs, _))
+            InstrKind::Assign(_, RValue::Var(rhs))
+            | InstrKind::Assign(_, RValue::Field(rhs, _))
                 if &rhs.var == v =>
             {
                 rhs.owned = true;
             }
-            Instr::Assign(_, _) => {
+            InstrKind::Assign(_, _) => {
                 panic!("{v:?} not found in this instruction, cannot make it owned")
             }
         }
     }
 }
 
-impl fmt::Debug for Instr {
+impl fmt::Debug for InstrKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Instr::Noop => write!(f, "()"),
-            Instr::Declare(x) => write!(f, "new {x:?}"),
-            Instr::Assign(lhs, rhs) => write!(f, "{lhs:?} = {rhs:?}"),
-            Instr::Call {
+            InstrKind::Noop => write!(f, "()"),
+            InstrKind::Declare(x) => write!(f, "new {x:?}"),
+            InstrKind::Assign(lhs, rhs) => write!(f, "{lhs:?} = {rhs:?}"),
+            InstrKind::Call {
                 name,
                 args,
                 destination,
@@ -125,7 +144,7 @@ impl fmt::Debug for Instr {
                 }
                 write!(f, "{name}({args:?})")
             }
-            Instr::Struct {
+            InstrKind::Struct {
                 name,
                 fields,
                 destination,
@@ -139,11 +158,9 @@ impl fmt::Debug for Instr {
                 }
                 res.finish()
             }
-            Instr::Branch(cond) => {
+            InstrKind::Branch(cond) => {
                 write!(f, "{cond:?}?")
             }
-            Instr::PushScope => write!(f, "PushScope"),
-            Instr::PopScope => write!(f, "PopScope"),
         }
     }
 }

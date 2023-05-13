@@ -11,7 +11,7 @@ use Value::*;
 
 use super::env::Env;
 use super::value::{Value, ValueRef};
-use crate::mir::{Branch, Cfg, CfgLabel, Fun, Instr, RValue, Var};
+use crate::mir::{Branch, Cfg, CfgLabel, Fun, InstrKind, RValue, Var};
 use crate::tast::Stratum;
 
 /// Interpreter for our language.
@@ -245,18 +245,18 @@ impl<'a> Interpreter<'a> {
     /// Executes an expression, returning the first label that do not exist in
     /// the CFG. Often, this is the return/exit label.
     fn visit_cfg(&mut self, cfg: &'a Cfg, label: &CfgLabel) {
-        let branch = match &cfg[label] {
-            Instr::Noop => DefaultB,
-            Instr::Declare(v) => {
+        let branch = match &cfg[label].kind {
+            InstrKind::Noop => DefaultB,
+            InstrKind::Declare(v) => {
                 self.add_var(v.clone());
                 DefaultB
             }
-            Instr::Assign(v, rvalue) => {
+            InstrKind::Assign(v, rvalue) => {
                 let value = self.visit_rvalue(rvalue, self.get_var(v).stratum);
                 self.set_var(v, value);
                 DefaultB
             }
-            Instr::Call {
+            InstrKind::Call {
                 name,
                 args,
                 destination,
@@ -276,7 +276,7 @@ impl<'a> Interpreter<'a> {
                 }
                 DefaultB
             }
-            Instr::Struct {
+            InstrKind::Struct {
                 name,
                 fields,
                 destination,
@@ -294,20 +294,12 @@ impl<'a> Interpreter<'a> {
                 }
                 DefaultB
             }
-            Instr::Branch(cond) => {
+            InstrKind::Branch(cond) => {
                 if self.get_var_value(cond).truth() {
                     TrueB
                 } else {
                     FalseB
                 }
-            }
-            Instr::PushScope => {
-                self.push_scope();
-                DefaultB
-            }
-            Instr::PopScope => {
-                self.pop_scope(None);
-                DefaultB
             }
         };
         if let Some(next) = cfg.take_branch(label, &branch) {

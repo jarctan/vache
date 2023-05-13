@@ -211,23 +211,23 @@ impl Compiler {
 
     /// Compiles a single CFG instruction.
     fn visit_instr(&mut self, instr: &Instr) -> TokenStream {
-        match instr {
-            crate::mir::Instr::Noop => quote!(),
-            crate::mir::Instr::Declare(v) => {
+        match &instr.kind {
+            crate::mir::InstrKind::Noop => quote!(),
+            crate::mir::InstrKind::Declare(v) => {
                 let name = format_ident!("{}", v.name.as_str());
                 let ty = self.translate_type(&v.ty, false);
                 quote! {
                     let mut #name: #ty;
                 }
             }
-            crate::mir::Instr::Assign(lhs, rhs) => {
+            crate::mir::InstrKind::Assign(lhs, rhs) => {
                 let lhs = format_ident!("{}", lhs.as_str());
                 let rhs = self.visit_rvalue(rhs.clone());
                 quote! {
                     #lhs = #rhs;
                 }
             }
-            crate::mir::Instr::Call {
+            crate::mir::InstrKind::Call {
                 name,
                 args,
                 destination,
@@ -274,12 +274,8 @@ impl Compiler {
                     quote!(#prefix #name(#(#args),*);)
                 }
             }
-            crate::mir::Instr::Struct { .. } => todo!(),
-            crate::mir::Instr::Branch(_) => todo!(),
-            crate::mir::Instr::PushScope => quote! {
-                {}
-            },
-            crate::mir::Instr::PopScope => quote!({}),
+            crate::mir::InstrKind::Struct { .. } => todo!(),
+            crate::mir::InstrKind::Branch(_) => todo!(),
         }
     }
 
