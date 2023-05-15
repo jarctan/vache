@@ -125,7 +125,6 @@ impl<'a> Interpreter<'a> {
             }
 
             self.visit_cfg(&f.body, &f.entry_l);
-            println!("ok, return value is {:?}", f.ret_v);
 
             // Request the final value (if the function returns a value, of course)
             self.pop_scope(f.ret_v.as_ref().map(|ret_v| self.get_var(ret_v)))

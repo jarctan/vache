@@ -216,7 +216,6 @@ pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
     }
 
     let loan_flow = loan_liveness(&cfg, entry_l, exit_l, var_flow);
-    println!("{loan_flow:?}");
 
     // List all invalidated borrows.
     let mut invalidated: Set<Borrow> = Set::new();
