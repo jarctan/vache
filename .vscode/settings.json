@@ -29,6 +29,7 @@
         "Flowable",
         "preneighbors",
         "Deque",
+        "mirer",
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }
