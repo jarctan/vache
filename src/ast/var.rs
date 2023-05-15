@@ -55,7 +55,7 @@ impl From<String> for Var {
 
 impl fmt::Debug for Var {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "${}", self.0)
+        <Self as fmt::Display>::fmt(self, f)
     }
 }
 

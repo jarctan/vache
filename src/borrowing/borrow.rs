@@ -19,7 +19,7 @@ pub struct Borrow {
 
 impl fmt::Debug for Borrow {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}@{:?}", self.var, self.label)
+        write!(f, "{:?}{:?}", self.var, self.label)
     }
 }
 

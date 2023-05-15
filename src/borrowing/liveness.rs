@@ -216,20 +216,21 @@ pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
     }
 
     let loan_flow = loan_liveness(&cfg, entry_l, exit_l, var_flow);
+    println!("{loan_flow:?}");
 
     // List all invalidated borrows.
-    let mut invalidated: Set<&Borrow> = Set::new();
+    let mut invalidated: Set<Borrow> = Set::new();
     for (label, instr) in cfg.bfs(entry_l, false) {
         if let Some(lhs) = instr.mutated_var() {
-            if let Some(borrow) = loan_flow[label].ins.is_borrowed(lhs) {
-                invalidated.insert(borrow);
+            for borrow in loan_flow[label].ins.borrows(lhs) {
+                invalidated.insert(borrow.clone());
             }
         }
     }
 
     // Transform all invalidated borrows into
     for Borrow { label, var } in invalidated {
-        cfg[label].force_clone(var);
+        cfg[&label].force_clone(&var);
     }
 
     cfg

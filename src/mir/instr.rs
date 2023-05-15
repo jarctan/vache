@@ -30,7 +30,6 @@ pub enum Branch {
 /// Instructions in the MIR (nodes in the CFG).
 ///
 /// Instruction = scope + kind of instruction.
-#[derive(Debug)]
 pub struct Instr {
     /// Instruction kind.
     pub kind: InstrKind,
@@ -50,6 +49,12 @@ impl Deref for Instr {
 impl DerefMut for Instr {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.kind
+    }
+}
+
+impl fmt::Debug for Instr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} // scope {:?}", self.kind, self.scope)
     }
 }
 

@@ -1,6 +1,6 @@
 //! Providing the general abstractions for the liveness analysis through the
 //! definition of flows.
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use std::iter::Sum;
 use std::ops::{BitOr, Sub};
 
@@ -19,10 +19,16 @@ pub trait Flowable = Sized
     + for<'a> Sub<&'a Self, Output = Self>;
 
 /// A flow point: a collection of inputs, and a collection of outputs.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Eq, Default)]
 pub struct Flow<S: Flowable> {
     /// Set of variables.
     pub ins: S,
     /// Outs.
     pub outs: S,
+}
+
+impl<S: Flowable> fmt::Debug for Flow<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} --> {:?}", self.ins, self.outs)
+    }
 }

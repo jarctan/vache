@@ -1,6 +1,7 @@
 //! Declaring here the annotations to the CFG we compute during the analysis.
 
 use std::collections::HashMap;
+use std::fmt;
 use std::iter::Sum;
 use std::ops::{Add, BitOr, Deref, DerefMut, Sub};
 
@@ -8,7 +9,7 @@ use super::borrow::{Borrow, Borrows};
 use crate::mir::{CfgLabel, Mode, Var, VarMode};
 
 /// A loan ledger.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Ledger {
     /// Map between variables defined in this environment and their borrows.
     borrows: HashMap<Var, Borrows>,
@@ -39,12 +40,17 @@ impl Ledger {
         }
     }
 
-    /// Returns iff a variable is borrowed by somebody.
-    pub fn is_borrowed(&self, var: impl AsRef<Var>) -> Option<&Borrow> {
-        let var = var.as_ref();
+    /// Returns all borrows of a variable.
+    pub fn borrows<'a>(&'a self, var: &'a Var) -> impl Iterator<Item = &'a Borrow> + 'a {
         self.borrows
             .values()
-            .find_map(|s| s.iter().find(|borrow| &borrow.var == var))
+            .flat_map(move |s| s.iter().filter(move |borrow| &borrow.var == var))
+    }
+}
+
+impl fmt::Debug for Ledger {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.borrows.fmt(f)
     }
 }
 
