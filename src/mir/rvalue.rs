@@ -6,11 +6,17 @@ use rug::Integer;
 
 use super::*;
 
+/// Variable addressing modality.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Default)]
 pub enum Mode {
+    /// Have a reference onto that value.
     #[default]
     Borrowed,
+    /// Clone the value to own it.
     Cloned,
+    /// Move the value out of its original variable.
+    ///
+    /// Is only safe when the original value is not used afterwards!
     Moved,
 }
 
