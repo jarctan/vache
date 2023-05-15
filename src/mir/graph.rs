@@ -161,6 +161,13 @@ impl<N, E> Cfg<N, E> {
         Bfs::new(self, start, rev_dir)
     }
 
+    /// Returns a mutable BFS iterator over the graph.
+    ///
+    /// `rev_dir`: take arrows in opposite direction.
+    pub fn bfs_mut<'a>(&'a mut self, start: &'a CfgLabel, rev_dir: bool) -> BfsMut<'a, N, E> {
+        BfsMut::new(self, start.clone(), rev_dir)
+    }
+
     /// Returns an immutable DFS iterator over the graph.
     ///
     /// `rev_dir`: take arrows in opposite direction.
@@ -350,6 +357,59 @@ impl<'a, N, E> Iterator for Bfs<'a, N, E> {
             }
         }
         Some((node, &self.graph[node]))
+    }
+}
+
+/// Breadth-First Search mutable iterator over a graph.
+pub struct BfsMut<'a, N, E> {
+    /// Queue of elements to visit.
+    queue: VecDeque<NodeIx>,
+    /// Already visited elements.
+    visited: HashSet<NodeIx>,
+    /// Reference to the graph itself.
+    graph: &'a mut Cfg<N, E>,
+    /// Take in reverse direction.
+    rev_dir: bool,
+}
+
+impl<'a, N, E> BfsMut<'a, N, E> {
+    /// Creates a new iterator that starts from a given label and traverses a
+    /// `graph`. Set `rev_dir` to true to traverse it in reverse direction.
+    fn new(graph: &'a mut Cfg<N, E>, start: CfgLabel, rev_dir: bool) -> Self {
+        Self {
+            queue: [start].into(),
+            visited: HashSet::new(),
+            graph,
+            rev_dir,
+        }
+    }
+}
+
+impl<'a, N, E> Iterator for BfsMut<'a, N, E> {
+    type Item = (NodeIx, &'a mut N);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node = self.queue.pop_front()?;
+        let iter: Box<dyn Iterator<Item = NodeIx>> = if self.rev_dir {
+            boxed(self.graph.preneighbors(&node).cloned())
+        } else {
+            boxed(self.graph.neighbors(&node).cloned())
+        };
+        for node in iter {
+            if self.visited.insert(node.clone()) {
+                // If `visited` did not contain this value before
+                self.queue.push_back(node);
+            }
+        }
+
+        // Hugely UNSAFE: we must prove that we will return mutable access to different
+        // parts of the graph. The borrow checker is unable to see that nodes
+        // that are returned here are always different. So the &mut N can be upgraded to
+        // &'a mut N. Since we will NOT use `self.graph[&node]` for the rest of `a,
+        // which is the lifetime of the iterator.
+        Some((node.clone(), unsafe {
+            &mut *(&mut self.graph[&node] as *mut N)
+        }))
     }
 }
 
