@@ -192,7 +192,7 @@ pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
     }
 
     for Borrow { label, var } in invalidated {
-        cfg[label].state_as_owned(var);
+        cfg[label].force_clone(var);
     }
 
     cfg
@@ -295,7 +295,13 @@ mod tests {
         assert!(
             matches!(
                 cfg[&l[3]].kind,
-                InstrKind::Assign(_, RValue::Var(VarMode { owned: true, .. }))
+                InstrKind::Assign(
+                    _,
+                    RValue::Var(VarMode {
+                        mode: Mode::Cloned,
+                        ..
+                    })
+                )
             ),
             "y should be cloned here"
         );
@@ -342,7 +348,13 @@ mod tests {
         assert!(
             matches!(
                 cfg[&l[3]].kind,
-                InstrKind::Assign(_, RValue::Var(VarMode { owned: false, .. })),
+                InstrKind::Assign(
+                    _,
+                    RValue::Var(VarMode {
+                        mode: Mode::Borrowed,
+                        ..
+                    })
+                ),
             ),
             "y should be taken by reference here"
         );

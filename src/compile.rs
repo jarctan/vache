@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use string_builder::Builder as StringBuilder;
 use Ty::*;
 
-use crate::mir::{Fun, Instr, Program, RValue, Struct, Ty, VarMode};
+use crate::mir::{Fun, Instr, Mode, Program, RValue, Struct, Ty, VarMode};
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
@@ -182,10 +182,10 @@ impl Compiler {
     /// Compiles a variable (with its addressing mode).
     fn visit_var(&mut self, var: VarMode) -> TokenStream {
         let name = format_ident!("{}", var.var.as_str());
-        if var.owned {
-            quote!(#name.clone())
-        } else {
-            quote!(__borrow(&#name))
+        match var.mode {
+            Mode::Cloned => quote!(#name.clone()),
+            Mode::Borrowed => quote!(__borrow(&#name)),
+            Mode::Moved => quote!(#name),
         }
     }
 

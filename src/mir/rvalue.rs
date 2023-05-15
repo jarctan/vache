@@ -6,13 +6,21 @@ use rug::Integer;
 
 use super::*;
 
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Default)]
+pub enum Mode {
+    #[default]
+    Borrowed,
+    Cloned,
+    Moved,
+}
+
 /// An variable with an ownership modality.
 #[derive(Clone, PartialEq, Eq)]
 pub struct VarMode {
     /// The variable.
     pub var: Var,
     /// Do we transfer ownership or take by reference?
-    pub owned: bool,
+    pub mode: Mode,
 }
 
 impl VarMode {
@@ -20,25 +28,26 @@ impl VarMode {
     pub fn refed(var: impl Into<Var>) -> Self {
         Self {
             var: var.into(),
-            owned: false,
+            mode: Mode::Borrowed,
         }
     }
 
     /// A var that is takes ownership of the value by cloning it.
-    pub fn owned(var: impl Into<Var>) -> Self {
+    pub fn cloned(var: impl Into<Var>) -> Self {
         Self {
             var: var.into(),
-            owned: true,
+            mode: Mode::Cloned,
         }
     }
 }
 
 impl fmt::Debug for VarMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.owned {
-            write!(f, "^{}", self.var)
-        } else {
-            write!(f, "&{}", self.var)
+        use Mode::*;
+        match self.mode {
+            Cloned => write!(f, "^{}", self.var),
+            Moved => write!(f, "!{}", self.var),
+            Borrowed => write!(f, "&{}", self.var),
         }
     }
 }

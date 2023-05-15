@@ -116,7 +116,7 @@ impl MIRer {
     fn visit_var_ref(src: VarDef, dest: Option<&VarDef>) -> VarMode {
         // If dest outlives, if must own the variable!
         if let Some(dest) = dest && dest.stm < src.stm {
-            VarMode::owned(src.name)
+            VarMode::cloned(src.name)
         } else {
             VarMode::refed(src.name)
         }

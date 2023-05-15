@@ -100,26 +100,28 @@ impl InstrKind {
         }
     }
 
-    /// If this instruction mutates variable `v`, it will modify its ownership
-    /// modality as "owned".
-    pub fn state_as_owned(&mut self, v: &Var) {
+    /// Changes the instruction to force cloning `v` inside that instruction.
+    ///
+    /// # Panics
+    /// Panics if the instruction does not contain `v`.
+    pub fn force_clone(&mut self, v: &Var) {
         match self {
             InstrKind::Noop | InstrKind::Branch(_) | InstrKind::Declare(_) => {
                 panic!("{v:?} not found in this instruction, cannot make it owned")
             }
             InstrKind::Call { args, .. } => {
                 let var = args.iter_mut().find(|arg| &arg.var == v).unwrap();
-                var.owned = true;
+                var.mode = Mode::Cloned;
             }
             InstrKind::Struct { fields, .. } => {
                 let var = fields.values_mut().find(|arg| &arg.var == v).unwrap();
-                var.owned = true;
+                var.mode = Mode::Cloned;
             }
             InstrKind::Assign(_, RValue::Var(rhs))
             | InstrKind::Assign(_, RValue::Field(rhs, _))
                 if &rhs.var == v =>
             {
-                rhs.owned = true;
+                rhs.mode = Mode::Cloned;
             }
             InstrKind::Assign(_, _) => {
                 panic!("{v:?} not found in this instruction, cannot make it owned")

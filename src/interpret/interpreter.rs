@@ -11,7 +11,7 @@ use Value::*;
 
 use super::env::Env;
 use super::value::{Value, ValueRef};
-use crate::mir::{Branch, Cfg, CfgLabel, Fun, InstrKind, RValue, Var};
+use crate::mir::{Branch, Cfg, CfgLabel, Fun, InstrKind, Mode, RValue, Var};
 use crate::tast::Stratum;
 
 /// Interpreter for our language.
@@ -224,11 +224,12 @@ impl<'a> Interpreter<'a> {
             RValue::String(s) => self.add_value(StrV(s.clone()), stratum),
             RValue::Var(v) => {
                 let v_ref = self.get_var(v);
-                if v.owned {
-                    self.add_value(self.get_value(v_ref).clone(), stratum)
-                } else {
-                    assert!(stratum >= v_ref.stratum, "Runtime error: ownership addressing should be specified as owned if moving variable out of its stratum");
-                    v_ref
+                match v.mode {
+                    Mode::Cloned => self.add_value(self.get_value(v_ref).clone(), stratum),
+                    Mode::Moved | Mode::Borrowed => {
+                        assert!(stratum >= v_ref.stratum, "Runtime error: ownership addressing should be specified as owned if moving variable out of its stratum");
+                        v_ref
+                    }
                 }
             }
             RValue::Field(strukt, field) => {

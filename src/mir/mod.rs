@@ -23,7 +23,7 @@ pub use graph::{Cfg, CfgLabel};
 pub use instr::instr;
 pub use instr::{Branch, Instr, InstrKind};
 pub use program::Program;
-pub use rvalue::{RValue, VarMode};
+pub use rvalue::{Mode, RValue, VarMode};
 
 #[cfg(test)]
 pub use crate::tast::vardef;
