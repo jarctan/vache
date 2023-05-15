@@ -4,7 +4,7 @@ use super::flow::Flow;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
 use crate::examples::Var;
-use crate::mir::{Cfg, CfgLabel, InstrKind, RValue};
+use crate::mir::{Cfg, CfgLabel, InstrKind, Mode, RValue};
 use crate::utils::set::Set;
 
 /// Variable liveness analysis.
@@ -110,7 +110,7 @@ fn loan_liveness(
                 | InstrKind::Assign(lhs, RValue::Field(rhs, _)) => {
                     let mut res = ins.clone() - lhs;
                     if var_flow[label].outs.contains(lhs) {
-                        res = res + (lhs.clone(), ins.borrow(rhs.var.clone(), label.clone()));
+                        res = res + (lhs.clone(), ins.borrow(rhs, label.clone()));
                     }
                     res
                 }
@@ -125,7 +125,7 @@ fn loan_liveness(
                             + (
                                 destination.clone(),
                                 args.iter()
-                                    .map(|arg| ins.borrow(arg.var.clone(), label.clone()))
+                                    .map(|arg| ins.borrow(arg, label.clone()))
                                     .sum::<Set<Borrow>>(),
                             );
                     }
@@ -143,7 +143,7 @@ fn loan_liveness(
                                 destination.clone(),
                                 fields
                                     .values()
-                                    .map(|field| ins.borrow(field.var.clone(), label.clone()))
+                                    .map(|field| ins.borrow(field, label.clone()))
                                     .sum::<Set<Borrow>>(),
                             );
                     }
@@ -179,6 +179,42 @@ fn loan_liveness(
 /// Performs liveliness analysis, determining which borrows are invalidated.
 pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
     let var_flow = var_liveness(&cfg, entry_l, exit_l);
+
+    // Checking last variable use and replace with a move
+    for (label, instr) in cfg.bfs_mut(entry_l, false) {
+        match &mut instr.kind {
+            InstrKind::Noop | InstrKind::Declare(_) | InstrKind::Branch(_) => (),
+            InstrKind::Assign(_, RValue::Var(rhs)) => {
+                if !var_flow[&label].outs.contains(&rhs.var) {
+                    rhs.mode = Mode::Moved;
+                }
+            }
+            InstrKind::Assign(_, _) => (),
+            InstrKind::Call {
+                name: _,
+                args,
+                destination: _,
+            } => {
+                for arg in args {
+                    if !var_flow[&label].outs.contains(&arg.var) {
+                        arg.mode = Mode::Moved;
+                    }
+                }
+            }
+            InstrKind::Struct {
+                name: _,
+                fields,
+                destination: _,
+            } => {
+                for field in fields.values_mut() {
+                    if !var_flow[&label].outs.contains(&field.var) {
+                        field.mode = Mode::Moved;
+                    }
+                }
+            }
+        }
+    }
+
     let loan_flow = loan_liveness(&cfg, entry_l, exit_l, var_flow);
 
     // List all invalidated borrows.
@@ -191,6 +227,7 @@ pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
         }
     }
 
+    // Transform all invalidated borrows into
     for Borrow { label, var } in invalidated {
         cfg[label].force_clone(var);
     }
@@ -274,10 +311,17 @@ mod tests {
                     InstrKind::Assign(x.clone(), RValue::Var(VarMode::refed(y.clone()))), // We assign y to x
                     stm,
                 ),
-                instr(InstrKind::Assign(y, RValue::Integer(36.into())), stm), /* We mutate y
-                                                                               * afterwards,
-                                                                               * invalidating
-                                                                               * the loan because we also... */
+                instr(
+                    InstrKind::Call {
+                        name: "+".to_string(),
+                        args: vec![VarMode::refed(y.clone()), VarMode::refed(y.clone())],  /* We mutate y
+                                                                                        * afterwards,
+                                                                                        * invalidating
+                                                                                        * the loan because we also... */
+                        destination: Some(y),
+                    },
+                    stm,
+                ),
                 instr(
                     InstrKind::Call {
                         name: "print".to_string(),
@@ -334,11 +378,19 @@ mod tests {
                                                                                    * to x */
                     stm,
                 ),
-                instr(InstrKind::Assign(y, RValue::Integer(36.into())), stm), /* We mutate y
-                                                                               * afterwards,
-                                                                               * BUT don't invalidate since x
-                                                                               * is not live
-                                                                               * anymore. */
+                instr(
+                    InstrKind::Call {
+                        name: "+".to_string(),
+                        args: vec![VarMode::refed(y.clone()), VarMode::refed(y.clone())],  /* We mutate y
+                                                                                        * afterwards,
+                                                                                        * invalidating
+                                                                                        * BUT don't invalidate since x
+                                                                                        * is not live
+                                                                                        * anymore. */
+                        destination: Some(y),
+                    },
+                    stm,
+                ),
                 instr(InstrKind::Noop, stm),
             ],
             (),
@@ -357,6 +409,58 @@ mod tests {
                 ),
             ),
             "y should be taken by reference here"
+        );
+    }
+
+    /// Checks with a simple example that we move the value if not used
+    /// afterwards.
+    #[test]
+    fn test_move_if_not_live() {
+        let mut cfg = Cfg::default();
+        let stm = Stratum::static_stm();
+
+        // Variables
+        let x = Var::from("x");
+        let x_def = vardef("x", Ty::IntT, stm);
+        let y = Var::from("y");
+        let y_def = vardef("y", Ty::IntT, stm);
+
+        // CFG
+        let l = cfg.add_block(
+            [
+                instr(InstrKind::Declare(y_def), stm),
+                instr(
+                    InstrKind::Assign(y.clone(), RValue::Integer(42.into())),
+                    stm,
+                ),
+                instr(InstrKind::Declare(x_def), stm),
+                instr(
+                    InstrKind::Assign(x, RValue::Var(VarMode::refed(y.clone()))), /* We assign y
+                                                                                   * to x */
+                    stm,
+                ),
+                instr(InstrKind::Assign(y, RValue::Integer(36.into())), stm), /* We mutate y
+                                                                               * but we don't
+                                                                               * need y,
+                                                                               * so x can own it */
+                instr(InstrKind::Noop, stm),
+            ],
+            (),
+        );
+
+        let cfg = liveness(cfg, &l[0], l.last().unwrap());
+        assert!(
+            matches!(
+                cfg[&l[3]].kind,
+                InstrKind::Assign(
+                    _,
+                    RValue::Var(VarMode {
+                        mode: Mode::Moved,
+                        ..
+                    })
+                ),
+            ),
+            "y should be moved here"
         );
     }
 }

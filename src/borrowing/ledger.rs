@@ -5,7 +5,7 @@ use std::iter::Sum;
 use std::ops::{Add, BitOr, Deref, DerefMut, Sub};
 
 use super::borrow::{Borrow, Borrows};
-use crate::mir::{CfgLabel, Var};
+use crate::mir::{CfgLabel, Mode, Var, VarMode};
 
 /// A loan ledger.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,9 +30,13 @@ impl Ledger {
 
     /// Returns the complete (deep, nested) list of all borrows resulting from
     /// the borrow of `var` at CFG label `label`.
-    pub fn borrow(&self, var: impl Into<Var>, label: CfgLabel) -> Borrows {
-        let var = var.into();
-        self.get(&var).cloned().unwrap_or_default() + Borrow { var, label }
+    pub fn borrow(&self, var: &VarMode, label: CfgLabel) -> Borrows {
+        if var.mode == Mode::Borrowed {
+            let var = var.var.clone();
+            self.get(&var).cloned().unwrap_or_default() + Borrow { var, label }
+        } else {
+            Borrows::new()
+        }
     }
 
     /// Returns iff a variable is borrowed by somebody.
