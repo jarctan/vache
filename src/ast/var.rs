@@ -92,7 +92,7 @@ impl From<VarDef> for Var {
     }
 }
 
-/// Creates a new variable definition.
+/// Shortcut to create a new variable definition.
 pub fn vardef(name: impl ToString, ty: Ty) -> VarDef {
     let name = name.to_string().into();
     VarDef { name, ty }

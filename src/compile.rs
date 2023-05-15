@@ -296,7 +296,7 @@ impl Compiler {
 
         let body: TokenStream = f
             .body
-            .bfs(&f.entry_l)
+            .bfs(&f.entry_l, false)
             .map(|(_, instr)| self.visit_instr(instr))
             .collect();
 

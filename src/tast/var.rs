@@ -45,3 +45,10 @@ impl From<VarDef> for Var {
         vardef.name
     }
 }
+
+/// Shortcut to create a new variable definition.
+#[cfg(test)]
+pub fn vardef(name: impl ToString, ty: Ty, stm: Stratum) -> VarDef {
+    let name = name.to_string().into();
+    VarDef { name, ty, stm }
+}

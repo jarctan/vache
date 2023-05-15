@@ -1,10 +1,9 @@
 //! Toy Stratum language compiler library.
 
 #![feature(box_patterns)]
-#![feature(extend_one)]
 #![feature(let_chains)]
 #![feature(trait_alias)]
-#![feature(arbitrary_self_types)]
+#![feature(array_windows)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 

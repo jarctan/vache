@@ -26,8 +26,9 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
     while updated {
         updated = false;
 
-        for (label, instr) in cfg.bfs(exit_l) {
+        for (label, instr) in cfg.bfs(exit_l, true) {
             let successors = cfg.neighbors(label);
+
             let outs: Set<Var> = successors.map(|x| var_flow[x].ins.clone()).sum();
             let ins: Set<Var> = match &instr.kind {
                 InstrKind::Noop => outs.clone(),
@@ -44,8 +45,9 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                     args,
                     destination,
                 } => {
-                    outs.clone() - destination.as_ref()
-                        + Set::from_iter(args.iter().map(|arg| &arg.var).cloned())
+                    let res = outs.clone() - destination.as_ref()
+                        + Set::from_iter(args.iter().map(|arg| &arg.var).cloned());
+                    res
                 }
                 InstrKind::Struct {
                     name: _,
@@ -85,7 +87,7 @@ fn loan_liveness(
     _exit_l: &CfgLabel,
     var_flow: Cfg<Flow<Set<Var>>>,
 ) -> Cfg<Flow<Ledger>> {
-    let out_of_scope = var_flow.map(|_, flow| flow.outs.clone() - &flow.ins, |_| ());
+    let out_of_scope = var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
 
     // Same, for loans.
     let mut loan_flow: Cfg<Flow<Ledger>> = cfg.map_ref(|_, _| Flow::default(), |_| ());
@@ -95,7 +97,7 @@ fn loan_liveness(
     while updated {
         updated = false;
 
-        for (label, instr) in cfg.bfs(entry_l) {
+        for (label, instr) in cfg.bfs(entry_l, false) {
             let predecessors = cfg.preneighbors(label);
             let ins: Ledger = predecessors.map(|x| loan_flow[x].outs.clone()).sum();
             let outs: Ledger = match &instr.kind {
@@ -106,34 +108,46 @@ fn loan_liveness(
                 | InstrKind::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs,
                 InstrKind::Assign(lhs, RValue::Var(rhs))
                 | InstrKind::Assign(lhs, RValue::Field(rhs, _)) => {
-                    ins.clone() - lhs + (lhs.clone(), ins.borrow(rhs.var.clone(), label.clone()))
+                    let mut res = ins.clone() - lhs;
+                    if var_flow[label].outs.contains(lhs) {
+                        res = res + (lhs.clone(), ins.borrow(rhs.var.clone(), label.clone()));
+                    }
+                    res
                 }
                 InstrKind::Call {
                     name: _,
                     args,
                     destination: Some(destination),
                 } => {
-                    ins.clone() - destination
-                        + (
-                            destination.clone(),
-                            args.iter()
-                                .map(|arg| ins.borrow(arg.var.clone(), label.clone()))
-                                .sum::<Set<Borrow>>(),
-                        )
+                    let mut res = ins.clone() - destination;
+                    if var_flow[label].outs.contains(destination) {
+                        res = res
+                            + (
+                                destination.clone(),
+                                args.iter()
+                                    .map(|arg| ins.borrow(arg.var.clone(), label.clone()))
+                                    .sum::<Set<Borrow>>(),
+                            );
+                    }
+                    res
                 }
                 InstrKind::Struct {
                     name: _,
                     fields,
                     destination: Some(destination),
                 } => {
-                    ins.clone() - destination
-                        + (
-                            destination.clone(),
-                            fields
-                                .values()
-                                .map(|field| ins.borrow(field.var.clone(), label.clone()))
-                                .sum::<Set<Borrow>>(),
-                        )
+                    let mut res = ins.clone() - destination;
+                    if var_flow[label].outs.contains(destination) {
+                        res = res
+                            + (
+                                destination.clone(),
+                                fields
+                                    .values()
+                                    .map(|field| ins.borrow(field.var.clone(), label.clone()))
+                                    .sum::<Set<Borrow>>(),
+                            );
+                    }
+                    res
                 }
                 InstrKind::Branch(_)
                 | InstrKind::Call {
@@ -169,7 +183,7 @@ pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
 
     // List all invalidated borrows.
     let mut invalidated: Set<&Borrow> = Set::new();
-    for (label, instr) in cfg.bfs(entry_l) {
+    for (label, instr) in cfg.bfs(entry_l, false) {
         if let Some(lhs) = instr.mutated_var() {
             if let Some(borrow) = loan_flow[label].ins.is_borrowed(lhs) {
                 invalidated.insert(borrow);
@@ -184,77 +198,153 @@ pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
     cfg
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::var::vardef;
-    use crate::ast::Ty;
-
-    #[test]
-    fn test_use() {
-        // Labels
-        let label = CfgLabel::new(0);
-
-        // Variables
-        let x = Var::from("x");
-        let x_def = vardef("x", Ty::IntT);
-        let y = Var::from("y");
-
-        assert!(Instr::Goto(label.clone()).var_uses().is_empty());
-
-        assert_eq!(
-            Set::from_iter(Instr::Assign(x, RValue::Var(y.clone()), label.clone()).var_uses()),
-            Set::from_iter([y])
-        );
-
-        assert!(Instr::Declare(x_def, label).var_uses().is_empty());
-    }
+    use crate::mir::*;
 
     #[test]
     fn test_liveness() {
-        // Labels
-        let l0 = CfgLabel::new(0);
-        let l1 = CfgLabel::new(1);
-        let l2 = CfgLabel::new(2);
-        let l3 = CfgLabel::new(3);
-        let l_exit = CfgLabel::new(4);
+        let mut cfg = Cfg::default();
+        let stm = Stratum::static_stm();
 
         // Variables
         let x = Var::from("x");
-        let x_def = vardef("x", Ty::IntT);
+        let x_def = vardef("x", Ty::IntT, stm);
         let y = Var::from("y");
-        let y_def = vardef("y", Ty::IntT);
+        let y_def = vardef("y", Ty::IntT, stm);
 
-        let cfg: Cfg = [
-            (l0.clone(), Instr::Declare(y_def, l1.clone())),
-            (
-                l1,
-                Instr::Assign(y.clone(), RValue::Integer(42.into()), l2.clone()),
-            ),
-            (l2.clone(), Instr::Declare(x_def, l3.clone())),
-            (
-                l3.clone(),
-                Instr::Assign(x, RValue::Var(y.clone()), l_exit.clone()),
-            ),
-        ]
-        .into_iter()
-        .collect();
+        // CFG
+        let l = cfg.add_block(
+            [
+                instr(InstrKind::Declare(y_def), stm),
+                instr(
+                    InstrKind::Assign(y.clone(), RValue::Integer(42.into())),
+                    stm,
+                ),
+                instr(InstrKind::Declare(x_def), stm),
+                instr(
+                    InstrKind::Assign(x, RValue::Var(VarMode::refed(y.clone()))),
+                    stm,
+                ),
+                instr(InstrKind::Noop, stm),
+            ],
+            (),
+        );
 
-        let analysis = liveness(&cfg, &l_exit);
+        let analysis = var_liveness(&cfg, &l[0], l.last().unwrap());
 
         // Entry and exit are trivial
-        assert_eq!(analysis[&l0].ins.len(), 0);
-        assert_eq!(analysis[&l_exit].ins.len(), 0);
-        assert_eq!(analysis[&l_exit].outs.len(), 0);
+        assert_eq!(analysis[&l[0]].ins.len(), 0);
+        assert_eq!(analysis[&l[4]].ins.len(), 0);
+        assert_eq!(analysis[&l[4]].outs.len(), 0);
 
         // During l2, we still need y
-        assert_eq!(analysis[&l2].ins, Set::from_iter([y.clone()]));
-        assert_eq!(analysis[&l2].outs, Set::from_iter([y.clone()]));
+        assert_eq!(analysis[&l[2]].ins, Set::from_iter([y.clone()]));
+        assert_eq!(analysis[&l[2]].outs, Set::from_iter([y.clone()]));
 
         // During l3, we still need y but not afterwards anymore
-        assert_eq!(analysis[&l3].ins, Set::from_iter([y]));
-        assert_eq!(analysis[&l3].outs.len(), 0);
+        assert_eq!(analysis[&l[3]].ins, Set::from_iter([y]));
+        assert_eq!(analysis[&l[3]].outs.len(), 0);
+    }
+
+    /// Checks with a simple example that we clone values when there is a
+    /// loan invalidation.
+    #[test]
+    fn test_clone_on_invalidation() {
+        let mut cfg = Cfg::default();
+        let stm = Stratum::static_stm();
+
+        // Variables
+        let x = Var::from("x");
+        let x_def = vardef("x", Ty::IntT, stm);
+        let y = Var::from("y");
+        let y_def = vardef("y", Ty::IntT, stm);
+
+        // CFG
+        let l = cfg.add_block(
+            [
+                instr(InstrKind::Declare(y_def), stm),
+                instr(
+                    InstrKind::Assign(y.clone(), RValue::Integer(42.into())),
+                    stm,
+                ),
+                instr(InstrKind::Declare(x_def), stm),
+                instr(
+                    InstrKind::Assign(x.clone(), RValue::Var(VarMode::refed(y.clone()))), // We assign y to x
+                    stm,
+                ),
+                instr(InstrKind::Assign(y, RValue::Integer(36.into())), stm), /* We mutate y
+                                                                               * afterwards,
+                                                                               * invalidating
+                                                                               * the loan because we also... */
+                instr(
+                    InstrKind::Call {
+                        name: "print".to_string(),
+                        args: vec![VarMode::refed(x)], // ...use x after so x is live
+                        destination: None,
+                    },
+                    stm,
+                ),
+                instr(InstrKind::Noop, stm),
+            ],
+            (),
+        );
+
+        let cfg = liveness(cfg, &l[0], l.last().unwrap());
+        assert!(
+            matches!(
+                cfg[&l[3]].kind,
+                InstrKind::Assign(_, RValue::Var(VarMode { owned: true, .. }))
+            ),
+            "y should be cloned here"
+        );
+    }
+
+    /// Checks with a simple example that we DON'T clone if the value is not
+    /// live afterwards.
+    #[test]
+    fn test_no_clone_if_not_live() {
+        let mut cfg = Cfg::default();
+        let stm = Stratum::static_stm();
+
+        // Variables
+        let x = Var::from("x");
+        let x_def = vardef("x", Ty::IntT, stm);
+        let y = Var::from("y");
+        let y_def = vardef("y", Ty::IntT, stm);
+
+        // CFG
+        let l = cfg.add_block(
+            [
+                instr(InstrKind::Declare(y_def), stm),
+                instr(
+                    InstrKind::Assign(y.clone(), RValue::Integer(42.into())),
+                    stm,
+                ),
+                instr(InstrKind::Declare(x_def), stm),
+                instr(
+                    InstrKind::Assign(x, RValue::Var(VarMode::refed(y.clone()))), /* We assign y
+                                                                                   * to x */
+                    stm,
+                ),
+                instr(InstrKind::Assign(y, RValue::Integer(36.into())), stm), /* We mutate y
+                                                                               * afterwards,
+                                                                               * BUT don't invalidate since x
+                                                                               * is not live
+                                                                               * anymore. */
+                instr(InstrKind::Noop, stm),
+            ],
+            (),
+        );
+
+        let cfg = liveness(cfg, &l[0], l.last().unwrap());
+        assert!(
+            matches!(
+                cfg[&l[3]].kind,
+                InstrKind::Assign(_, RValue::Var(VarMode { owned: false, .. })),
+            ),
+            "y should be taken by reference here"
+        );
     }
 }
-*/

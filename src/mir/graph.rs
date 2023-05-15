@@ -7,6 +7,7 @@ use std::ops::Index;
 use std::ops::{Deref, IndexMut};
 
 use super::{Branch, Instr};
+use crate::utils::boxed;
 
 /// A node index in the graph.
 #[derive(Clone, Default, PartialEq, Eq, Hash)]
@@ -154,13 +155,17 @@ impl<N, E> Cfg<N, E> {
     }
 
     /// Returns an immutable BFS iterator over the graph.
-    pub fn bfs<'a>(&'a self, start: &'a CfgLabel) -> Bfs<'a, N, E> {
-        Bfs::new(self, start)
+    ///
+    /// `rev_dir`: take arrows in opposite direction.
+    pub fn bfs<'a>(&'a self, start: &'a CfgLabel, rev_dir: bool) -> Bfs<'a, N, E> {
+        Bfs::new(self, start, rev_dir)
     }
 
     /// Returns an immutable DFS iterator over the graph.
-    pub fn dfs<'a>(&'a self, start: &'a CfgLabel) -> Dfs<'a, N, E> {
-        Dfs::new(self, start)
+    ///
+    /// `rev_dir`: take arrows in opposite direction.
+    pub fn dfs<'a>(&'a self, start: &'a CfgLabel, rev_dir: bool) -> Dfs<'a, N, E> {
+        Dfs::new(self, start, rev_dir)
     }
 
     /// Maps into a new CFG.
@@ -251,6 +256,20 @@ impl<N, E> Cfg<N, E> {
     }
 }
 
+impl<N, E: Copy> Cfg<N, E> {
+    /// Adds a block/linked-list of nodes.
+    ///
+    /// Weight must be `Copy`-able. Returns the labels for each element in the
+    /// bloc, in order.
+    pub fn add_block(&mut self, nodes: impl IntoIterator<Item = N>, weight: E) -> Vec<CfgLabel> {
+        let labels: Vec<CfgLabel> = nodes.into_iter().map(|node| self.add_node(node)).collect();
+        for [from, to] in labels.array_windows::<2>() {
+            self.add_edge(from.clone(), to.clone(), Branch::DefaultB, weight);
+        }
+        labels
+    }
+}
+
 impl<N, E> Default for Cfg<N, E> {
     fn default() -> Self {
         Self {
@@ -297,16 +316,19 @@ pub struct Bfs<'a, N, E> {
     visited: HashSet<&'a NodeIx>,
     /// Reference to the graph itself.
     graph: &'a Cfg<N, E>,
+    /// Take in reverse direction.
+    rev_dir: bool,
 }
 
 impl<'a, N, E> Bfs<'a, N, E> {
     /// Creates a new iterator that starts from a given label and traverses a
-    /// `graph`.
-    fn new(graph: &'a Cfg<N, E>, start: &'a CfgLabel) -> Self {
+    /// `graph`. Set `rev_dir` to true to traverse it in reverse direction.
+    fn new(graph: &'a Cfg<N, E>, start: &'a CfgLabel, rev_dir: bool) -> Self {
         Self {
             queue: [start].into(),
             visited: HashSet::new(),
             graph,
+            rev_dir,
         }
     }
 }
@@ -316,7 +338,12 @@ impl<'a, N, E> Iterator for Bfs<'a, N, E> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let node = self.queue.pop_front()?;
-        for node in self.graph.neighbors(node) {
+        let iter: Box<dyn Iterator<Item = &NodeIx>> = if self.rev_dir {
+            boxed(self.graph.preneighbors(node))
+        } else {
+            boxed(self.graph.neighbors(node))
+        };
+        for node in iter {
             if self.visited.insert(node) {
                 // If `visited` did not contain this value before
                 self.queue.push_back(node);
@@ -334,16 +361,19 @@ pub struct Dfs<'a, N, E> {
     visited: HashSet<&'a NodeIx>,
     /// Reference to the graph itself.
     graph: &'a Cfg<N, E>,
+    /// Take in reverse direction.
+    rev_dir: bool,
 }
 
 impl<'a, N, E> Dfs<'a, N, E> {
     /// Creates a new iterator that starts from a given label and traverses a
-    /// `graph`.
-    fn new(graph: &'a Cfg<N, E>, start: &'a CfgLabel) -> Self {
+    /// `graph`. Set `rev_dir` to true to traverse it in reverse direction.
+    fn new(graph: &'a Cfg<N, E>, start: &'a CfgLabel, rev_dir: bool) -> Self {
         Self {
             stack: [start].into(),
             visited: HashSet::new(),
             graph,
+            rev_dir,
         }
     }
 }
@@ -356,7 +386,12 @@ impl<'a, N, E> Iterator for Dfs<'a, N, E> {
             let node = self.stack.pop()?;
             if self.visited.insert(node) {
                 // If `visited` did not contain this value before
-                for node in self.graph.neighbors(node) {
+                let iter: Box<dyn Iterator<Item = &NodeIx>> = if self.rev_dir {
+                    boxed(self.graph.preneighbors(node))
+                } else {
+                    boxed(self.graph.neighbors(node))
+                };
+                for node in iter {
                     self.stack.push(node);
                 }
                 break node;

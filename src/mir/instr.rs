@@ -32,12 +32,12 @@ pub enum Branch {
 /// Instruction = scope + kind of instruction.
 #[derive(Debug)]
 pub struct Instr {
+    /// Instruction kind.
+    pub kind: InstrKind,
     /// Scope id of the instruction.
     ///
     /// This is the stratum/scope in which it is.
     pub scope: Stratum,
-    /// Instruction kind.
-    pub kind: InstrKind,
 }
 
 impl Deref for Instr {
@@ -162,5 +162,14 @@ impl fmt::Debug for InstrKind {
                 write!(f, "{cond:?}?")
             }
         }
+    }
+}
+
+/// Shortcut to create a instruction of a given kind and scope.
+#[cfg(test)]
+pub fn instr(kind: impl Into<InstrKind>, scope: impl Into<Stratum>) -> Instr {
+    Instr {
+        kind: kind.into(),
+        scope: scope.into(),
     }
 }

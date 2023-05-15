@@ -19,6 +19,8 @@ pub use program::Program;
 pub use selfvisitor::SelfVisitor;
 pub use stmt::Stmt;
 pub use stratum::Stratum;
+#[cfg(test)]
+pub use var::vardef;
 pub use var::VarDef;
 
 pub use crate::ast::{Struct, Ty, Var};
