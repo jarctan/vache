@@ -86,6 +86,8 @@ pub enum RValue {
         /// Value for each field.
         fields: HashMap<String, VarMode>,
     },
+    /// Array creation.
+    Array(Vec<VarMode>),
 }
 
 impl fmt::Debug for RValue {
@@ -105,6 +107,7 @@ impl fmt::Debug for RValue {
                 }
                 res.finish()
             }
+            Array(array) => f.debug_list().entries(array).finish(),
         }
     }
 }

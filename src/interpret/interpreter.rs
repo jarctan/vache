@@ -237,7 +237,11 @@ impl<'a> Interpreter<'a> {
             },
             RValue::Index(array, index) => {
                 match (self.get_var_value(array), self.get_var_value(index)) {
-                    (_, StrV(_index)) => todo!(),
+                    (ArrayV(array), IntV(index)) => {
+                        let index =
+                            usize::try_from(index).expect("Runtime error: array index is too big");
+                        array[index]
+                    }
                     _ => panic!("Runtime error: incorrect indexing"),
                 }
             }
@@ -247,6 +251,10 @@ impl<'a> Interpreter<'a> {
                     .map(|(k, v)| (k.clone(), self.get_var(v)))
                     .collect();
                 self.add_value(StructV(name.to_owned(), fields), stratum)
+            }
+            RValue::Array(array) => {
+                let array = array.iter().map(|v| self.get_var(v)).collect();
+                self.add_value(ArrayV(array), stratum)
             }
         }
     }

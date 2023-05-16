@@ -25,6 +25,8 @@ pub enum Value {
     ///
     /// We keep the name to display structures nicely in the end.
     StructV(String, HashMap<String, ValueRef>),
+    /// Array.
+    ArrayV(Vec<ValueRef>),
 }
 
 use Value::*;
@@ -44,6 +46,7 @@ impl fmt::Debug for Value {
                 }
                 display.finish()
             }
+            ArrayV(array) => f.debug_list().entries(array).finish(),
         }
     }
 }
@@ -57,6 +60,7 @@ impl fmt::Display for Value {
             StrV(s) => fmt::Display::fmt(s, f),
             BoolV(b) => fmt::Display::fmt(b, f),
             StructV(name, _) => fmt::Display::fmt(name, f),
+            ArrayV(_) => write!(f, "[]"),
         }
     }
 }

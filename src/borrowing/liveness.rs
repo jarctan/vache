@@ -47,6 +47,9 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                     outs.clone() - lhs
                         + Set::from_iter(fields.values().map(|arg| &arg.var).cloned())
                 }
+                InstrKind::Assign(lhs, RValue::Array(array)) => {
+                    outs.clone() - lhs + Set::from_iter(array.iter().map(|arg| &arg.var).cloned())
+                }
                 InstrKind::Call {
                     name: _,
                     args,
@@ -133,6 +136,20 @@ fn loan_liveness(
                                 fields
                                     .values()
                                     .map(|field| ins.borrow(field, label.clone()))
+                                    .sum::<Set<Borrow>>(),
+                            );
+                    }
+                    res
+                }
+                InstrKind::Assign(lhs, RValue::Array(array)) => {
+                    let mut res = ins.clone() - lhs;
+                    if var_flow[label].outs.contains(lhs) {
+                        res = res
+                            + (
+                                lhs.clone(),
+                                array
+                                    .iter()
+                                    .map(|item| ins.borrow(item, label.clone()))
                                     .sum::<Set<Borrow>>(),
                             );
                     }

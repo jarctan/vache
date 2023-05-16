@@ -212,6 +212,7 @@ impl Compiler {
                 quote!(#array[#index])
             }
             RValue::Struct { .. } => todo!(),
+            RValue::Array(_) => todo!(),
         }
     }
 
