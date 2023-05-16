@@ -30,6 +30,7 @@
         "preneighbors",
         "Deque",
         "mirer",
+        "struct"
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }
