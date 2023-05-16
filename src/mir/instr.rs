@@ -1,7 +1,6 @@
 //! Defining instructions and branches, which are the basic units in the
 //! MIR/CFG.
 
-use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
 use super::Stratum;
@@ -78,15 +77,6 @@ pub enum InstrKind {
         /// Destination variable to hold the result.
         destination: Option<Var>,
     },
-    /// Structure instantiation.
-    Struct {
-        /// Name of the structure to instantiate.
-        name: String,
-        /// Name of the structure to instantiate.
-        fields: HashMap<String, VarMode>,
-        /// Destination variable to hold the instantiated structure.
-        destination: Option<Var>,
-    },
     /// Asks for the truthiness of the first argument.
     Branch(Var),
 }
@@ -98,9 +88,7 @@ impl InstrKind {
         match self {
             InstrKind::Noop | InstrKind::Branch(_) => None,
             InstrKind::Declare(v) => Some(&v.name),
-            InstrKind::Call { destination: v, .. } | InstrKind::Struct { destination: v, .. } => {
-                v.as_ref()
-            }
+            InstrKind::Call { destination: v, .. } => v.as_ref(),
             InstrKind::Assign(v, _) => Some(v),
         }
     }
@@ -118,7 +106,7 @@ impl InstrKind {
                 let var = args.iter_mut().find(|arg| &arg.var == v).unwrap();
                 var.mode = Mode::Cloned;
             }
-            InstrKind::Struct { fields, .. } => {
+            InstrKind::Assign(_, RValue::Struct { fields, .. }) => {
                 let var = fields.values_mut().find(|arg| &arg.var == v).unwrap();
                 var.mode = Mode::Cloned;
             }
@@ -150,20 +138,6 @@ impl fmt::Debug for InstrKind {
                     write!(f, "{destination:?} = ")?;
                 }
                 write!(f, "{name}({args:?})")
-            }
-            InstrKind::Struct {
-                name,
-                fields,
-                destination,
-            } => {
-                if let Some(destination) = destination {
-                    write!(f, "{destination:?} = ")?;
-                }
-                let mut res = f.debug_struct(name);
-                for (name, var) in fields {
-                    res.field(name, var);
-                }
-                res.finish()
             }
             InstrKind::Branch(cond) => {
                 write!(f, "{cond:?}?")

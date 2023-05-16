@@ -43,6 +43,10 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                 InstrKind::Assign(lhs, RValue::Index(array, index)) => {
                     outs.clone() - lhs + array.var.clone() + index.var.clone()
                 }
+                InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
+                    outs.clone() - lhs
+                        + Set::from_iter(fields.values().map(|arg| &arg.var).cloned())
+                }
                 InstrKind::Call {
                     name: _,
                     args,
@@ -51,14 +55,6 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                     let res = outs.clone() - destination.as_ref()
                         + Set::from_iter(args.iter().map(|arg| &arg.var).cloned());
                     res
-                }
-                InstrKind::Struct {
-                    name: _,
-                    fields,
-                    destination,
-                } => {
-                    outs.clone() - destination.as_ref()
-                        + Set::from_iter(fields.values().map(|arg| &arg.var).cloned())
                 }
                 InstrKind::Branch(v) => outs.clone() + v.clone(),
             };
@@ -128,6 +124,20 @@ fn loan_liveness(
                     }
                     res
                 }
+                InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
+                    let mut res = ins.clone() - lhs;
+                    if var_flow[label].outs.contains(lhs) {
+                        res = res
+                            + (
+                                lhs.clone(),
+                                fields
+                                    .values()
+                                    .map(|field| ins.borrow(field, label.clone()))
+                                    .sum::<Set<Borrow>>(),
+                            );
+                    }
+                    res
+                }
                 InstrKind::Call {
                     name: _,
                     args,
@@ -145,29 +155,8 @@ fn loan_liveness(
                     }
                     res
                 }
-                InstrKind::Struct {
-                    name: _,
-                    fields,
-                    destination: Some(destination),
-                } => {
-                    let mut res = ins.clone() - destination;
-                    if var_flow[label].outs.contains(destination) {
-                        res = res
-                            + (
-                                destination.clone(),
-                                fields
-                                    .values()
-                                    .map(|field| ins.borrow(field, label.clone()))
-                                    .sum::<Set<Borrow>>(),
-                            );
-                    }
-                    res
-                }
                 InstrKind::Branch(_)
                 | InstrKind::Call {
-                    destination: None, ..
-                }
-                | InstrKind::Struct {
                     destination: None, ..
                 } => ins.clone(),
             } - &out_of_scope[label];
@@ -203,6 +192,13 @@ pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
                     rhs.mode = Mode::Moved;
                 }
             }
+            InstrKind::Assign(_, RValue::Struct { name: _, fields }) => {
+                for field in fields.values_mut() {
+                    if !var_flow[&label].outs.contains(&field.var) {
+                        field.mode = Mode::Moved;
+                    }
+                }
+            }
             InstrKind::Assign(_, _) => (),
             InstrKind::Call {
                 name: _,
@@ -212,17 +208,6 @@ pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
                 for arg in args {
                     if !var_flow[&label].outs.contains(&arg.var) {
                         arg.mode = Mode::Moved;
-                    }
-                }
-            }
-            InstrKind::Struct {
-                name: _,
-                fields,
-                destination: _,
-            } => {
-                for field in fields.values_mut() {
-                    if !var_flow[&label].outs.contains(&field.var) {
-                        field.mode = Mode::Moved;
                     }
                 }
             }

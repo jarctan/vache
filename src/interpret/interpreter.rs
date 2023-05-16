@@ -241,6 +241,13 @@ impl<'a> Interpreter<'a> {
                     _ => panic!("Runtime error: incorrect indexing"),
                 }
             }
+            RValue::Struct { name, fields } => {
+                let fields = fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), self.get_var(v)))
+                    .collect();
+                self.add_value(StructV(name.to_owned(), fields), stratum)
+            }
         }
     }
 
@@ -275,24 +282,6 @@ impl<'a> Interpreter<'a> {
                             "if the destination is set, then the function should return a value",
                         ),
                     );
-                }
-                DefaultB
-            }
-            InstrKind::Struct {
-                name,
-                fields,
-                destination,
-            } => {
-                let fields = fields
-                    .iter()
-                    .map(|(k, v)| (k.clone(), self.get_var(v)))
-                    .collect();
-                let stratum = destination
-                    .as_ref()
-                    .map_or(self.current_stratum(), |dest| self.get_var(dest).stratum);
-                let value = self.add_value(StructV(name.to_owned(), fields), stratum);
-                if let Some(destination) = destination {
-                    self.set_var(destination, value);
                 }
                 DefaultB
             }

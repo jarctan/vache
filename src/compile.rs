@@ -211,6 +211,7 @@ impl Compiler {
                 let index = self.visit_var(index);
                 quote!(#array[#index])
             }
+            RValue::Struct { .. } => todo!(),
         }
     }
 
@@ -279,7 +280,6 @@ impl Compiler {
                     quote!(#prefix #name(#(#args),*);)
                 }
             }
-            crate::mir::InstrKind::Struct { .. } => todo!(),
             crate::mir::InstrKind::Branch(_) => todo!(),
         }
     }

@@ -270,19 +270,28 @@ impl MIRer {
                     .map(|(name, e)| (name.clone(), self.fresh_var(e.ty.clone(), self.stm)))
                     .collect();
 
-                // Struct instantiation in the CFG
-                let struct_l = self.insert(
-                    self.instr(InstrKind::Struct {
-                        name: s_name,
-                        fields: field_vars
-                            .clone()
-                            .into_iter()
-                            .map(|(field, var)| (field, Self::visit_var_ref(var, dest_v.as_ref())))
-                            .collect(),
-                        destination: dest_v.map(|dest_v| dest_v.name),
-                    }),
-                    [(DefaultB, dest_l)],
-                );
+                // Struct instantiation in the CFG.
+                // Only do if the destination exist! Otherwise, no usefulness to it.
+                let struct_l = if let Some(dest_v) = dest_v {
+                    self.insert(
+                        self.instr(InstrKind::Assign(
+                            dest_v.name.clone(),
+                            RValue::Struct {
+                                name: s_name,
+                                fields: field_vars
+                                    .clone()
+                                    .into_iter()
+                                    .map(|(field, var)| {
+                                        (field, Self::visit_var_ref(var, Some(&dest_v)))
+                                    })
+                                    .collect(),
+                            },
+                        )),
+                        [(DefaultB, dest_l)],
+                    )
+                } else {
+                    dest_l
+                };
 
                 // Compute the expressions in the fields in the CFG (rev order!)
                 let compute_l = fields

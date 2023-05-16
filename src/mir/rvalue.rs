@@ -1,6 +1,6 @@
 //! Defining right values in the MIR.
 
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 use rug::Integer;
 
@@ -79,6 +79,13 @@ pub enum RValue {
     Field(VarMode, String),
     /// Index into an array/map.
     Index(VarMode, VarMode),
+    /// Structure instantiation.
+    Struct {
+        /// Name of the structure to instantiate.
+        name: String,
+        /// Value for each field.
+        fields: HashMap<String, VarMode>,
+    },
 }
 
 impl fmt::Debug for RValue {
@@ -91,6 +98,13 @@ impl fmt::Debug for RValue {
             Var(v) => write!(f, "{v:?}"),
             Field(v, field) => write!(f, "{v:?}.{field}"),
             Index(array, index) => write!(f, "{array:?}[{index:?}]"),
+            Struct { name, fields } => {
+                let mut res = f.debug_struct(name);
+                for (name, var) in fields {
+                    res.field(name, var);
+                }
+                res.finish()
+            }
         }
     }
 }
