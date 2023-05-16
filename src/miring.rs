@@ -8,7 +8,6 @@ use Ty::*;
 
 use crate::mir::*;
 use crate::tast;
-use crate::tast::Stratum;
 
 /// Fresh variable counter.
 ///
@@ -122,6 +121,18 @@ impl MIRer {
         }
     }
 
+    /// Inserts a `place = rvalue` instruction in the CFG, that branches to a
+    /// list of labels after that instruction.
+    fn insert_assign_instr(
+        &mut self,
+        place: impl Into<Place>,
+        rvalue: impl Into<RValue>,
+        branches: impl IntoIterator<Item = (Branch, CfgLabel)>,
+    ) -> CfgLabel {
+        let instr = self.instr(InstrKind::Assign(place.into(), rvalue.into()));
+        self.insert(instr, branches)
+    }
+
     /// Visits an expression. It It will add the nodes for that
     /// block in the CFG, and return the CFG label for it.
     ///
@@ -139,49 +150,37 @@ impl MIRer {
         structs: &HashMap<String, Struct>,
     ) -> CfgLabel {
         match e.raw {
-            tast::RawExpr::UnitE => {
+            tast::ExprKind::UnitE => {
                 if let Some(dest_v) = dest_v {
-                    self.insert(
-                        self.instr(InstrKind::Assign(dest_v.name, RValue::Unit)),
-                        [(DefaultB, dest_l)],
-                    )
+                    self.insert_assign_instr(dest_v.name, RValue::Unit, [(DefaultB, dest_l)])
                 } else {
                     dest_l
                 }
             }
-            tast::RawExpr::IntegerE(i) => {
+            tast::ExprKind::IntegerE(i) => {
                 if let Some(dest_v) = dest_v {
-                    self.insert(
-                        self.instr(InstrKind::Assign(dest_v.name, RValue::Integer(i))),
-                        [(DefaultB, dest_l)],
-                    )
+                    self.insert_assign_instr(dest_v.name, i, [(DefaultB, dest_l)])
                 } else {
                     dest_l
                 }
             }
-            tast::RawExpr::StringE(s) => {
+            tast::ExprKind::StringE(s) => {
                 if let Some(dest_v) = dest_v {
-                    self.insert(
-                        self.instr(InstrKind::Assign(dest_v.name, RValue::String(s))),
-                        [(DefaultB, dest_l)],
-                    )
+                    self.insert_assign_instr(dest_v.name, s, [(DefaultB, dest_l)])
                 } else {
                     dest_l
                 }
             }
-            tast::RawExpr::VarE(v) => {
+            tast::ExprKind::VarE(v) => {
                 if let Some(dest_v) = dest_v && dest_v != v {
                     let var_ref = Self::visit_var_ref(v, Some(&dest_v));
                     // Only do the assignment if the rhs and lhs are not the same! Otherwise optimize it away
-                    self.insert(
-                        self.instr(InstrKind::Assign(dest_v.name, RValue::Var(var_ref))),
-                        [(DefaultB, dest_l)],
-                    )
+                    self.insert_assign_instr(dest_v.name, var_ref,[(DefaultB, dest_l)])
                 } else {
                     dest_l
                 }
             }
-            tast::RawExpr::CallE { name, args } => {
+            tast::ExprKind::CallE { name, args } => {
                 // Find some temporary variables to hold the result of the evaluation of each
                 // argument
                 let arg_vars: Vec<VarDef> = args
@@ -218,7 +217,7 @@ impl MIRer {
                     self.insert(self.instr(InstrKind::Declare(v)), [(DefaultB, dest_l)])
                 })
             }
-            tast::RawExpr::IfE(box cond, box iftrue, box iffalse) => {
+            tast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
                 // Branches.
                 let iftrue_l = self.visit_block(iftrue, dest_v.clone(), dest_l.clone(), structs);
                 let iffalse_l = self.visit_block(iffalse, dest_v, dest_l, structs);
@@ -233,18 +232,16 @@ impl MIRer {
                 // Evaluate the condition
                 self.visit_expr(cond, Some(cond_var), cond_l, structs)
             }
-            tast::RawExpr::BlockE(box e) => self.visit_block(e, dest_v, dest_l, structs),
-            tast::RawExpr::FieldE(box s, field) => {
+            tast::ExprKind::BlockE(box e) => self.visit_block(e, dest_v, dest_l, structs),
+            tast::ExprKind::FieldE(box s, field) => {
                 if let StructT(name) = &s.ty {
                     let field_ty = structs[name].get_field(&field).clone();
                     let struct_var = self.fresh_var(field_ty, self.stm);
                     let var_ref = Self::visit_var_ref(struct_var.clone(), dest_v.as_ref());
                     let dest_l = if let Some(dest_v) = dest_v {
-                        self.insert(
-                            self.instr(InstrKind::Assign(
-                                dest_v.name,
-                                RValue::Field(var_ref, field),
-                            )),
+                        self.insert_assign_instr(
+                            dest_v.name,
+                            RValue::Field(var_ref, field),
                             [(DefaultB, dest_l)],
                         )
                     } else {
@@ -259,7 +256,7 @@ impl MIRer {
                     panic!("Compiler error: field are only valid on structs");
                 }
             }
-            tast::RawExpr::StructE {
+            tast::ExprKind::StructE {
                 name: s_name,
                 fields,
             } => {
@@ -273,20 +270,18 @@ impl MIRer {
                 // Struct instantiation in the CFG.
                 // Only do if the destination exist! Otherwise, no usefulness to it.
                 let struct_l = if let Some(dest_v) = dest_v {
-                    self.insert(
-                        self.instr(InstrKind::Assign(
-                            dest_v.name.clone(),
-                            RValue::Struct {
-                                name: s_name,
-                                fields: field_vars
-                                    .clone()
-                                    .into_iter()
-                                    .map(|(field, var)| {
-                                        (field, Self::visit_var_ref(var, Some(&dest_v)))
-                                    })
-                                    .collect(),
-                            },
-                        )),
+                    self.insert_assign_instr(
+                        dest_v.name.clone(),
+                        RValue::Struct {
+                            name: s_name,
+                            fields: field_vars
+                                .clone()
+                                .into_iter()
+                                .map(|(field, var)| {
+                                    (field, Self::visit_var_ref(var, Some(&dest_v)))
+                                })
+                                .collect(),
+                        },
                         [(DefaultB, dest_l)],
                     )
                 } else {
@@ -307,14 +302,15 @@ impl MIRer {
                     self.insert(self.instr(InstrKind::Declare(var)), [(DefaultB, dest_l)])
                 })
             }
-            tast::RawExpr::IndexE(box e, box ix) => {
+            tast::ExprKind::IndexE(box e, box ix) => {
                 let e_var = self.fresh_var(e.ty.clone(), self.stm);
                 let ix_var = self.fresh_var(ix.ty.clone(), self.stm);
                 let e_ref = Self::visit_var_ref(e_var.clone(), dest_v.as_ref());
                 let ix_ref = Self::visit_var_ref(ix_var.clone(), dest_v.as_ref());
                 let dest_l = if let Some(dest_v) = dest_v {
-                    self.insert(
-                        self.instr(InstrKind::Assign(dest_v.name, RValue::Index(e_ref, ix_ref))),
+                    self.insert_assign_instr(
+                        dest_v.name,
+                        RValue::Index(e_ref, ix_ref),
                         [(DefaultB, dest_l)],
                     )
                 } else {
@@ -331,7 +327,7 @@ impl MIRer {
                     self.insert(self.instr(InstrKind::Declare(ix_var)), [(DefaultB, dest_l)]);
                 self.insert(self.instr(InstrKind::Declare(e_var)), [(DefaultB, dest_l)])
             }
-            tast::RawExpr::ArrayE(array) => {
+            tast::ExprKind::ArrayE(array) => {
                 // Find some temporary variables to hold the result of the evaluation of each
                 // item in the array
                 let array_vars: Vec<VarDef> = array
@@ -342,17 +338,15 @@ impl MIRer {
                 // Array creation
                 // Only do if the destination exist! Otherwise, no usefulness to it
                 let struct_l = if let Some(dest_v) = dest_v {
-                    self.insert(
-                        self.instr(InstrKind::Assign(
-                            dest_v.name.clone(),
-                            RValue::Array(
-                                array_vars
-                                    .clone()
-                                    .into_iter()
-                                    .map(|var| Self::visit_var_ref(var, Some(&dest_v)))
-                                    .collect(),
-                            ),
-                        )),
+                    self.insert_assign_instr(
+                        dest_v.name.clone(),
+                        RValue::Array(
+                            array_vars
+                                .clone()
+                                .into_iter()
+                                .map(|var| Self::visit_var_ref(var, Some(&dest_v)))
+                                .collect(),
+                        ),
                         [(DefaultB, dest_l)],
                     )
                 } else {
@@ -421,9 +415,27 @@ impl MIRer {
                 let expr_l = self.visit_expr(expr, Some(vardef.clone()), dest_l, structs);
                 self.insert(self.instr(InstrKind::Declare(vardef)), [(DefaultB, expr_l)])
             }
-            tast::Stmt::Assign(vardef, expr) => {
-                self.visit_expr(expr, Some(vardef), dest_l, structs)
-            }
+            tast::Stmt::Assign(
+                tast::Place {
+                    kind: tast::PlaceKind::VarP(name),
+                    ty,
+                    stm,
+                },
+                expr,
+            ) => self.visit_expr(expr, Some(VarDef { name, stm, ty }), dest_l, structs),
+            tast::Stmt::Assign(place, expr) => match place.kind {
+                tast::PlaceKind::VarP(name) => self.visit_expr(
+                    expr,
+                    Some(VarDef {
+                        name,
+                        ty: place.ty,
+                        stm: place.stm,
+                    }),
+                    dest_l,
+                    structs,
+                ),
+                _ => todo!(),
+            },
             tast::Stmt::While { cond, body } => {
                 let loop_l = self.fresh_label();
 

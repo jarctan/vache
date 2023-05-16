@@ -35,20 +35,21 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                 InstrKind::Declare(var) => outs.clone() - &var.name,
                 InstrKind::Assign(lhs, RValue::Unit)
                 | InstrKind::Assign(lhs, RValue::String(_))
-                | InstrKind::Assign(lhs, RValue::Integer(_)) => outs.clone() - lhs,
+                | InstrKind::Assign(lhs, RValue::Integer(_)) => outs.clone() - lhs.root(),
                 InstrKind::Assign(lhs, RValue::Var(rhs))
                 | InstrKind::Assign(lhs, RValue::Field(rhs, _)) => {
-                    outs.clone() - lhs + rhs.var.clone()
+                    outs.clone() - lhs.root() + rhs.var.clone()
                 }
                 InstrKind::Assign(lhs, RValue::Index(array, index)) => {
-                    outs.clone() - lhs + array.var.clone() + index.var.clone()
+                    outs.clone() - lhs.root() + array.var.clone() + index.var.clone()
                 }
                 InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
-                    outs.clone() - lhs
+                    outs.clone() - lhs.root()
                         + Set::from_iter(fields.values().map(|arg| &arg.var).cloned())
                 }
                 InstrKind::Assign(lhs, RValue::Array(array)) => {
-                    outs.clone() - lhs + Set::from_iter(array.iter().map(|arg| &arg.var).cloned())
+                    outs.clone() - lhs.root()
+                        + Set::from_iter(array.iter().map(|arg| &arg.var).cloned())
                 }
                 InstrKind::Call {
                     name: _,
@@ -107,32 +108,32 @@ fn loan_liveness(
                 InstrKind::Declare(var) => ins.clone() - &var.name,
                 InstrKind::Assign(lhs, RValue::Unit)
                 | InstrKind::Assign(lhs, RValue::String(_))
-                | InstrKind::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs,
+                | InstrKind::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs.root(),
                 InstrKind::Assign(lhs, RValue::Var(rhs))
                 | InstrKind::Assign(lhs, RValue::Field(rhs, _)) => {
-                    let mut res = ins.clone() - lhs;
-                    if var_flow[label].outs.contains(lhs) {
-                        res = res + (lhs.clone(), ins.borrow(rhs, label.clone()));
+                    let mut res = ins.clone() - lhs.root();
+                    if var_flow[label].outs.contains(lhs.root()) {
+                        res = res + (lhs.root().clone(), ins.borrow(rhs, label.clone()));
                     }
                     res
                 }
                 InstrKind::Assign(lhs, RValue::Index(array, index)) => {
-                    let mut res = ins.clone() - lhs;
-                    if var_flow[label].outs.contains(lhs) {
+                    let mut res = ins.clone() - lhs.root();
+                    if var_flow[label].outs.contains(lhs.root()) {
                         res = res
                             + (
-                                lhs.clone(),
+                                lhs.root().clone(),
                                 ins.borrow(array, label.clone()) + ins.borrow(index, label.clone()),
                             );
                     }
                     res
                 }
                 InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
-                    let mut res = ins.clone() - lhs;
-                    if var_flow[label].outs.contains(lhs) {
+                    let mut res = ins.clone() - lhs.root();
+                    if var_flow[label].outs.contains(lhs.root()) {
                         res = res
                             + (
-                                lhs.clone(),
+                                lhs.root().clone(),
                                 fields
                                     .values()
                                     .map(|field| ins.borrow(field, label.clone()))
@@ -142,11 +143,11 @@ fn loan_liveness(
                     res
                 }
                 InstrKind::Assign(lhs, RValue::Array(array)) => {
-                    let mut res = ins.clone() - lhs;
-                    if var_flow[label].outs.contains(lhs) {
+                    let mut res = ins.clone() - lhs.root();
+                    if var_flow[label].outs.contains(lhs.root()) {
                         res = res
                             + (
-                                lhs.clone(),
+                                lhs.root().clone(),
                                 array
                                     .iter()
                                     .map(|item| ins.borrow(item, label.clone()))
@@ -287,12 +288,12 @@ mod tests {
             [
                 instr(InstrKind::Declare(y_def), stm),
                 instr(
-                    InstrKind::Assign(y.clone(), RValue::Integer(42.into())),
+                    InstrKind::Assign(y.clone().into(), RValue::Integer(42.into())),
                     stm,
                 ),
                 instr(InstrKind::Declare(x_def), stm),
                 instr(
-                    InstrKind::Assign(x, RValue::Var(VarMode::refed(y.clone()))),
+                    InstrKind::Assign(x.into(), RValue::Var(VarMode::refed(y.clone()))),
                     stm,
                 ),
                 instr(InstrKind::Noop, stm),
@@ -334,12 +335,12 @@ mod tests {
             [
                 instr(InstrKind::Declare(y_def), stm),
                 instr(
-                    InstrKind::Assign(y.clone(), RValue::Integer(42.into())),
+                    InstrKind::Assign(y.clone().into(), RValue::Integer(42.into())),
                     stm,
                 ),
                 instr(InstrKind::Declare(x_def), stm),
                 instr(
-                    InstrKind::Assign(x.clone(), RValue::Var(VarMode::refed(y.clone()))), // We assign y to x
+                    InstrKind::Assign(x.clone().into(), RValue::Var(VarMode::refed(y.clone()))), // We assign y to x
                     stm,
                 ),
                 instr(
@@ -400,12 +401,12 @@ mod tests {
             [
                 instr(InstrKind::Declare(y_def), stm),
                 instr(
-                    InstrKind::Assign(y.clone(), RValue::Integer(42.into())),
+                    InstrKind::Assign(y.clone().into(), RValue::Integer(42.into())),
                     stm,
                 ),
                 instr(InstrKind::Declare(x_def), stm),
                 instr(
-                    InstrKind::Assign(x, RValue::Var(VarMode::refed(y.clone()))), /* We assign y
+                    InstrKind::Assign(x.into(), RValue::Var(VarMode::refed(y.clone()))), /* We assign y
                                                                                    * to x */
                     stm,
                 ),
@@ -461,16 +462,16 @@ mod tests {
             [
                 instr(InstrKind::Declare(y_def), stm),
                 instr(
-                    InstrKind::Assign(y.clone(), RValue::Integer(42.into())),
+                    InstrKind::Assign(y.clone().into(), RValue::Integer(42.into())),
                     stm,
                 ),
                 instr(InstrKind::Declare(x_def), stm),
                 instr(
-                    InstrKind::Assign(x, RValue::Var(VarMode::refed(y.clone()))), /* We assign y
+                    InstrKind::Assign(x.into(), RValue::Var(VarMode::refed(y.clone()))), /* We assign y
                                                                                    * to x */
                     stm,
                 ),
-                instr(InstrKind::Assign(y, RValue::Integer(36.into())), stm), /* We mutate y
+                instr(InstrKind::Assign(y.into(), RValue::Integer(36.into())), stm), /* We mutate y
                                                                                * but we don't
                                                                                * need y,
                                                                                * so x can own it */

@@ -3,7 +3,8 @@
 
 use std::ops::{Deref, DerefMut};
 
-use super::Stratum;
+use Place::*;
+
 use super::*;
 
 /// Branch = label on CFG edges.
@@ -66,7 +67,7 @@ pub enum InstrKind {
     /// Declare a new, uninitialized variable.
     Declare(VarDef),
     /// Assigns a variable.
-    Assign(Var, RValue),
+    Assign(Place, RValue),
     /// Performs a call to `name(args)`, putting the result in variable
     /// `destination`.
     Call {
@@ -89,7 +90,8 @@ impl InstrKind {
             InstrKind::Noop | InstrKind::Branch(_) => None,
             InstrKind::Declare(v) => Some(&v.name),
             InstrKind::Call { destination: v, .. } => v.as_ref(),
-            InstrKind::Assign(v, _) => Some(v),
+            InstrKind::Assign(VarP(v), _) => Some(v),
+            InstrKind::Assign(_, _) => todo!(),
         }
     }
 

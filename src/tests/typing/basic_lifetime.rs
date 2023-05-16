@@ -14,7 +14,7 @@ fn basic_lifetime() {
             ret: BlockE(boxed(Block {
                 stmts: vec![
                     Declare(vardef("y", IntT), int(6)),
-                    Assign(Var::from("y"), var("x")),
+                    Assign(Place::from("y"), var("x")),
                 ],
                 ret: UnitE,
             })),

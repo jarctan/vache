@@ -34,7 +34,7 @@ pub fn get_field_and_mutate() -> impl Into<Program> {
                     ),
                 ),
                 Declare(vardef("n", StrT), field(var("john"), "name")),
-                Assign(Var::from("n"), string("12")),
+                Assign(Place::from("n"), string("12")),
                 print(vec![var("n"), field(var("john"), "name")]),
             ]),
         }],

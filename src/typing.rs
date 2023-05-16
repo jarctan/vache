@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use RawExpr::*;
+use ExprKind::*;
 use Ty::*;
 
 use crate::ast;
@@ -171,6 +171,20 @@ impl Typer {
                 self.valid_type_names.contains(name),
                 "Unknown struct {name}"
             ),
+        }
+    }
+
+    /// Types a place (lhs expression).
+    fn visit_place(&self, place: ast::Place) -> Place {
+        match place {
+            ast::Place::VarP(var) => {
+                let (vardef, stm) = self
+                    .get_var(&var)
+                    .unwrap_or_else(|| panic!("Assigning to an undeclared variable {var}"));
+                Place::var(var, vardef.ty.clone(), stm)
+            }
+            ast::Place::IndexP(_, _) => todo!(),
+            ast::Place::FieldP(_, _) => todo!(),
         }
     }
 }
@@ -416,23 +430,14 @@ impl SelfVisitor for Typer {
 
                 Declare(VarDef::with_stratum(vardef, stm), expr)
             }
-            ast::Stmt::Assign(var, expr) => {
+            ast::Stmt::Assign(place, expr) => {
                 let expr = self.visit_expr(expr);
                 let expr_ty = &expr.ty;
-                let (vardef, stm) = self
-                    .get_var(&var)
-                    .unwrap_or_else(|| panic!("Assigning to an undeclared variable {var}"));
+                let place = self.visit_place(place);
 
                 // Check the type
-                assert_eq!(&vardef.ty, expr_ty, "expression type ({expr_ty}) of {expr:?} should match the type of variable {var} ({})", vardef.ty);
-                Assign(
-                    VarDef {
-                        name: var,
-                        ty: vardef.ty.clone(),
-                        stm,
-                    },
-                    expr,
-                )
+                assert_eq!(&place.ty, expr_ty, "expression type ({expr_ty}) of {expr:?} should match the type of variable {place:?} ({})", place.ty);
+                Assign(place, expr)
             }
             ast::Stmt::While { cond, body } => {
                 let cond = self.visit_expr(cond);

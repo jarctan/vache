@@ -7,11 +7,12 @@ use std::collections::HashMap;
 
 use string_builder::Builder as StringBuilder;
 use Branch::*;
+use Place::*;
 use Value::*;
 
 use super::env::Env;
 use super::value::{Value, ValueRef};
-use crate::mir::{Branch, Cfg, CfgLabel, Fun, InstrKind, Mode, RValue, Var};
+use crate::mir::{Branch, Cfg, CfgLabel, Fun, InstrKind, Mode, Place, RValue, Var};
 use crate::tast::Stratum;
 
 /// Interpreter for our language.
@@ -269,11 +270,12 @@ impl<'a> Interpreter<'a> {
                 self.add_var(v.clone());
                 DefaultB
             }
-            InstrKind::Assign(v, rvalue) => {
+            InstrKind::Assign(VarP(v), rvalue) => {
                 let value = self.visit_rvalue(rvalue, self.get_var(v).stratum);
                 self.set_var(v, value);
                 DefaultB
             }
+            InstrKind::Assign(_, _) => todo!(),
             InstrKind::Call {
                 name,
                 args,

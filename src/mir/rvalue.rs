@@ -111,3 +111,27 @@ impl fmt::Debug for RValue {
         }
     }
 }
+
+impl From<()> for RValue {
+    fn from(_: ()) -> Self {
+        Self::Unit
+    }
+}
+
+impl From<rug::Integer> for RValue {
+    fn from(value: rug::Integer) -> Self {
+        Self::Integer(value)
+    }
+}
+
+impl From<String> for RValue {
+    fn from(value: String) -> Self {
+        Self::String(value)
+    }
+}
+
+impl From<VarMode> for RValue {
+    fn from(var: VarMode) -> Self {
+        Self::Var(var)
+    }
+}

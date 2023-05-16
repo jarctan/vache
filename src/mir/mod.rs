@@ -12,6 +12,7 @@
 pub mod fun;
 pub mod graph;
 pub mod instr;
+mod place;
 pub mod program;
 pub mod rvalue;
 
@@ -22,6 +23,7 @@ pub use graph::{Cfg, CfgLabel};
 #[cfg(test)]
 pub use instr::instr;
 pub use instr::{Branch, Instr, InstrKind};
+pub use place::Place;
 pub use program::Program;
 pub use rvalue::{Mode, RValue, VarMode};
 

@@ -10,7 +10,7 @@ use super::{Block, Stratum, Ty, VarDef};
 #[derive(Debug, Clone)]
 pub struct Expr {
     /// The variant of the expression (unit, integer, etc.).
-    pub raw: RawExpr,
+    pub raw: ExprKind,
     /// Type of the expression.
     pub ty: Ty,
     /// Stratum of the expression.
@@ -19,7 +19,7 @@ pub struct Expr {
 
 impl Expr {
     /// Creates a new expression.
-    pub fn new(raw: impl Into<RawExpr>, ty: impl Into<Ty>, stm: impl Into<Stratum>) -> Self {
+    pub fn new(raw: impl Into<ExprKind>, ty: impl Into<Ty>, stm: impl Into<Stratum>) -> Self {
         Self {
             raw: raw.into(),
             ty: ty.into(),
@@ -32,7 +32,7 @@ impl Expr {
 ///
 /// Rule: all variants end with a capital `E`.
 #[derive(Debug, Clone)]
-pub enum RawExpr {
+pub enum ExprKind {
     /// Unit expression, that does nothing.
     UnitE,
     /// An unbounded integer.

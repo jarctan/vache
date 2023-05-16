@@ -1,6 +1,6 @@
 //! Parsing statements, and defining their representation in the AST.
 
-use super::{Block, Expr, Var, VarDef};
+use super::{Block, Expr, Place, VarDef};
 use crate::utils::boxed;
 
 /// A statement.
@@ -11,7 +11,7 @@ pub enum Stmt {
     /// defined in the 1st argument.
     Declare(VarDef, Expr),
     /// An assignment.
-    Assign(Var, Expr),
+    Assign(Place, Expr),
     /// An expression, whose final value is discarded.
     ExprS(Expr),
     /// A while statement.

@@ -2,9 +2,10 @@
 
 use proc_macro2::TokenStream;
 use string_builder::Builder as StringBuilder;
+use Place::*;
 use Ty::*;
 
-use crate::mir::{Fun, Instr, Mode, Program, RValue, Struct, Ty, VarMode};
+use crate::mir::{Fun, Instr, Mode, Place, Program, RValue, Struct, Ty, VarMode};
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
@@ -240,13 +241,14 @@ impl Compiler {
                     let mut #name: #ty;
                 }
             }
-            crate::mir::InstrKind::Assign(lhs, rhs) => {
-                let lhs = format_ident!("{}", lhs.as_str());
+            crate::mir::InstrKind::Assign(VarP(v), rhs) => {
+                let lhs = format_ident!("{}", v.as_str());
                 let rhs = self.visit_rvalue(rhs.clone());
                 quote! {
                     #lhs = #rhs;
                 }
             }
+            crate::mir::InstrKind::Assign(_, _) => todo!(),
             crate::mir::InstrKind::Call {
                 name,
                 args,

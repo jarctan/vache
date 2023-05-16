@@ -13,7 +13,7 @@ pub fn one_borrow() -> impl Into<Program> {
             body: stmts(vec![
                 Declare(vardef("n", IntT), int(10)),
                 Declare(vardef("y", IntT), var("n")),
-                Assign(Var::from("n"), binop(var("n"), "+", int(2))),
+                Assign(Place::from("n"), binop(var("n"), "+", int(2))),
                 print(vec![var("n"), var("y")]),
             ]),
         }],
@@ -31,7 +31,7 @@ pub fn two_borrows() -> impl Into<Program> {
                 Declare(vardef("n", IntT), int(10)),
                 Declare(vardef("y", IntT), var("n")),
                 Declare(vardef("z", IntT), var("n")),
-                Assign(Var::from("n"), binop(var("n"), "+", int(2))),
+                Assign(Place::from("n"), binop(var("n"), "+", int(2))),
                 print(vec![var("n"), var("y"), var("z")]),
             ]),
         }],

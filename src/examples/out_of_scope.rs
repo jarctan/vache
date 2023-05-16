@@ -13,8 +13,8 @@ pub fn out_of_scope() -> impl Into<Program> {
                 Declare(vardef("n", IntT), int(12)),
                 block_stmt(stmts(vec![
                     Declare(vardef("p", IntT), int(24)),
-                    Assign(Var::from("n"), var("p")),
-                    Assign(Var::from("p"), int(27)),
+                    Assign(Place::from("n"), var("p")),
+                    Assign(Place::from("p"), int(27)),
                 ])),
                 print(vec![var("n")]),
             ],

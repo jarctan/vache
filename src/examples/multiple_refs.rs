@@ -26,7 +26,7 @@ pub fn multiple_refs() -> impl Into<Program> {
                     Declare(vardef("n", IntT), int(12)),
                     Declare(vardef("even1", BoolT), call("is_even", vec![var("n")])),
                     Declare(vardef("even2", BoolT), call("is_even", vec![var("n")])),
-                    Assign(Var::from("n"), int(11)),
+                    Assign(Place::from("n"), int(11)),
                     Declare(vardef("even3", BoolT), call("is_even", vec![var("n")])),
                     print(vec![var("even1"), var("even2"), var("even3")]),
                 ],

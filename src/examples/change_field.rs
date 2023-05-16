@@ -32,7 +32,7 @@ pub fn change_field() -> impl Into<Program> {
                     ),
                 ),
                 Declare(vardef("n", StrT), field(var("john"), "name")),
-                Assign(Var::from("n"), string("dupont")),
+                Assign(Place::from("n"), string("dupont")),
                 print(vec![var("n"), field(var("john"), "name")]),
             ]),
         }],
