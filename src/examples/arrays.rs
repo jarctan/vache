@@ -27,3 +27,28 @@ pub fn simple_array_indexing() -> impl Into<Program> {
         }],
     )
 }
+
+pub fn separate_index_for_array() -> impl Into<Program> {
+    Program::new(
+        vec![],
+        vec![Fun {
+            name: "main".to_string(),
+            params: vec![],
+            ret_ty: UnitT,
+            body: stmts(vec![
+                Declare(
+                    vardef("list", ArrayT(boxed(StrT))),
+                    array([
+                        string("tomato"),
+                        string("lettuce"),
+                        string("zucchini"),
+                        string("avocado"),
+                    ]),
+                ),
+                Declare(vardef("ix", IntT), int(2)),
+                Declare(vardef("item", StrT), index(var("list"), var("ix"))),
+                print([var("item"), var("ix")]),
+            ]),
+        }],
+    )
+}
