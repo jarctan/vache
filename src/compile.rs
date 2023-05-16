@@ -134,7 +134,7 @@ impl Compiler {
     }
 
     /// Translate a type into a Rust type.
-    pub fn translate_type(&self, ty: &Ty, show_lifetime: bool) -> TokenStream {
+    pub fn translate_type(ty: &Ty, show_lifetime: bool) -> TokenStream {
         match ty {
             UnitT => quote!(()),
             BoolT => quote!(bool),
@@ -156,6 +156,10 @@ impl Compiler {
                 let name = format_ident!("{}", name);
                 quote!(#name)
             }
+            ArrayT(box ty) => {
+                let ty = Self::translate_type(ty, show_lifetime);
+                quote!(Vec<#ty>)
+            }
         }
     }
 
@@ -167,7 +171,7 @@ impl Compiler {
             .into_iter()
             .map(|(k, ty)| {
                 let k = format_ident!("{k}");
-                let ty = self.translate_type(&ty, true);
+                let ty = Self::translate_type(&ty, true);
                 quote!(#k: #ty,)
             })
             .collect();
@@ -222,7 +226,7 @@ impl Compiler {
             crate::mir::InstrKind::Noop => quote!(),
             crate::mir::InstrKind::Declare(v) => {
                 let name = format_ident!("{}", v.name.as_str());
-                let ty = self.translate_type(&v.ty, false);
+                let ty = Self::translate_type(&v.ty, false);
                 quote! {
                     let mut #name: #ty;
                 }
@@ -293,7 +297,7 @@ impl Compiler {
             .into_iter()
             .map(|param| {
                 let name = format_ident!("{}", String::from(param.name));
-                let ty = self.translate_type(&param.ty, true);
+                let ty = Self::translate_type(&param.ty, true);
                 quote! {
                     #name: #ty
                 }
@@ -310,7 +314,7 @@ impl Compiler {
             .ret_v
             .as_ref()
             .map(|v| {
-                let ty = self.translate_type(&v.ty, true);
+                let ty = Self::translate_type(&v.ty, true);
                 quote!(-> #ty)
             })
             .unwrap_or_default();

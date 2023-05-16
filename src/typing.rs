@@ -163,9 +163,10 @@ impl Typer {
     /// Checks that `ty` is well defined in the environment.
     ///
     /// In particular, unknown structure names will raise an error.
-    fn check_ty(&mut self, ty: &Ty) {
+    fn check_ty(&self, ty: &Ty) {
         match ty {
             UnitT | BoolT | IntT | StrT => (),
+            ArrayT(box ty) => self.check_ty(ty),
             StructT(name) => assert!(
                 self.valid_type_names.contains(name),
                 "Unknown struct {name}"
@@ -268,11 +269,21 @@ impl SelfVisitor for Typer {
                 if let StructT(name) = &s.ty {
                     let strukt = self.get_struct(name).unwrap();
                     let ty = strukt.get_field(&field).clone();
-                    let s_stm = s.stm;
-                    // Choose to copy every time. TODO: do not copy on last use
+                    let s_stm = s.stm; // Needed now because we move s after
                     Expr::new(FieldE(boxed(s), field), ty, s_stm)
                 } else {
                     panic!("Cannot get a field of something which is not a struct");
+                }
+            }
+            ast::Expr::IndexE(box e, box ix) => {
+                let e = self.visit_expr(e);
+                let ix = self.visit_expr(ix);
+                if let ArrayT(box item_ty) = &e.ty && let IntT = ix.ty {
+                    let ty = item_ty.clone(); // Needed now because we move e after
+                    let e_stm = e.stm; // Needed now because we move e after
+                    Expr::new(IndexE(boxed(e), boxed(ix)), ty, e_stm)
+                } else {
+                    panic!("Only integer indexing is supported, and for arrays only");
                 }
             }
             ast::Expr::StructE {
@@ -321,6 +332,29 @@ impl SelfVisitor for Typer {
                     StructT(s_name),
                     common_stm,
                 )
+            }
+            ast::Expr::ArrayE(array) => {
+                assert!(!array.is_empty(), "empty arrays are not supported yet");
+                // Compute the type of the items
+                // Because of borrowing rules, we need to do that before we immutably borrow
+                // `self` through `.get_struct()` since we need a mutable borrow into `self`
+                // here.
+                let array: Vec<Expr> = array
+                    .into_iter()
+                    .map(|expr| self.visit_expr(expr))
+                    .collect();
+
+                let common_stm = array
+                    .iter()
+                    .fold(Stratum::static_stm(), |s1, Expr { stm: s2, .. }| {
+                        core::cmp::max(s1, *s2)
+                    });
+                let ty = ArrayT(boxed(array[0].ty.clone()));
+                assert!(
+                    array.iter().all(|item| item.ty == array[0].ty),
+                    "all items in the list should have the same type"
+                );
+                Expr::new(ArrayE(array), ty, common_stm)
             }
         }
     }

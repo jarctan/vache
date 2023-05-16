@@ -1,3 +1,4 @@
+mod arrays;
 mod basic_lifetime;
 mod ceil_mod2;
 mod fibo;

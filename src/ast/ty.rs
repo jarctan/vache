@@ -17,6 +17,8 @@ pub enum Ty {
     ///
     /// Structures are identified by their names.
     StructT(String),
+    /// Arrays.
+    ArrayT(Box<Ty>),
 }
 
 use Ty::*;
@@ -26,7 +28,7 @@ impl Ty {
     pub fn copyable(&self) -> bool {
         match self {
             UnitT | BoolT => true,
-            IntT | StrT | StructT(_) => false,
+            IntT | StrT | StructT(_) | ArrayT(_) => false,
         }
     }
 }
@@ -63,6 +65,7 @@ impl fmt::Display for Ty {
             IntT => write!(f, "int"),
             StrT => write!(f, "str"),
             StructT(s) => write!(f, "{s}{{}}"),
+            ArrayT(box ty) => write!(f, "{ty}[]"),
         }
     }
 }

@@ -52,6 +52,10 @@ pub enum RawExpr {
         /// Ordered because we need to specify here the evaluation order.
         fields: Vec<(String, Expr)>,
     },
+    /// An index in an array/a map.
+    IndexE(Box<Expr>, Box<Expr>),
+    /// Array creation.
+    ArrayE(Vec<Expr>),
     /// A function call.
     CallE {
         /// Name/identifier of the function.

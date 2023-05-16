@@ -1,5 +1,6 @@
 use super::*;
 
+mod arrays;
 mod borrows;
 mod change_field;
 mod custom_addition;

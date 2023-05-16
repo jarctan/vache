@@ -256,7 +256,7 @@ impl MIRer {
                         [(DefaultB, dest_l)],
                     )
                 } else {
-                    panic!("Cannot get a field of something which is not a struct");
+                    panic!("Compiler error: field are only valid on structs");
                 }
             }
             tast::RawExpr::StructE {
@@ -293,7 +293,8 @@ impl MIRer {
                     dest_l
                 };
 
-                // Compute the expressions in the fields in the CFG (rev order!)
+                // Compute the value of the tmp variables (remember the CFG is declared in rev
+                // order!)
                 let compute_l = fields
                     .into_iter()
                     .rev()
@@ -301,7 +302,82 @@ impl MIRer {
                         self.visit_expr(expr, Some(field_vars[&field].clone()), dest_l, structs)
                     });
 
+                // Declare the temporary variables
                 field_vars.into_values().fold(compute_l, |dest_l, var| {
+                    self.insert(self.instr(InstrKind::Declare(var)), [(DefaultB, dest_l)])
+                })
+            }
+            tast::RawExpr::IndexE(box e, box ix) => {
+                if let ArrayT(box array_ty) = &e.ty {
+                    let e_var = self.fresh_var(e.ty.clone(), self.stm);
+                    let ix_var = self.fresh_var(array_ty.clone(), self.stm);
+                    let e_ref = Self::visit_var_ref(e_var.clone(), dest_v.as_ref());
+                    let ix_ref = Self::visit_var_ref(ix_var.clone(), dest_v.as_ref());
+                    let dest_l = if let Some(dest_v) = dest_v {
+                        self.insert(
+                            self.instr(InstrKind::Assign(
+                                dest_v.name,
+                                RValue::Index(e_ref, ix_ref),
+                            )),
+                            [(DefaultB, dest_l)],
+                        )
+                    } else {
+                        dest_l
+                    };
+
+                    // Assign the two temporary variables
+                    // Note: ix is compute AFTER e, so appears first here
+                    let dest_l = self.visit_expr(ix, Some(ix_var.clone()), dest_l, structs);
+                    let dest_l = self.visit_expr(e, Some(e_var.clone()), dest_l, structs);
+
+                    // Declare temporary variables
+                    let dest_l =
+                        self.insert(self.instr(InstrKind::Declare(ix_var)), [(DefaultB, dest_l)]);
+                    self.insert(self.instr(InstrKind::Declare(e_var)), [(DefaultB, dest_l)])
+                } else {
+                    panic!("Compiler error: indexed element should be an array");
+                }
+            }
+            tast::RawExpr::ArrayE(array) => {
+                // Find some temporary variables to hold the result of the evaluation of each
+                // item in the array
+                let array_vars: Vec<VarDef> = array
+                    .iter()
+                    .map(|e| self.fresh_var(e.ty.clone(), self.stm))
+                    .collect();
+
+                // Array creation
+                // Only do if the destination exist! Otherwise, no usefulness to it
+                let struct_l = if let Some(dest_v) = dest_v {
+                    self.insert(
+                        self.instr(InstrKind::Assign(
+                            dest_v.name.clone(),
+                            RValue::Array(
+                                array_vars
+                                    .clone()
+                                    .into_iter()
+                                    .map(|var| Self::visit_var_ref(var, Some(&dest_v)))
+                                    .collect(),
+                            ),
+                        )),
+                        [(DefaultB, dest_l)],
+                    )
+                } else {
+                    dest_l
+                };
+
+                // Compute the value of the tmp variables (remember the CFG is declared in
+                // reversed order!)
+                let compute_l = array_vars
+                    .iter()
+                    .rev()
+                    .zip(array.into_iter().rev())
+                    .fold(struct_l, |dest_l, (var, item)| {
+                        self.visit_expr(item, Some(var.clone()), dest_l, structs)
+                    });
+
+                // Declare the temporary variables
+                array_vars.into_iter().fold(compute_l, |dest_l, var| {
                     self.insert(self.instr(InstrKind::Declare(var)), [(DefaultB, dest_l)])
                 })
             }

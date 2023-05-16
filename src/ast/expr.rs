@@ -29,6 +29,10 @@ pub enum Expr {
         /// Ordered because we need to specify here the evaluation order.
         fields: Vec<(String, Expr)>,
     },
+    /// An index in an array/a map.
+    IndexE(Box<Expr>, Box<Expr>),
+    /// Array creation.
+    ArrayE(Vec<Expr>),
     /// A function call.
     CallE {
         /// Name/identifier of the function.
@@ -72,12 +76,22 @@ pub fn field(e: Expr, member: impl ToString) -> Expr {
     FieldE(boxed(e), member.to_string())
 }
 
+/// Shortcut to create a `x[y]` expression.
+pub fn index(e1: Expr, ix: Expr) -> Expr {
+    IndexE(boxed(e1), boxed(ix))
+}
+
 /// Shortcut to create a `MyStruct { (field: value)* }` expression.
 pub fn structure(name: impl ToString, fields: impl IntoIterator<Item = (String, Expr)>) -> Expr {
     StructE {
         name: name.to_string(),
         fields: fields.into_iter().collect(),
     }
+}
+
+/// Shortcut to create a `[el1, el2, ..]` expression.
+pub fn array(items: impl IntoIterator<Item = Expr>) -> Expr {
+    ArrayE(items.into_iter().collect())
 }
 
 /// Shortcut to create a block `Expr`.
