@@ -16,7 +16,7 @@ pub mod var;
 pub use block::Block;
 pub use expr::Expr;
 pub use fun::{Fun, FunSig};
-pub use place::Place;
+pub use place::{idx_place, Place};
 pub use program::Program;
 pub use selfvisitor::SelfVisitor;
 pub use stmt::Stmt;

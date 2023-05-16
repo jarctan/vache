@@ -17,7 +17,6 @@
         "typer",
         "unparse",
         "vache",
-        "interp",
         "funs",
         "strukt", // alternative orthograph to avoid the `struct` keyword
         "rvalue",

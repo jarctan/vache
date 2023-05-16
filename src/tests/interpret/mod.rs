@@ -15,5 +15,5 @@ mod while_loop;
 fn test(p: impl Into<Program>, output: impl AsRef<str>) {
     let mir = crate::mir(crate::check(p.into()));
     println!("MIR: {:#?}", mir);
-    assert_eq!(crate::interp(mir), output.as_ref(), "Output mismatch");
+    assert_eq!(crate::interpret(mir), output.as_ref(), "Output mismatch");
 }

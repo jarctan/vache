@@ -52,3 +52,29 @@ pub fn separate_index_for_array() -> impl Into<Program> {
         }],
     )
 }
+
+pub fn simple_array_assignment() -> impl Into<Program> {
+    Program::new(
+        vec![],
+        vec![Fun {
+            name: "main".to_string(),
+            params: vec![],
+            ret_ty: UnitT,
+            body: stmts(vec![
+                Declare(
+                    vardef("list", ArrayT(boxed(StrT))),
+                    array([
+                        string("tomato"),
+                        string("lettuce"),
+                        string("zucchini"),
+                        string("avocado"),
+                    ]),
+                ),
+                Declare(vardef("ix", IntT), int(2)),
+                Assign(idx_place(var("list"), var("ix")), string("cucumber")),
+                Declare(vardef("item", StrT), index(var("list"), var("ix"))),
+                print([var("item"), var("ix")]),
+            ]),
+        }],
+    )
+}

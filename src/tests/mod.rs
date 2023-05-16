@@ -1,6 +1,6 @@
 //! Typing tests.
 
-pub(crate) mod interp;
+pub(crate) mod interpret;
 pub(crate) mod typing;
 
 pub use Expr::*;

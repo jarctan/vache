@@ -77,6 +77,6 @@ pub fn compile(p: impl Into<mir::Program>) -> String {
 /// Under the hood, it will allocate a new `Interpreter` and launch it on your
 /// program. It will call the function `main` within your program and return the
 /// standard output of your program.
-pub fn interp(p: impl Into<mir::Program>) -> String {
+pub fn interpret(p: impl Into<mir::Program>) -> String {
     interpret::interpret(p.into())
 }
