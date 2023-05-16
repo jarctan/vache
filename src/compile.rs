@@ -211,12 +211,21 @@ impl Compiler {
                 quote!(#s.#field)
             }
             RValue::Index(array, index) => {
-                let array = self.visit_var(array);
-                let index = self.visit_var(index);
-                quote!(#array[#index])
+                let index = format_ident!("{}", index.var.as_str());
+                let index = quote!(#index.to_usize().unwrap());
+                let array_ident = format_ident!("{}", array.var.as_str());
+                match array.mode {
+                    Mode::Borrowed => quote!(__borrow(#array_ident[#index])),
+                    Mode::Cloned => quote!(#array_ident[#index].clone()),
+                    Mode::Moved => quote!(#array_ident.remove(#index)),
+                }
             }
             RValue::Struct { .. } => todo!(),
-            RValue::Array(_) => todo!(),
+            RValue::Array(array) => {
+                let items: Vec<TokenStream> =
+                    array.into_iter().map(|item| self.visit_var(item)).collect();
+                quote!(vec![#(#items),*])
+            }
         }
     }
 

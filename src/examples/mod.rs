@@ -1,5 +1,6 @@
 //! List of examples.
 
+mod arrays;
 mod borrows;
 mod change_field;
 mod custom_addition;
@@ -10,6 +11,7 @@ mod out_of_scope;
 mod structure;
 mod while_loop;
 
+pub use arrays::*;
 pub use borrows::*;
 pub use change_field::*;
 pub use custom_addition::*;
@@ -29,3 +31,4 @@ pub use crate::ast::stmt::*;
 pub use crate::ast::ty::*;
 pub use crate::ast::var::*;
 pub use crate::ast::*;
+pub use crate::utils::boxed;

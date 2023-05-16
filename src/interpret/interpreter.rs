@@ -238,8 +238,9 @@ impl<'a> Interpreter<'a> {
             RValue::Index(array, index) => {
                 match (self.get_var_value(array), self.get_var_value(index)) {
                     (ArrayV(array), IntV(index)) => {
-                        let index =
-                            usize::try_from(index).expect("Runtime error: array index is too big");
+                        let index = index
+                            .to_usize()
+                            .expect("Runtime error: array index is too big");
                         array[index]
                     }
                     _ => panic!("Runtime error: incorrect indexing"),

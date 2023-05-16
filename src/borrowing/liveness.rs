@@ -216,6 +216,21 @@ pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
                     }
                 }
             }
+            InstrKind::Assign(_, RValue::Array(items)) => {
+                for item in items.iter_mut() {
+                    if !var_flow[&label].outs.contains(&item.var) {
+                        item.mode = Mode::Moved;
+                    }
+                }
+            }
+            InstrKind::Assign(_, RValue::Index(array, index)) => {
+                if !var_flow[&label].outs.contains(&array.var) {
+                    array.mode = Mode::Moved;
+                }
+                if !var_flow[&label].outs.contains(&index.var) {
+                    index.mode = Mode::Moved;
+                }
+            }
             InstrKind::Assign(_, _) => (),
             InstrKind::Call {
                 name: _,

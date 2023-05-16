@@ -308,35 +308,28 @@ impl MIRer {
                 })
             }
             tast::RawExpr::IndexE(box e, box ix) => {
-                if let ArrayT(box array_ty) = &e.ty {
-                    let e_var = self.fresh_var(e.ty.clone(), self.stm);
-                    let ix_var = self.fresh_var(array_ty.clone(), self.stm);
-                    let e_ref = Self::visit_var_ref(e_var.clone(), dest_v.as_ref());
-                    let ix_ref = Self::visit_var_ref(ix_var.clone(), dest_v.as_ref());
-                    let dest_l = if let Some(dest_v) = dest_v {
-                        self.insert(
-                            self.instr(InstrKind::Assign(
-                                dest_v.name,
-                                RValue::Index(e_ref, ix_ref),
-                            )),
-                            [(DefaultB, dest_l)],
-                        )
-                    } else {
-                        dest_l
-                    };
-
-                    // Assign the two temporary variables
-                    // Note: ix is compute AFTER e, so appears first here
-                    let dest_l = self.visit_expr(ix, Some(ix_var.clone()), dest_l, structs);
-                    let dest_l = self.visit_expr(e, Some(e_var.clone()), dest_l, structs);
-
-                    // Declare temporary variables
-                    let dest_l =
-                        self.insert(self.instr(InstrKind::Declare(ix_var)), [(DefaultB, dest_l)]);
-                    self.insert(self.instr(InstrKind::Declare(e_var)), [(DefaultB, dest_l)])
+                let e_var = self.fresh_var(e.ty.clone(), self.stm);
+                let ix_var = self.fresh_var(ix.ty.clone(), self.stm);
+                let e_ref = Self::visit_var_ref(e_var.clone(), dest_v.as_ref());
+                let ix_ref = Self::visit_var_ref(ix_var.clone(), dest_v.as_ref());
+                let dest_l = if let Some(dest_v) = dest_v {
+                    self.insert(
+                        self.instr(InstrKind::Assign(dest_v.name, RValue::Index(e_ref, ix_ref))),
+                        [(DefaultB, dest_l)],
+                    )
                 } else {
-                    panic!("Compiler error: indexed element should be an array");
-                }
+                    dest_l
+                };
+
+                // Assign the two temporary variables
+                // Note: ix is compute AFTER e, so appears first here
+                let dest_l = self.visit_expr(ix, Some(ix_var.clone()), dest_l, structs);
+                let dest_l = self.visit_expr(e, Some(e_var.clone()), dest_l, structs);
+
+                // Declare temporary variables
+                let dest_l =
+                    self.insert(self.instr(InstrKind::Declare(ix_var)), [(DefaultB, dest_l)]);
+                self.insert(self.instr(InstrKind::Declare(e_var)), [(DefaultB, dest_l)])
             }
             tast::RawExpr::ArrayE(array) => {
                 // Find some temporary variables to hold the result of the evaluation of each
@@ -377,7 +370,7 @@ impl MIRer {
                     });
 
                 // Declare the temporary variables
-                array_vars.into_iter().fold(compute_l, |dest_l, var| {
+                array_vars.into_iter().rev().fold(compute_l, |dest_l, var| {
                     self.insert(self.instr(InstrKind::Declare(var)), [(DefaultB, dest_l)])
                 })
             }
