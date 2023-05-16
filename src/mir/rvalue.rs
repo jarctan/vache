@@ -77,6 +77,8 @@ pub enum RValue {
     Var(VarMode),
     /// A field in a structure.
     Field(VarMode, String),
+    /// Index into an array/map.
+    Index(VarMode, VarMode),
 }
 
 impl fmt::Debug for RValue {
@@ -88,6 +90,7 @@ impl fmt::Debug for RValue {
             String(s) => write!(f, "\"{s}\""),
             Var(v) => write!(f, "{v:?}"),
             Field(v, field) => write!(f, "{v:?}.{field}"),
+            Index(array, index) => write!(f, "{array:?}[{index:?}]"),
         }
     }
 }

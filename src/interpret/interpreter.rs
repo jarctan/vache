@@ -231,12 +231,14 @@ impl<'a> Interpreter<'a> {
                     }
                 }
             }
-            RValue::Field(strukt, field) => {
-                let value = self.get_var_value(strukt);
-                if let StructV(_, strukt) = value {
-                    strukt[field]
-                } else {
-                    panic!("Runtime error: field access should only be on structs")
+            RValue::Field(lhs, field) => match self.get_var_value(lhs) {
+                StructV(_, strukt) => strukt[field],
+                _ => panic!("Runtime error: field access should only be on structs"),
+            },
+            RValue::Index(array, index) => {
+                match (self.get_var_value(array), self.get_var_value(index)) {
+                    (_, StrV(_index)) => todo!(),
+                    _ => panic!("Runtime error: incorrect indexing"),
                 }
             }
         }

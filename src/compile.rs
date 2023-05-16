@@ -206,6 +206,11 @@ impl Compiler {
                 let field = format_ident!("{field}");
                 quote!(#s.#field)
             }
+            RValue::Index(array, index) => {
+                let array = self.visit_var(array);
+                let index = self.visit_var(index);
+                quote!(#array[#index])
+            }
         }
     }
 

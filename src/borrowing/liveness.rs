@@ -40,6 +40,9 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                 | InstrKind::Assign(lhs, RValue::Field(rhs, _)) => {
                     outs.clone() - lhs + rhs.var.clone()
                 }
+                InstrKind::Assign(lhs, RValue::Index(array, index)) => {
+                    outs.clone() - lhs + array.var.clone() + index.var.clone()
+                }
                 InstrKind::Call {
                     name: _,
                     args,
@@ -111,6 +114,17 @@ fn loan_liveness(
                     let mut res = ins.clone() - lhs;
                     if var_flow[label].outs.contains(lhs) {
                         res = res + (lhs.clone(), ins.borrow(rhs, label.clone()));
+                    }
+                    res
+                }
+                InstrKind::Assign(lhs, RValue::Index(array, index)) => {
+                    let mut res = ins.clone() - lhs;
+                    if var_flow[label].outs.contains(lhs) {
+                        res = res
+                            + (
+                                lhs.clone(),
+                                ins.borrow(array, label.clone()) + ins.borrow(index, label.clone()),
+                            );
                     }
                     res
                 }
