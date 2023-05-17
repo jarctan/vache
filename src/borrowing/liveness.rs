@@ -252,7 +252,7 @@ pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
     // List all invalidated borrows.
     let mut invalidated: Set<Borrow> = Set::new();
     for (label, instr) in cfg.bfs(entry_l, false) {
-        if let Some(lhs) = instr.mutated_var() {
+        for lhs in instr.mutated_var() {
             for borrow in loan_flow[label].ins.borrows(lhs) {
                 invalidated.insert(borrow.clone());
             }

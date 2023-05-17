@@ -6,6 +6,7 @@ use std::ops::{Deref, DerefMut};
 use Place::*;
 
 use super::*;
+use crate::utils::boxed;
 
 /// Branch = label on CFG edges.
 ///
@@ -85,13 +86,87 @@ pub enum InstrKind {
 impl InstrKind {
     /// If this instruction mutates a variable, returns it.
     /// Otherwise, returns `None`.
-    pub fn mutated_var(&self) -> Option<&Var> {
+    pub fn mutated_var(&self) -> Box<dyn Iterator<Item = &Var> + '_> {
         match self {
-            InstrKind::Noop | InstrKind::Branch(_) => None,
-            InstrKind::Declare(v) => Some(&v.name),
-            InstrKind::Call { destination: v, .. } => v.as_ref(),
-            InstrKind::Assign(VarP(v), _) => Some(v),
-            InstrKind::Assign(IndexP(array, _), _) => Some(array),
+            InstrKind::Noop | InstrKind::Branch(_) => boxed([].into_iter()),
+            InstrKind::Declare(v) => boxed([&v.name].into_iter()),
+            InstrKind::Call {
+                destination: Some(v),
+                ..
+            } => boxed([v].into_iter()),
+            InstrKind::Call {
+                destination: None, ..
+            } => boxed([].into_iter()),
+            InstrKind::Assign(VarP(v), RValue::Array(array)) => {
+                let mut vec = vec![v];
+                array
+                    .iter()
+                    .filter(|item| item.mode == Mode::MutBorrowed)
+                    .map(|v| &v.var)
+                    .collect_into(&mut vec);
+                boxed(vec.into_iter())
+            }
+            InstrKind::Assign(VarP(v), RValue::Struct { name: _, fields }) => {
+                let mut vec = vec![v];
+                fields
+                    .values()
+                    .filter(|item| item.mode == Mode::MutBorrowed)
+                    .map(|v| &v.var)
+                    .collect_into(&mut vec);
+                boxed(vec.into_iter())
+            }
+            InstrKind::Assign(
+                VarP(lhs),
+                RValue::Field(
+                    VarMode {
+                        var: rhs,
+                        mode: Mode::MutBorrowed,
+                    },
+                    _,
+                ),
+            ) => boxed([lhs, rhs].into_iter()),
+            InstrKind::Assign(
+                VarP(lhs),
+                RValue::Index(
+                    VarMode {
+                        var: rhs1,
+                        mode: Mode::MutBorrowed,
+                    },
+                    VarMode {
+                        var: rhs2,
+                        mode: Mode::MutBorrowed,
+                    },
+                ),
+            ) => boxed([lhs, rhs1, rhs2].into_iter()),
+            InstrKind::Assign(
+                VarP(lhs),
+                RValue::Index(
+                    VarMode {
+                        var: rhs,
+                        mode: Mode::MutBorrowed,
+                    },
+                    _,
+                ),
+            ) => boxed([lhs, rhs].into_iter()),
+            InstrKind::Assign(
+                VarP(lhs),
+                RValue::Index(
+                    _,
+                    VarMode {
+                        var: rhs,
+                        mode: Mode::MutBorrowed,
+                    },
+                ),
+            ) => boxed([lhs, rhs].into_iter()),
+            InstrKind::Assign(
+                VarP(lhs),
+                RValue::Var(VarMode {
+                    var: rhs,
+                    mode: Mode::MutBorrowed,
+                }),
+            ) => boxed([lhs, rhs].into_iter()),
+            InstrKind::Assign(VarP(v), _) => boxed([v].into_iter()),
+            InstrKind::Assign(IndexP(array, _), _) => boxed([array].into_iter()),
             InstrKind::Assign(_, _) => todo!(),
         }
     }

@@ -105,3 +105,31 @@ pub fn assignment_while_borrowed() -> impl Into<Program> {
         }],
     )
 }
+
+pub fn cloning_array() -> impl Into<Program> {
+    Program::new(
+        vec![],
+        vec![Fun {
+            name: "main".to_string(),
+            params: vec![],
+            ret_ty: UnitT,
+            body: stmts(vec![
+                Declare(
+                    vardef("list", ArrayT(boxed(StrT))),
+                    array([
+                        string("tomato"),
+                        string("lettuce"),
+                        string("zucchini"),
+                        string("avocado"),
+                    ]),
+                ),
+                Declare(vardef("list2", ArrayT(boxed(StrT))), var("list")),
+                Assign(idx_place(var("list2"), int(1)), string("cabbage")),
+                Assign(idx_place(var("list"), int(2)), string("cucumber")),
+                Declare(vardef("item1", StrT), index(var("list"), int(2))),
+                Declare(vardef("item2", StrT), index(var("list2"), int(1))),
+                print([var("item1"), var("item2")]),
+            ]),
+        }],
+    )
+}

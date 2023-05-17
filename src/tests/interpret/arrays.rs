@@ -24,3 +24,8 @@ fn assignment_while_borrowed() {
         "cucumber zucchini 2\n",
     );
 }
+
+#[test]
+fn cloning_array() {
+    test(examples::cloning_array(), "cucumber cabbage\n");
+}

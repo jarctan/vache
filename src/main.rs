@@ -3,7 +3,7 @@
 use vache_lib::{borrow_check, check, compile, mir};
 
 fn main() {
-    let checked = check(vache_lib::examples::assignment_while_borrowed());
+    let checked = check(vache_lib::examples::cloning_array());
     let mir = mir(checked);
     let mir = borrow_check(mir);
     println!("MIR: {:#?}", mir);
