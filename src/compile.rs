@@ -22,7 +22,6 @@ impl Compiler {
             #![allow(clippy::needless_late_init)]
             #![allow(unused_mut)]
 
-            extern crate rug;
             use std::borrow::{Borrow, BorrowMut};
             use std::fmt;
             use std::ops::{Add, Deref, DerefMut, Div, Mul, Rem, Sub};
@@ -197,6 +196,16 @@ impl Compiler {
             impl<'a, B: Clone> BorrowMut<B> for Cow<'a, B> {
                 fn borrow_mut(&mut self) -> &mut B {
                     self
+                }
+            }
+
+            impl<'a, 'c, 'b: 'c> Cow<'a, Vec<Cow<'b, String>>> {
+                pub fn remove(self, index: usize) -> Cow<'c, String> {
+                    match self {
+                        Cow::Borrowed(b) => b[index].clone(),
+                        Cow::MutBorrowed(array) => array.remove(index),
+                        Cow::Owned(mut array) => array.remove(index),
+                    }
                 }
             }
         )

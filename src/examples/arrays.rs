@@ -78,3 +78,30 @@ pub fn simple_array_assignment() -> impl Into<Program> {
         }],
     )
 }
+
+pub fn assignment_while_borrowed() -> impl Into<Program> {
+    Program::new(
+        vec![],
+        vec![Fun {
+            name: "main".to_string(),
+            params: vec![],
+            ret_ty: UnitT,
+            body: stmts(vec![
+                Declare(
+                    vardef("list", ArrayT(boxed(StrT))),
+                    array([
+                        string("tomato"),
+                        string("lettuce"),
+                        string("zucchini"),
+                        string("avocado"),
+                    ]),
+                ),
+                Declare(vardef("ix", IntT), int(2)),
+                Declare(vardef("item_bef", StrT), index(var("list"), var("ix"))),
+                Assign(idx_place(var("list"), var("ix")), string("cucumber")),
+                Declare(vardef("item", StrT), index(var("list"), var("ix"))),
+                print([var("item"), var("item_bef"), var("ix")]),
+            ]),
+        }],
+    )
+}

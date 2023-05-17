@@ -16,3 +16,11 @@ fn separate_index_for_array() {
 fn simple_array_assignment() {
     test(examples::simple_array_assignment(), "cucumber 2\n");
 }
+
+#[test]
+fn assignment_while_borrowed() {
+    test(
+        examples::assignment_while_borrowed(),
+        "cucumber zucchini 2\n",
+    );
+}
