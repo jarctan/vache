@@ -106,18 +106,22 @@ impl MIRer {
     }
 
     /// Returns the variable with its suitable addressing:
-    /// * refed by default
+    /// * requested `mode` by default
     /// * BUT if the stratum of the assigned value is clearly longer-lived, then
     ///   we know we must own the value.
     ///
     /// Further refinements to the addressing mode will be made by the next
     /// phases (liveness analysis for instance).
-    fn visit_var_ref(src: VarDef, dest: Option<&VarDef>) -> VarMode {
+    fn visit_vardef(src: VarDef, mode: Mode, dest: Option<&VarDef>) -> VarMode {
         // If dest outlives, if must own the variable!
-        if let Some(dest) = dest && dest.stm < src.stm {
-            VarMode::cloned(src.name)
+        let mode = if let Some(dest) = dest && dest.stm < src.stm {
+            Mode::Cloned
         } else {
-            VarMode::refed(src.name)
+            mode
+        };
+        VarMode {
+            var: src.name,
+            mode,
         }
     }
 
@@ -146,6 +150,7 @@ impl MIRer {
         &mut self,
         e: tast::Expr,
         dest_v: Option<VarDef>,
+        mode: Mode,
         dest_l: CfgLabel,
         structs: &HashMap<String, Struct>,
     ) -> CfgLabel {
@@ -173,7 +178,7 @@ impl MIRer {
             }
             tast::ExprKind::VarE(v) => {
                 if let Some(dest_v) = dest_v && dest_v != v {
-                    let var_ref = Self::visit_var_ref(v, Some(&dest_v));
+                    let var_ref = Self::visit_vardef(v, mode, Some(&dest_v));
                     // Only do the assignment if the rhs and lhs are not the same! Otherwise optimize it away
                     self.insert_assign_instr(dest_v.name, var_ref,[(DefaultB, dest_l)])
                 } else {
@@ -196,7 +201,7 @@ impl MIRer {
                         args: arg_vars
                             .clone()
                             .into_iter()
-                            .map(|arg| Self::visit_var_ref(arg, dest_v.as_ref()))
+                            .map(|arg| Self::visit_vardef(arg, Mode::default(), dest_v.as_ref()))
                             .collect(),
                         destination: dest_v.map(|dest| dest.name),
                     }),
@@ -209,7 +214,7 @@ impl MIRer {
                     .rev()
                     .zip(arg_vars.iter().rev().cloned())
                     .fold(call_l, |dest_l, (arg_expr, arg_var)| {
-                        self.visit_expr(arg_expr, Some(arg_var), dest_l, structs)
+                        self.visit_expr(arg_expr, Some(arg_var), mode, dest_l, structs)
                     });
 
                 // Declaration of the arguments
@@ -230,14 +235,14 @@ impl MIRer {
                 );
 
                 // Evaluate the condition
-                self.visit_expr(cond, Some(cond_var), cond_l, structs)
+                self.visit_expr(cond, Some(cond_var), mode, cond_l, structs)
             }
             tast::ExprKind::BlockE(box e) => self.visit_block(e, dest_v, dest_l, structs),
             tast::ExprKind::FieldE(box s, field) => {
                 if let StructT(name) = &s.ty {
                     let field_ty = structs[name].get_field(&field).clone();
                     let struct_var = self.fresh_var(field_ty, self.stm);
-                    let var_ref = Self::visit_var_ref(struct_var.clone(), dest_v.as_ref());
+                    let var_ref = Self::visit_vardef(struct_var.clone(), mode, dest_v.as_ref());
                     let dest_l = if let Some(dest_v) = dest_v {
                         self.insert_assign_instr(
                             dest_v.name,
@@ -247,7 +252,8 @@ impl MIRer {
                     } else {
                         dest_l
                     };
-                    let dest_l = self.visit_expr(s, Some(struct_var.clone()), dest_l, structs);
+                    let dest_l =
+                        self.visit_expr(s, Some(struct_var.clone()), mode, dest_l, structs);
                     self.insert(
                         self.instr(InstrKind::Declare(struct_var)),
                         [(DefaultB, dest_l)],
@@ -278,7 +284,10 @@ impl MIRer {
                                 .clone()
                                 .into_iter()
                                 .map(|(field, var)| {
-                                    (field, Self::visit_var_ref(var, Some(&dest_v)))
+                                    (
+                                        field,
+                                        Self::visit_vardef(var, Mode::default(), Some(&dest_v)),
+                                    )
                                 })
                                 .collect(),
                         },
@@ -294,7 +303,13 @@ impl MIRer {
                     .into_iter()
                     .rev()
                     .fold(struct_l, |dest_l, (field, expr)| {
-                        self.visit_expr(expr, Some(field_vars[&field].clone()), dest_l, structs)
+                        self.visit_expr(
+                            expr,
+                            Some(field_vars[&field].clone()),
+                            mode,
+                            dest_l,
+                            structs,
+                        )
                     });
 
                 // Declare the temporary variables
@@ -305,8 +320,8 @@ impl MIRer {
             tast::ExprKind::IndexE(box e, box ix) => {
                 let e_var = self.fresh_var(e.ty.clone(), self.stm);
                 let ix_var = self.fresh_var(ix.ty.clone(), self.stm);
-                let e_ref = Self::visit_var_ref(e_var.clone(), dest_v.as_ref());
-                let ix_ref = Self::visit_var_ref(ix_var.clone(), dest_v.as_ref());
+                let e_ref = Self::visit_vardef(e_var.clone(), Mode::default(), dest_v.as_ref());
+                let ix_ref = Self::visit_vardef(ix_var.clone(), Mode::default(), dest_v.as_ref());
                 let dest_l = if let Some(dest_v) = dest_v {
                     self.insert_assign_instr(
                         dest_v.name,
@@ -319,8 +334,8 @@ impl MIRer {
 
                 // Assign the two temporary variables
                 // Note: ix is compute AFTER e, so appears first here
-                let dest_l = self.visit_expr(ix, Some(ix_var.clone()), dest_l, structs);
-                let dest_l = self.visit_expr(e, Some(e_var.clone()), dest_l, structs);
+                let dest_l = self.visit_expr(ix, Some(ix_var.clone()), mode, dest_l, structs);
+                let dest_l = self.visit_expr(e, Some(e_var.clone()), mode, dest_l, structs);
 
                 // Declare temporary variables
                 let dest_l =
@@ -344,7 +359,7 @@ impl MIRer {
                             array_vars
                                 .clone()
                                 .into_iter()
-                                .map(|var| Self::visit_var_ref(var, Some(&dest_v)))
+                                .map(|var| Self::visit_vardef(var, Mode::default(), Some(&dest_v)))
                                 .collect(),
                         ),
                         [(DefaultB, dest_l)],
@@ -355,13 +370,12 @@ impl MIRer {
 
                 // Compute the value of the tmp variables (remember the CFG is declared in
                 // reversed order!)
-                let compute_l = array_vars
-                    .iter()
-                    .rev()
-                    .zip(array.into_iter().rev())
-                    .fold(struct_l, |dest_l, (var, item)| {
-                        self.visit_expr(item, Some(var.clone()), dest_l, structs)
-                    });
+                let compute_l = array_vars.iter().rev().zip(array.into_iter().rev()).fold(
+                    struct_l,
+                    |dest_l, (var, item)| {
+                        self.visit_expr(item, Some(var.clone()), mode, dest_l, structs)
+                    },
+                );
 
                 // Declare the temporary variables
                 array_vars.into_iter().rev().fold(compute_l, |dest_l, var| {
@@ -387,7 +401,7 @@ impl MIRer {
         structs: &HashMap<String, Struct>,
     ) -> CfgLabel {
         self.push_scope();
-        let ret_l = self.visit_expr(b.ret, dest_v, dest_l, structs);
+        let ret_l = self.visit_expr(b.ret, dest_v, Mode::Cloned, dest_l, structs);
         let entry_l = b
             .stmts
             .into_iter()
@@ -412,7 +426,8 @@ impl MIRer {
     ) -> CfgLabel {
         match s {
             tast::Stmt::Declare(vardef, expr) => {
-                let expr_l = self.visit_expr(expr, Some(vardef.clone()), dest_l, structs);
+                let expr_l =
+                    self.visit_expr(expr, Some(vardef.clone()), Mode::default(), dest_l, structs);
                 self.insert(self.instr(InstrKind::Declare(vardef)), [(DefaultB, expr_l)])
             }
             tast::Stmt::Assign(
@@ -422,7 +437,13 @@ impl MIRer {
                     stm,
                 },
                 expr,
-            ) => self.visit_expr(expr, Some(VarDef { name, stm, ty }), dest_l, structs),
+            ) => self.visit_expr(
+                expr,
+                Some(VarDef { name, stm, ty }),
+                Mode::default(),
+                dest_l,
+                structs,
+            ),
             tast::Stmt::Assign(place, expr) => match place.kind {
                 tast::PlaceKind::VarP(name) => self.visit_expr(
                     expr,
@@ -431,10 +452,62 @@ impl MIRer {
                         ty: place.ty,
                         stm: place.stm,
                     }),
+                    Mode::default(),
                     dest_l,
                     structs,
                 ),
-                _ => todo!(),
+                tast::PlaceKind::IndexP(box array, box ix) => {
+                    let array_var = self.fresh_var(array.ty.clone(), self.stm);
+                    let ix_var = self.fresh_var(ix.ty.clone(), self.stm);
+                    let array_ty = if let ArrayT(box array_ty) = &array.ty {
+                        array_ty.clone()
+                    } else {
+                        panic!("Compiler error")
+                    };
+
+                    // Create a temporary destination variable to hold the result of the rhs
+                    let dest_v = self.fresh_var(array_ty, self.stm);
+
+                    // Finally, assign to the indexed variable
+                    let dest_l = self.insert_assign_instr(
+                        Place::IndexP(array_var.name.clone(), ix_var.name.clone()),
+                        Self::visit_vardef(dest_v.clone(), Mode::default(), Some(&array_var)),
+                        [(DefaultB, dest_l)],
+                    );
+
+                    // Assign the two temporary variables
+                    // Note: ix is compute AFTER e, so appears first here
+                    let dest_l =
+                        self.visit_expr(ix, Some(ix_var.clone()), Mode::default(), dest_l, structs);
+                    let dest_l = self.visit_expr(
+                        array,
+                        Some(array_var.clone()),
+                        Mode::MutBorrowed,
+                        dest_l,
+                        structs,
+                    );
+
+                    // Assign the tmp variable for the result of the index
+                    let dest_l = self.visit_expr(
+                        expr,
+                        Some(dest_v.clone()),
+                        Mode::default(),
+                        dest_l,
+                        structs,
+                    );
+
+                    // Declare temporary variables;
+                    let dest_l =
+                        self.insert(self.instr(InstrKind::Declare(ix_var)), [(DefaultB, dest_l)]);
+                    let dest_l = self.insert(
+                        self.instr(InstrKind::Declare(array_var)),
+                        [(DefaultB, dest_l)],
+                    );
+                    self.insert(self.instr(InstrKind::Declare(dest_v)), [(DefaultB, dest_l)])
+                }
+                tast::PlaceKind::FieldP(box _strukt, box _field) => {
+                    todo!()
+                }
             },
             tast::Stmt::While { cond, body } => {
                 let loop_l = self.fresh_label();
@@ -450,7 +523,8 @@ impl MIRer {
                 );
 
                 // Compute the condition.
-                let cond_l: CfgLabel = self.visit_expr(cond, Some(cond_v.clone()), if_l, structs);
+                let cond_l: CfgLabel =
+                    self.visit_expr(cond, Some(cond_v.clone()), Mode::default(), if_l, structs);
                 self.insert_at(
                     loop_l.clone(),
                     self.instr(InstrKind::Noop),
@@ -460,7 +534,7 @@ impl MIRer {
                 // Declare the condition and loop
                 self.insert(self.instr(InstrKind::Declare(cond_v)), [(DefaultB, loop_l)])
             }
-            tast::Stmt::ExprS(e) => self.visit_expr(e, None, dest_l, structs),
+            tast::Stmt::ExprS(e) => self.visit_expr(e, None, Mode::default(), dest_l, structs),
         }
     }
 

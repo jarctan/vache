@@ -206,6 +206,13 @@ impl<'a> Interpreter<'a> {
             .unwrap()
     }
 
+    /// Gets a value from the dynamic store/slab.
+    fn get_value_mut(&mut self, value: ValueRef) -> &mut Value {
+        self.env[usize::from(value.stratum)]
+            .get_value_mut(value.key)
+            .unwrap()
+    }
+
     /// Gets the value of a variable.
     fn get_var_value(&self, v: impl AsRef<Var>) -> &Value {
         self.get_value(self.get_var(v))
@@ -226,7 +233,7 @@ impl<'a> Interpreter<'a> {
                 let v_ref = self.get_var(v);
                 match v.mode {
                     Mode::Cloned => self.add_value(self.get_value(v_ref).clone(), stratum),
-                    Mode::Moved | Mode::Borrowed => {
+                    Mode::Moved | Mode::Borrowed | Mode::MutBorrowed => {
                         assert!(stratum >= v_ref.stratum, "Runtime error: ownership addressing should be specified as owned if moving variable out of its stratum");
                         v_ref
                     }
@@ -275,7 +282,30 @@ impl<'a> Interpreter<'a> {
                 self.set_var(v, value);
                 DefaultB
             }
-            InstrKind::Assign(_, _) => todo!(),
+            InstrKind::Assign(IndexP(array, index), rvalue) => {
+                let array_ref = self.get_var(array);
+                let stm = array_ref.stratum;
+
+                let value = self.visit_rvalue(rvalue, stm);
+
+                let index = self.get_var_value(index);
+                let index = if let IntV(index) = index {
+                    index.to_usize().expect("Index is too big")
+                } else {
+                    panic!("Runtime error: index should be an integer")
+                };
+
+                if let ArrayV(array) = self.get_value_mut(array_ref) {
+                    array[index] = value;
+                } else {
+                    panic!("Runtime error: indexed element should be an array")
+                }
+                DefaultB
+            }
+
+            InstrKind::Assign(FieldP(_, _), _) => {
+                todo!()
+            }
             InstrKind::Call {
                 name,
                 args,

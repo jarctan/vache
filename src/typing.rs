@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use ExprKind::*;
+use PlaceKind::*;
 use Ty::*;
 
 use crate::ast;
@@ -175,7 +176,7 @@ impl Typer {
     }
 
     /// Types a place (lhs expression).
-    fn visit_place(&self, place: ast::Place) -> Place {
+    fn visit_place(&mut self, place: ast::Place) -> Place {
         match place {
             ast::Place::VarP(var) => {
                 let (vardef, stm) = self
@@ -183,7 +184,21 @@ impl Typer {
                     .unwrap_or_else(|| panic!("Assigning to an undeclared variable {var}"));
                 Place::var(var, vardef.ty.clone(), stm)
             }
-            ast::Place::IndexP(_, _) => todo!(),
+            ast::Place::IndexP(box e, box ix) => {
+                let e = self.visit_expr(e);
+                let ix = self.visit_expr(ix);
+                if let ArrayT(box item_ty) = &e.ty && let IntT = ix.ty {
+                    let ty = item_ty.clone(); // Needed now because we move e after
+                    let e_stm = e.stm; // Needed now because we move e after
+                    Place {
+                        kind: IndexP(boxed(e), boxed(ix)),
+                        ty,
+                        stm: e_stm,
+                    }
+                } else {
+                    panic!("Only integer indexing is supported, and for arrays only");
+                }
+            }
             ast::Place::FieldP(_, _) => todo!(),
         }
     }

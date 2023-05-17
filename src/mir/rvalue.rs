@@ -12,6 +12,8 @@ pub enum Mode {
     /// Have a reference onto that value.
     #[default]
     Borrowed,
+    /// Have a mutable reference onto that value.
+    MutBorrowed,
     /// Clone the value to own it.
     Cloned,
     /// Move the value out of its original variable.
@@ -54,6 +56,7 @@ impl fmt::Debug for VarMode {
             Cloned => write!(f, "^{}", self.var),
             Moved => write!(f, "!{}", self.var),
             Borrowed => write!(f, "&{}", self.var),
+            MutBorrowed => write!(f, "&mut {}", self.var),
         }
     }
 }

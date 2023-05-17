@@ -53,6 +53,17 @@ impl Env {
         Some(value)
     }
 
+    /// Gets a mutable reference to a value from the environment, based on the
+    /// key in the slab.
+    pub fn get_value_mut(&mut self, key: usize) -> Option<&mut Value> {
+        let value = self.slab.get_mut(key)?;
+        assert!(
+            !matches!(value, Value::UninitV),
+            "Runtime error: getting an uninitialized value"
+        );
+        Some(value)
+    }
+
     /// Adds a value to that environment, returning the key to it in the slab.
     pub fn add_value(&mut self, value: Value) -> ValueRef {
         ValueRef {

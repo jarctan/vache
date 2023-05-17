@@ -14,5 +14,5 @@ fn separate_index_for_array() {
 
 #[test]
 fn simple_array_assignment() {
-    test(examples::simple_array_assignment(), "zucchini 2\n");
+    test(examples::simple_array_assignment(), "cucumber 2\n");
 }

@@ -91,6 +91,7 @@ impl InstrKind {
             InstrKind::Declare(v) => Some(&v.name),
             InstrKind::Call { destination: v, .. } => v.as_ref(),
             InstrKind::Assign(VarP(v), _) => Some(v),
+            InstrKind::Assign(IndexP(array, _), _) => Some(array),
             InstrKind::Assign(_, _) => todo!(),
         }
     }

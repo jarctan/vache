@@ -23,8 +23,105 @@ impl Compiler {
             #![allow(unused_mut)]
 
             extern crate rug;
-            use std::borrow::{Cow, Borrow};
-            use std::ops::{Sub, Add, Rem, Mul, Div};
+            use std::borrow::{Borrow, BorrowMut};
+            use std::fmt;
+            use std::ops::{Add, Deref, DerefMut, Div, Mul, Rem, Sub};
+
+            pub enum Cow<'a, B>
+            where
+                B: 'a + Clone,
+            {
+                Borrowed(&'a B),
+                MutBorrowed(&'a mut B),
+                Owned(B),
+            }
+
+            impl<B: Clone> fmt::Debug for Cow<'_, B>
+            where
+                B: fmt::Debug,
+            {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    match *self {
+                        Cow::Borrowed(ref b) => write!(f, "&{:?}", b),
+                        Cow::MutBorrowed(ref b) => write!(f, "&mut {:?}", b),
+                        Cow::Owned(ref o) => write!(f, "{:?}", o),
+                    }
+                }
+            }
+
+            impl<B: Clone> fmt::Display for Cow<'_, B>
+            where
+                B: fmt::Display,
+            {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    match *self {
+                        Cow::Borrowed(ref b) => fmt::Display::fmt(b, f),
+                        Cow::MutBorrowed(ref b) => fmt::Display::fmt(b, f),
+                        Cow::Owned(ref o) => fmt::Display::fmt(o, f),
+                    }
+                }
+            }
+
+            impl<'a, B: 'a + Clone> Clone for Cow<'a, B> {
+                fn clone(&self) -> Self {
+                    match self {
+                        Cow::Borrowed(b) => Cow::Borrowed(b),
+                        Cow::MutBorrowed(b) => {
+                            let b: &B = b.borrow();
+                            Cow::Owned(b.to_owned())
+                        }
+                        Cow::Owned(ref b) => {
+                            let b: &B = b.borrow();
+                            Cow::Owned(b.to_owned())
+                        }
+                    }
+                }
+
+                fn clone_from(&mut self, source: &Self) {
+                    match (self, source) {
+                        (&mut Cow::Owned(ref mut dest), Cow::Owned(ref o)) => o.borrow().clone_into(dest),
+                        (t, s) => *t = s.clone(),
+                    }
+                }
+            }
+
+            impl<B: Clone> Cow<'_, B> {
+                pub fn into_owned(self) -> B {
+                    match self {
+                        Cow::Borrowed(borrowed) => borrowed.clone(),
+                        Cow::MutBorrowed(borrowed) => (*borrowed).clone(),
+                        Cow::Owned(owned) => owned,
+                    }
+                }
+            }
+
+            impl<B: Clone> Deref for Cow<'_, B> {
+                type Target = B;
+
+                fn deref(&self) -> &B {
+                    match self {
+                        Cow::Borrowed(borrowed) => borrowed,
+                        Cow::MutBorrowed(borrowed) => borrowed,
+                        Cow::Owned(ref owned) => owned.borrow(),
+                    }
+                }
+            }
+
+            impl<B: Clone> DerefMut for Cow<'_, B> {
+                fn deref_mut(&mut self) -> &mut B {
+                    match self {
+                        Cow::Borrowed(borrowed) => {
+                            *self = Cow::Owned(borrowed.clone());
+                            match self {
+                                Cow::Owned(ref mut owned) => owned,
+                                Cow::Borrowed(..) | Cow::MutBorrowed(..) => unreachable!(),
+                            }
+                        }
+                        Cow::MutBorrowed(borrowed) => borrowed,
+                        Cow::Owned(ref mut owned) => owned,
+                    }
+                }
+            }
 
             /// Prelude function.
             pub(crate) fn __eq<B: PartialEq + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
@@ -34,10 +131,28 @@ impl Compiler {
             }
 
             /// Prelude function.
-            pub(crate) fn __neq<B: PartialEq + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
-                let b1: &B = x.borrow();
-                let b2: &B = y.borrow();
-                b1 != b2
+            pub(crate) fn __add<'a, B: Add<Output = B> + Clone>(x: Cow<B>, y: Cow<B>) -> Cow<'a, B> {
+                Cow::Owned(x.into_owned() + y.into_owned())
+            }
+
+            /// Prelude function.
+            pub(crate) fn __sub<'a, B: Sub<Output = B> + Clone>(x: Cow<B>, y: Cow<B>) -> Cow<'a, B> {
+                Cow::Owned(x.into_owned() - y.into_owned())
+            }
+
+            /// Prelude function.
+            pub(crate) fn __mul<'a, B: Mul<Output = B> + Clone>(x: Cow<B>, y: Cow<B>) -> Cow<'a, B> {
+                Cow::Owned(x.into_owned() * y.into_owned())
+            }
+
+            /// Prelude function.
+            pub(crate) fn __div<'a, B: Div<Output = B> + Clone>(x: Cow<B>, y: Cow<B>) -> Cow<'a, B> {
+                Cow::Owned(x.into_owned() / y.into_owned())
+            }
+
+            /// Prelude function.
+            pub(crate) fn __rem<'a, B: Rem<Output = B> + Clone>(x: Cow<B>, y: Cow<B>) -> Cow<'a, B> {
+                Cow::Owned(x.into_owned() % y.into_owned())
             }
 
             /// Prelude function.
@@ -48,75 +163,40 @@ impl Compiler {
             }
 
             /// Prelude function.
-            pub(crate) fn __gt<B: PartialOrd + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
-                let b1: &B = x.borrow();
-                let b2: &B = y.borrow();
-                b1 > b2
-            }
-
-            /// Prelude function.
-            pub(crate) fn __le<B: PartialOrd + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
-                let b1: &B = x.borrow();
-                let b2: &B = y.borrow();
-                b1 <= b2
-            }
-
-            /// Prelude function.
-            pub(crate) fn __lt<B: PartialOrd + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
-                let b1: &B = x.borrow();
-                let b2: &B = y.borrow();
-                b1 < b2
-            }
-
-            /// Prelude function.
-            pub(crate) fn __add<'a, B: Add<Output = B> + Clone>(
-                x: Cow<B>,
-                y: Cow<B>,
-            ) -> Cow<'a, B> {
-                Cow::Owned(x.into_owned() + y.into_owned())
-            }
-
-            /// Prelude function.
-            pub(crate) fn __sub<'a, B: Sub<Output = B> + Clone>(
-                x: Cow<B>,
-                y: Cow<B>,
-            ) -> Cow<'a, B> {
-                Cow::Owned(x.into_owned() - y.into_owned())
-            }
-
-            /// Prelude function.
-            pub(crate) fn __mul<'a, B: Mul<Output = B> + Clone>(
-                x: Cow<B>,
-                y: Cow<B>,
-            ) -> Cow<'a, B> {
-                Cow::Owned(x.into_owned() * y.into_owned())
-            }
-
-            /// Prelude function.
-            pub(crate) fn __div<'a, B: Div<Output = B> + Clone>(
-                x: Cow<B>,
-                y: Cow<B>,
-            ) -> Cow<'a, B> {
-                Cow::Owned(x.into_owned() / y.into_owned())
-            }
-
-            /// Prelude function.
-            pub(crate) fn __rem<'a, B: Rem<Output = B> + Clone>(
-                x: Cow<B>,
-                y: Cow<B>,
-            ) -> Cow<'a, B> {
-                Cow::Owned(x.into_owned() % y.into_owned())
+            #[allow(clippy::ptr_arg)]
+            pub(crate) fn __borrow<'b, 'c: 'b, 'a, B: Clone>(cow: &'c Cow<'a, B>) -> Cow<'b, B> {
+                match cow {
+                    Cow::Borrowed(b) => Cow::Borrowed(b),
+                    Cow::MutBorrowed(b) => Cow::Borrowed(b),
+                    Cow::Owned(ref o) => {
+                        let b: &'c B = o.borrow();
+                        Cow::Borrowed(b)
+                    }
+                }
             }
 
             /// Prelude function.
             #[allow(clippy::ptr_arg)]
-            pub(crate) fn __borrow<'a, B: ?Sized + ToOwned>(cow: &'a Cow<'a, B>) -> Cow<'a, B> {
-                match *cow {
+            pub(crate) fn __borrow_mut<'b, 'c: 'b, 'a: 'b, B: Clone>(cow: &'c mut Cow<'a, B>) -> Cow<'b, B> {
+                match cow {
                     Cow::Borrowed(b) => Cow::Borrowed(b),
-                    Cow::Owned(ref o) => {
-                        let b: &'a B = o.borrow();
-                        Cow::Borrowed(b)
+                    Cow::MutBorrowed(b) => Cow::Borrowed(b),
+                    Cow::Owned(ref mut o) => {
+                        let b: &'c mut B = o.borrow_mut();
+                        Cow::MutBorrowed(b)
                     }
+                }
+            }
+
+            impl<'a, B: Clone> Borrow<B> for Cow<'a, B> {
+                fn borrow(&self) -> &B {
+                    self
+                }
+            }
+
+            impl<'a, B: Clone> BorrowMut<B> for Cow<'a, B> {
+                fn borrow_mut(&mut self) -> &mut B {
+                    self
                 }
             }
         )
@@ -159,7 +239,7 @@ impl Compiler {
             }
             ArrayT(box ty) => {
                 let ty = Self::translate_type(ty, show_lifetime);
-                quote!(Vec<#ty>)
+                quote!(Cow<Vec<#ty>>)
             }
         }
     }
@@ -190,6 +270,7 @@ impl Compiler {
         match var.mode {
             Mode::Cloned => quote!(#name.clone()),
             Mode::Borrowed => quote!(__borrow(&#name)),
+            Mode::MutBorrowed => quote!(__borrow_mut(&mut #name)),
             Mode::Moved => quote!(#name),
         }
     }
@@ -217,6 +298,7 @@ impl Compiler {
                 let array_ident = format_ident!("{}", array.var.as_str());
                 match array.mode {
                     Mode::Borrowed => quote!(__borrow(#array_ident[#index])),
+                    Mode::MutBorrowed => quote!(__borrow_mut(#array_ident[#index])),
                     Mode::Cloned => quote!(#array_ident[#index].clone()),
                     Mode::Moved => quote!(#array_ident.remove(#index)),
                 }
@@ -225,7 +307,7 @@ impl Compiler {
             RValue::Array(array) => {
                 let items: Vec<TokenStream> =
                     array.into_iter().map(|item| self.visit_var(item)).collect();
-                quote!(vec![#(#items),*])
+                quote!(Cow::Owned(vec![#(#items),*]))
             }
         }
     }
@@ -246,6 +328,15 @@ impl Compiler {
                 let rhs = self.visit_rvalue(rhs.clone());
                 quote! {
                     #lhs = #rhs;
+                }
+            }
+            crate::mir::InstrKind::Assign(IndexP(array, index), rhs) => {
+                let array = format_ident!("{}", array.as_str());
+                let index = format_ident!("{}", index.as_str());
+                let index = quote!(#index.to_usize().unwrap());
+                let rhs = self.visit_rvalue(rhs.clone());
+                quote! {
+                    #array[#index] = #rhs;
                 }
             }
             crate::mir::InstrKind::Assign(_, _) => todo!(),
