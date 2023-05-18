@@ -223,6 +223,21 @@ impl<'a> Interpreter<'a> {
         self.stdout.string().unwrap()
     }
 
+    /// Gets a variable, possibly cloning it if its addressing mode and stratum
+    /// require so.
+    ///
+    /// No-op if we decide not to clone, otherwise returns the identifier of the
+    /// location of the cloned variable.
+    pub fn opt_clone(&mut self, mode: &Mode, v_ref: ValueRef, stratum: Stratum) -> ValueRef {
+        match mode {
+            Mode::Cloned => self.add_value(self.get_value(v_ref).clone(), stratum),
+            Mode::Moved | Mode::Borrowed | Mode::MutBorrowed => {
+                assert!(stratum >= v_ref.stratum, "Runtime error: ownership addressing should be specified as owned if moving variable out of its stratum");
+                v_ref
+            }
+        }
+    }
+
     /// Visit a right-value.
     fn visit_rvalue(&mut self, rvalue: &'a RValue, stratum: Stratum) -> ValueRef {
         match rvalue {
@@ -231,25 +246,19 @@ impl<'a> Interpreter<'a> {
             RValue::String(s) => self.add_value(StrV(s.clone()), stratum),
             RValue::Var(v) => {
                 let v_ref = self.get_var(v);
-                match v.mode {
-                    Mode::Cloned => self.add_value(self.get_value(v_ref).clone(), stratum),
-                    Mode::Moved | Mode::Borrowed | Mode::MutBorrowed => {
-                        assert!(stratum >= v_ref.stratum, "Runtime error: ownership addressing should be specified as owned if moving variable out of its stratum");
-                        v_ref
-                    }
-                }
+                self.opt_clone(&v.mode, v_ref, stratum)
             }
             RValue::Field(lhs, field) => match self.get_var_value(lhs) {
                 StructV(_, strukt) => strukt[field],
                 _ => panic!("Runtime error: field access should only be on structs"),
             },
-            RValue::Index(array, index) => {
+            RValue::Index(array, index, mode) => {
                 match (self.get_var_value(array), self.get_var_value(index)) {
                     (ArrayV(array), IntV(index)) => {
                         let index = index
                             .to_usize()
                             .expect("Runtime error: array index is too big");
-                        array[index]
+                        self.opt_clone(mode, array[index], stratum)
                     }
                     _ => panic!("Runtime error: incorrect indexing"),
                 }

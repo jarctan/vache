@@ -21,6 +21,7 @@ impl Compiler {
         quote!(
             #![allow(clippy::needless_late_init)]
             #![allow(unused_mut)]
+            #![allow(dead_code)]
 
             use std::borrow::{Borrow, BorrowMut};
             use std::fmt;
@@ -199,8 +200,8 @@ impl Compiler {
                 }
             }
 
-            impl<'a, 'c, 'b: 'c> Cow<'a, Vec<Cow<'b, String>>> {
-                pub fn remove(self, index: usize) -> Cow<'c, String> {
+            impl<'a, 'c, 'b: 'c, B: Clone> Cow<'a, Vec<Cow<'b, B>>> {
+                pub fn remove(self, index: usize) -> Cow<'c, B> {
                     match self {
                         Cow::Borrowed(b) => b[index].clone(),
                         Cow::MutBorrowed(array) => array.remove(index),
@@ -301,15 +302,15 @@ impl Compiler {
                 let field = format_ident!("{field}");
                 quote!(#s.#field)
             }
-            RValue::Index(array, index) => {
+            RValue::Index(array, index, mode) => {
                 let index = format_ident!("{}", index.var.as_str());
                 let index = quote!(#index.to_usize().unwrap());
-                let array_ident = format_ident!("{}", array.var.as_str());
-                match array.mode {
-                    Mode::Borrowed => quote!(__borrow(#array_ident[#index])),
-                    Mode::MutBorrowed => quote!(__borrow_mut(#array_ident[#index])),
-                    Mode::Cloned => quote!(#array_ident[#index].clone()),
-                    Mode::Moved => quote!(#array_ident.remove(#index)),
+                let array = self.visit_var(array);
+                match mode {
+                    Mode::Borrowed => quote!(__borrow(#array[#index])),
+                    Mode::MutBorrowed => quote!(__borrow_mut(&mut #array[#index])),
+                    Mode::Cloned => quote!(#array[#index].clone()),
+                    Mode::Moved => quote!(Cow::remove(#array, #index)),
                 }
             }
             RValue::Struct { .. } => todo!(),

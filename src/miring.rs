@@ -325,7 +325,7 @@ impl MIRer {
                 let dest_l = if let Some(dest_v) = dest_v {
                     self.insert_assign_instr(
                         dest_v.name,
-                        RValue::Index(e_ref, ix_ref),
+                        RValue::Index(e_ref, ix_ref, Mode::MutBorrowed),
                         [(DefaultB, dest_l)],
                     )
                 } else {
@@ -430,20 +430,6 @@ impl MIRer {
                     self.visit_expr(expr, Some(vardef.clone()), Mode::default(), dest_l, structs);
                 self.insert(self.instr(InstrKind::Declare(vardef)), [(DefaultB, expr_l)])
             }
-            tast::Stmt::Assign(
-                tast::Place {
-                    kind: tast::PlaceKind::VarP(name),
-                    ty,
-                    stm,
-                },
-                expr,
-            ) => self.visit_expr(
-                expr,
-                Some(VarDef { name, stm, ty }),
-                Mode::default(),
-                dest_l,
-                structs,
-            ),
             tast::Stmt::Assign(place, expr) => match place.kind {
                 tast::PlaceKind::VarP(name) => self.visit_expr(
                     expr,
@@ -491,7 +477,7 @@ impl MIRer {
                     let dest_l = self.visit_expr(
                         expr,
                         Some(dest_v.clone()),
-                        Mode::default(),
+                        Mode::MutBorrowed,
                         dest_l,
                         structs,
                     );

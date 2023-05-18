@@ -5,8 +5,10 @@ use std::fmt;
 use std::iter::Sum;
 use std::ops::{Add, BitOr, Deref, DerefMut, Sub};
 
+use Place::*;
+
 use super::borrow::{Borrow, Borrows};
-use crate::mir::{CfgLabel, Mode, Var, VarMode};
+use crate::mir::{CfgLabel, Place, Var, VarMode};
 
 /// A loan ledger.
 #[derive(Clone, PartialEq, Eq)]
@@ -32,11 +34,33 @@ impl Ledger {
     /// Returns the complete (deep, nested) list of all borrows resulting from
     /// the borrow of `var` at CFG label `label`.
     pub fn borrow(&self, var: &VarMode, label: CfgLabel) -> Borrows {
-        if var.mode == Mode::Borrowed {
+        if var.mode.is_borrowing() {
             let var = var.var.clone();
             self.get(&var).cloned().unwrap_or_default() + Borrow { var, label }
         } else {
             Borrows::new()
+        }
+    }
+
+    /// Records new `borrows` related to the borrower that living at `place`.
+    pub fn add_borrows(&mut self, place: &Place, borrows: Borrows) {
+        match place {
+            VarP(v) => {
+                self.borrows.insert(v.clone(), borrows);
+            }
+            IndexP(array, _) => {
+                // If you assign something to an element of an array, we need to ADD the borrows
+                // to the old ones, since we have no way to know which (if any) borrows are
+                // invalidated by that assignment.
+                let entry = self.borrows.entry(array.clone());
+                entry.or_default().extend(borrows);
+            }
+            FieldP(strukt, _) => {
+                let entry = self.borrows.entry(strukt.clone());
+                entry.or_default().extend(borrows); // TODO: change, too coarse
+                                                    // grained. Separate borrows
+                                                    // between fields.
+            }
         }
     }
 

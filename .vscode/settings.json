@@ -29,7 +29,8 @@
         "preneighbors",
         "Deque",
         "mirer",
-        "struct"
+        "struct",
+        "varmode",
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }

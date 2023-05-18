@@ -1,6 +1,7 @@
 //! Defining right values in the MIR.
 
-use std::{collections::HashMap, fmt};
+use std::collections::HashMap;
+use std::fmt;
 
 use rug::Integer;
 
@@ -20,6 +21,31 @@ pub enum Mode {
     ///
     /// Is only safe when the original value is not used afterwards!
     Moved,
+}
+
+impl Mode {
+    /// Is this a borrowing mode?
+    pub fn is_borrowing(&self) -> bool {
+        use Mode::*;
+        // Note: we state all cases explicitly to force an error if we were to add new
+        // variants.
+        match self {
+            Borrowed | MutBorrowed => true,
+            Cloned | Moved => false,
+        }
+    }
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Mode::*;
+        match self {
+            Borrowed => write!(f, "&"),
+            MutBorrowed => write!(f, "&mut "),
+            Cloned => write!(f, "^"),
+            Moved => write!(f, "!"),
+        }
+    }
 }
 
 /// An variable with an ownership modality.
@@ -51,13 +77,7 @@ impl VarMode {
 
 impl fmt::Debug for VarMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use Mode::*;
-        match self.mode {
-            Cloned => write!(f, "^{}", self.var),
-            Moved => write!(f, "!{}", self.var),
-            Borrowed => write!(f, "&{}", self.var),
-            MutBorrowed => write!(f, "&mut {}", self.var),
-        }
+        write!(f, "{}{}", self.mode, self.var)
     }
 }
 
@@ -81,7 +101,7 @@ pub enum RValue {
     /// A field in a structure.
     Field(VarMode, String),
     /// Index into an array/map.
-    Index(VarMode, VarMode),
+    Index(VarMode, VarMode, Mode),
     /// Structure instantiation.
     Struct {
         /// Name of the structure to instantiate.
@@ -102,7 +122,7 @@ impl fmt::Debug for RValue {
             String(s) => write!(f, "\"{s}\""),
             Var(v) => write!(f, "{v:?}"),
             Field(v, field) => write!(f, "{v:?}.{field}"),
-            Index(array, index) => write!(f, "{array:?}[{index:?}]"),
+            Index(array, index, mode) => write!(f, "{mode}{array:?}[{index:?}]"),
             Struct { name, fields } => {
                 let mut res = f.debug_struct(name);
                 for (name, var) in fields {

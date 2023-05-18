@@ -136,6 +136,18 @@ impl InstrKind {
                         var: rhs2,
                         mode: Mode::MutBorrowed,
                     },
+                    _,
+                ),
+            ) => boxed([lhs, rhs1, rhs2].into_iter()),
+            InstrKind::Assign(
+                VarP(lhs),
+                RValue::Index(
+                    VarMode { var: rhs1, mode: _ },
+                    VarMode {
+                        var: rhs2,
+                        mode: Mode::MutBorrowed,
+                    },
+                    Mode::MutBorrowed,
                 ),
             ) => boxed([lhs, rhs1, rhs2].into_iter()),
             InstrKind::Assign(
@@ -146,7 +158,12 @@ impl InstrKind {
                         mode: Mode::MutBorrowed,
                     },
                     _,
+                    _,
                 ),
+            ) => boxed([lhs, rhs].into_iter()),
+            InstrKind::Assign(
+                VarP(lhs),
+                RValue::Index(VarMode { var: rhs, mode: _ }, _, Mode::MutBorrowed),
             ) => boxed([lhs, rhs].into_iter()),
             InstrKind::Assign(
                 VarP(lhs),
@@ -156,6 +173,7 @@ impl InstrKind {
                         var: rhs,
                         mode: Mode::MutBorrowed,
                     },
+                    _,
                 ),
             ) => boxed([lhs, rhs].into_iter()),
             InstrKind::Assign(

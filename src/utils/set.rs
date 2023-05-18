@@ -118,6 +118,17 @@ impl<'a, T: Eq + Hash> Sub<Option<&'a T>> for Set<T> {
     }
 }
 
+impl<T: Eq + Hash> Add<Option<T>> for Set<T> {
+    type Output = Set<T>;
+
+    fn add(mut self, rhs: Option<T>) -> Self {
+        if let Some(rhs) = rhs {
+            self.0.insert(rhs);
+        }
+        self
+    }
+}
+
 impl<'a, T: Eq + Hash> Sub<&'a T> for Set<T> {
     type Output = Set<T>;
 

@@ -1,10 +1,11 @@
 //! Implementing the liveness analysis algorithm.
 
+use super::borrow::Borrows;
 use super::flow::Flow;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
 use crate::examples::Var;
-use crate::mir::{Cfg, CfgLabel, InstrKind, Mode, RValue};
+use crate::mir::{Cfg, CfgLabel, InstrKind, Mode, RValue, VarMode};
 use crate::utils::set::Set;
 
 /// Variable liveness analysis.
@@ -35,20 +36,24 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                 InstrKind::Declare(var) => outs.clone() - &var.name,
                 InstrKind::Assign(lhs, RValue::Unit)
                 | InstrKind::Assign(lhs, RValue::String(_))
-                | InstrKind::Assign(lhs, RValue::Integer(_)) => outs.clone() - lhs.root(),
+                | InstrKind::Assign(lhs, RValue::Integer(_)) => {
+                    outs.clone() - lhs.defs() + lhs.uses()
+                }
                 InstrKind::Assign(lhs, RValue::Var(rhs))
                 | InstrKind::Assign(lhs, RValue::Field(rhs, _)) => {
-                    outs.clone() - lhs.root() + rhs.var.clone()
+                    outs.clone() - lhs.defs() + lhs.uses() + rhs.var.clone()
                 }
-                InstrKind::Assign(lhs, RValue::Index(array, index)) => {
-                    outs.clone() - lhs.root() + array.var.clone() + index.var.clone()
+                InstrKind::Assign(lhs, RValue::Index(array, index, _)) => {
+                    outs.clone() - lhs.defs() + lhs.uses() + array.var.clone() + index.var.clone()
                 }
                 InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
-                    outs.clone() - lhs.root()
+                    outs.clone() - lhs.defs()
+                        + lhs.uses()
                         + Set::from_iter(fields.values().map(|arg| &arg.var).cloned())
                 }
                 InstrKind::Assign(lhs, RValue::Array(array)) => {
-                    outs.clone() - lhs.root()
+                    outs.clone() - lhs.defs()
+                        + lhs.uses()
                         + Set::from_iter(array.iter().map(|arg| &arg.var).cloned())
                 }
                 InstrKind::Call {
@@ -88,7 +93,7 @@ fn loan_liveness(
     cfg: &Cfg,
     entry_l: &CfgLabel,
     _exit_l: &CfgLabel,
-    var_flow: Cfg<Flow<Set<Var>>>,
+    var_flow: &Cfg<Flow<Set<Var>>>,
 ) -> Cfg<Flow<Ledger>> {
     let out_of_scope = var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
 
@@ -108,53 +113,58 @@ fn loan_liveness(
                 InstrKind::Declare(var) => ins.clone() - &var.name,
                 InstrKind::Assign(lhs, RValue::Unit)
                 | InstrKind::Assign(lhs, RValue::String(_))
-                | InstrKind::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs.root(),
+                | InstrKind::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs.defs(),
                 InstrKind::Assign(lhs, RValue::Var(rhs))
                 | InstrKind::Assign(lhs, RValue::Field(rhs, _)) => {
-                    let mut res = ins.clone() - lhs.root();
-                    if var_flow[label].outs.contains(lhs.root()) {
-                        res = res + (lhs.root().clone(), ins.borrow(rhs, label.clone()));
+                    let mut ledger = ins.clone();
+                    if var_flow[label].outs.contains(lhs.defs()) {
+                        ledger.add_borrows(lhs, ins.borrow(rhs, label.clone()));
+                    } else {
+                        ledger.remove(lhs.defs());
                     }
-                    res
+                    ledger
                 }
-                InstrKind::Assign(lhs, RValue::Index(array, index)) => {
-                    let mut res = ins.clone() - lhs.root();
-                    if var_flow[label].outs.contains(lhs.root()) {
-                        res = res
-                            + (
-                                lhs.root().clone(),
-                                ins.borrow(array, label.clone()) + ins.borrow(index, label.clone()),
-                            );
+                InstrKind::Assign(lhs, RValue::Index(array, index, _)) => {
+                    let mut ledger = ins.clone();
+                    if var_flow[label].outs.contains(lhs.defs()) {
+                        ledger.add_borrows(
+                            lhs,
+                            ins.borrow(array, label.clone()) + ins.borrow(index, label.clone()),
+                        );
+                    } else {
+                        ledger.remove(lhs.defs());
                     }
-                    res
+                    ledger
                 }
                 InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
-                    let mut res = ins.clone() - lhs.root();
-                    if var_flow[label].outs.contains(lhs.root()) {
-                        res = res
-                            + (
-                                lhs.root().clone(),
-                                fields
-                                    .values()
-                                    .map(|field| ins.borrow(field, label.clone()))
-                                    .sum::<Set<Borrow>>(),
-                            );
+                    let mut ledger = ins.clone();
+                    if var_flow[label].outs.contains(lhs.defs()) {
+                        ledger.add_borrows(
+                            lhs,
+                            fields
+                                .values()
+                                .map(|field| ins.borrow(field, label.clone()))
+                                .sum::<Borrows>(),
+                        );
+                    } else {
+                        ledger.remove(lhs.defs());
                     }
-                    res
+                    ledger
                 }
                 InstrKind::Assign(lhs, RValue::Array(array)) => {
-                    let mut res = ins.clone() - lhs.root();
-                    if var_flow[label].outs.contains(lhs.root()) {
-                        res = res
-                            + (
-                                lhs.root().clone(),
-                                array
-                                    .iter()
-                                    .map(|item| ins.borrow(item, label.clone()))
-                                    .sum::<Set<Borrow>>(),
-                            );
+                    let mut ledger = ins.clone();
+                    if var_flow[label].outs.contains(lhs.defs()) {
+                        ledger.add_borrows(
+                            lhs,
+                            array
+                                .iter()
+                                .map(|item| ins.borrow(item, label.clone()))
+                                .sum::<Borrows>(),
+                        );
+                    } else {
+                        ledger.remove(lhs.defs());
                     }
-                    res
+                    ledger
                 }
                 InstrKind::Call {
                     name: _,
@@ -168,7 +178,7 @@ fn loan_liveness(
                                 destination.clone(),
                                 args.iter()
                                     .map(|arg| ins.borrow(arg, label.clone()))
-                                    .sum::<Set<Borrow>>(),
+                                    .sum::<Borrows>(),
                             );
                     }
                     res
@@ -190,6 +200,31 @@ fn loan_liveness(
     loan_flow
 }
 
+/// Check for the last-variable-use optimization on the use of `varmode`.
+///
+/// Inputs:
+/// * `varmode` to optimize
+/// * `outs`: set of variables that are alive at the end of the instruction that
+///   uses that `varmode`.
+///
+/// Mutates in place `varmode` to switch its mode to `Moved` if it's the last
+/// use of the variable.
+fn optimize_last_use(varmode: &mut VarMode, outs: &Set<Var>) {
+    match varmode.mode {
+        Mode::Cloned => {
+            if !outs.contains(&varmode.var) {
+                varmode.mode = Mode::Moved;
+            }
+        }
+        Mode::Borrowed | Mode::MutBorrowed => {
+            if !outs.contains(&varmode.var) {
+                varmode.mode = Mode::Moved;
+            }
+        }
+        Mode::Moved => (),
+    }
+}
+
 /// Liveness analysis.
 ///
 /// Takes as arguments:
@@ -199,37 +234,37 @@ fn loan_liveness(
 ///
 /// Performs liveliness analysis, determining which borrows are invalidated.
 pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
+    // Compute the two analyses
     let var_flow = var_liveness(&cfg, entry_l, exit_l);
+    let loan_flow = loan_liveness(&cfg, entry_l, exit_l, &var_flow);
 
     // Checking last variable use and replace with a move
     for (label, instr) in cfg.bfs_mut(entry_l, false) {
         match &mut instr.kind {
             InstrKind::Noop | InstrKind::Declare(_) | InstrKind::Branch(_) => (),
             InstrKind::Assign(_, RValue::Var(rhs)) => {
-                if !var_flow[&label].outs.contains(&rhs.var) {
-                    rhs.mode = Mode::Moved;
-                }
+                optimize_last_use(rhs, &var_flow[&label].outs);
             }
             InstrKind::Assign(_, RValue::Struct { name: _, fields }) => {
                 for field in fields.values_mut() {
-                    if !var_flow[&label].outs.contains(&field.var) {
-                        field.mode = Mode::Moved;
-                    }
+                    optimize_last_use(field, &var_flow[&label].outs);
                 }
             }
             InstrKind::Assign(_, RValue::Array(items)) => {
                 for item in items.iter_mut() {
-                    if !var_flow[&label].outs.contains(&item.var) {
-                        item.mode = Mode::Moved;
-                    }
+                    optimize_last_use(item, &var_flow[&label].outs);
                 }
             }
-            InstrKind::Assign(_, RValue::Index(array, index)) => {
-                if !var_flow[&label].outs.contains(&array.var) {
-                    array.mode = Mode::Moved;
-                }
-                if !var_flow[&label].outs.contains(&index.var) {
-                    index.mode = Mode::Moved;
+            InstrKind::Assign(_, RValue::Index(array, index, mode)) => {
+                let outs = &var_flow[&label].outs;
+                optimize_last_use(array, outs);
+                optimize_last_use(index, outs);
+
+                // We can optimize last use only if the `array` refers to loans that are not
+                // valid afterwards.
+                let borrows = &loan_flow[&label].ins[&array.var];
+                if borrows.iter().all(|borrow| !outs.contains(&borrow.var)) {
+                    *mode = Mode::Moved;
                 }
             }
             InstrKind::Assign(_, _) => (),
@@ -239,18 +274,14 @@ pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
                 destination: _,
             } => {
                 for arg in args {
-                    if !var_flow[&label].outs.contains(&arg.var) {
-                        arg.mode = Mode::Moved;
-                    }
+                    optimize_last_use(arg, &var_flow[&label].outs);
                 }
             }
         }
     }
 
-    let loan_flow = loan_liveness(&cfg, entry_l, exit_l, var_flow);
-
     // List all invalidated borrows.
-    let mut invalidated: Set<Borrow> = Set::new();
+    let mut invalidated: Borrows = Borrows::new();
     for (label, instr) in cfg.bfs(entry_l, false) {
         for lhs in instr.mutated_var() {
             for borrow in loan_flow[label].ins.borrows(lhs) {

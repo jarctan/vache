@@ -7,6 +7,7 @@ mod custom_addition;
 mod hello_world;
 mod id_fn;
 mod is_even;
+mod matrices;
 mod multiple_refs;
 mod out_of_scope;
 mod structures;
