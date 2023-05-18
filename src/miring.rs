@@ -230,7 +230,7 @@ impl MIRer {
                 // The switch
                 let cond_var = self.fresh_var(BoolT, self.stm);
                 let cond_l = self.insert(
-                    self.instr(InstrKind::Branch(cond_var.name.clone())),
+                    self.instr(InstrKind::Branch(VarMode::new(cond_var.name.clone(), mode))),
                     [(TrueB, iftrue_l), (FalseB, iffalse_l)],
                 );
 
@@ -498,13 +498,15 @@ impl MIRer {
             tast::Stmt::While { cond, body } => {
                 let loop_l = self.fresh_label();
 
+                self.push_scope();
+
                 // The block itself.
                 let body_l = self.visit_block(body, None, loop_l.clone(), structs);
 
                 // If statement
                 let cond_v = self.fresh_var(BoolT, self.stm);
                 let if_l = self.insert(
-                    self.instr(InstrKind::Branch(cond_v.name.clone())),
+                    self.instr(InstrKind::Branch(VarMode::refed(cond_v.name.clone()))),
                     [(TrueB, body_l), (FalseB, dest_l)],
                 );
 
@@ -518,7 +520,12 @@ impl MIRer {
                 );
 
                 // Declare the condition and loop
-                self.insert(self.instr(InstrKind::Declare(cond_v)), [(DefaultB, loop_l)])
+                let dest_l =
+                    self.insert(self.instr(InstrKind::Declare(cond_v)), [(DefaultB, loop_l)]);
+
+                self.pop_scope();
+
+                dest_l
             }
             tast::Stmt::ExprS(e) => self.visit_expr(e, None, Mode::default(), dest_l, structs),
         }

@@ -1,6 +1,7 @@
 //! Defining functions in the MIR.
 
-use super::{Cfg, CfgLabel, VarDef};
+use super::Stmt;
+use super::VarDef;
 
 /// A function in the parser AST.
 #[derive(Debug)]
@@ -14,11 +15,7 @@ pub struct Fun {
     ///
     /// If `None`, the function returns nothing.
     pub ret_v: Option<VarDef>,
-    /// Entry label in the CFG.
-    pub entry_l: CfgLabel,
-    /// Return label in the CFG.
-    pub ret_l: CfgLabel,
     /// Body of the function: a list of statements and
     /// a final expression.
-    pub body: Cfg,
+    pub body: Vec<Stmt>,
 }

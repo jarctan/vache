@@ -58,6 +58,14 @@ pub struct VarMode {
 }
 
 impl VarMode {
+    /// Constructor.
+    pub fn new(var: impl Into<Var>, mode: Mode) -> Self {
+        Self {
+            var: var.into(),
+            mode,
+        }
+    }
+
     /// A var that is taken by reference.
     pub fn refed(var: impl Into<Var>) -> Self {
         Self {

@@ -3,7 +3,7 @@
 use vache_lib::{borrow_check, check, compile, mir};
 
 fn main() {
-    let checked = check(vache_lib::examples::simple_matrix_modify());
+    let checked = check(vache_lib::examples::while_loop2());
     let mir = mir(checked);
     let mir = borrow_check(mir);
     println!("MIR: {:#?}", mir);

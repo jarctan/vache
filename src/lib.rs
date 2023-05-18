@@ -20,6 +20,7 @@ pub mod examples;
 mod interpret;
 mod mir;
 mod miring;
+mod precompile;
 mod tast;
 #[cfg(test)]
 mod tests;

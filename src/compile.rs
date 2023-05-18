@@ -5,7 +5,8 @@ use string_builder::Builder as StringBuilder;
 use Place::*;
 use Ty::*;
 
-use crate::mir::{Fun, Instr, Mode, Place, Program, RValue, Struct, Ty, VarMode};
+use crate::mir;
+use crate::precompile::{precompile, Fun, Mode, Place, Program, RValue, Stmt, Struct, Ty, VarMode};
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
@@ -213,7 +214,8 @@ impl Compiler {
     }
 
     /// Compiles a program in our language into an executable source code.
-    pub fn compile(&mut self, p: Program) -> String {
+    pub fn compile(&mut self, p: mir::Program) -> String {
+        let p = precompile(p);
         let tokens = self.visit_program(p);
         let prelude = Self::prelude();
         let file = syn::parse2(quote! {
@@ -322,35 +324,34 @@ impl Compiler {
         }
     }
 
-    /// Compiles a single CFG instruction.
-    fn visit_instr(&mut self, instr: &Instr) -> TokenStream {
-        match &instr.kind {
-            crate::mir::InstrKind::Noop => quote!(),
-            crate::mir::InstrKind::Declare(v) => {
+    /// Compiles a single statement.
+    fn visit_stmt(&mut self, stmt: Stmt) -> TokenStream {
+        match stmt {
+            Stmt::Declare(v) => {
                 let name = format_ident!("{}", v.name.as_str());
                 let ty = Self::translate_type(&v.ty, false);
                 quote! {
                     let mut #name: #ty;
                 }
             }
-            crate::mir::InstrKind::Assign(VarP(v), rhs) => {
+            Stmt::Assign(VarP(v), rhs) => {
                 let lhs = format_ident!("{}", v.as_str());
-                let rhs = self.visit_rvalue(rhs.clone());
+                let rhs = self.visit_rvalue(rhs);
                 quote! {
                     #lhs = #rhs;
                 }
             }
-            crate::mir::InstrKind::Assign(IndexP(array, index), rhs) => {
+            Stmt::Assign(IndexP(array, index), rhs) => {
                 let array = format_ident!("{}", array.as_str());
                 let index = format_ident!("{}", index.as_str());
                 let index = quote!(#index.to_usize().unwrap());
-                let rhs = self.visit_rvalue(rhs.clone());
+                let rhs = self.visit_rvalue(rhs);
                 quote! {
                     #array[#index] = #rhs;
                 }
             }
-            crate::mir::InstrKind::Assign(_, _) => todo!(),
-            crate::mir::InstrKind::Call {
+            Stmt::Assign(_, _) => todo!(),
+            Stmt::Call {
                 name,
                 args,
                 destination,
@@ -374,11 +375,11 @@ impl Compiler {
                         builder.append(" {}");
                     }
 
-                    let args = args.iter().map(|arg| self.visit_var(arg.clone()));
+                    let args = args.into_iter().map(|arg| self.visit_var(arg));
                     let fmt_str = builder.string().unwrap();
                     quote!(#prefix println!(#fmt_str, #(#args),*);)
                 } else {
-                    let args = args.iter().map(|arg| self.visit_var(arg.clone()));
+                    let args = args.into_iter().map(|arg| self.visit_var(arg));
                     let name = match name.as_str() {
                         "+" => "__add".to_string(),
                         "-" => "__sub".to_string(),
@@ -397,7 +398,40 @@ impl Compiler {
                     quote!(#prefix #name(#(#args),*);)
                 }
             }
-            crate::mir::InstrKind::Branch(_) => todo!(),
+            Stmt::If(v, iftrue, iffalse) => {
+                let v = self.visit_var(v);
+                let iftrue: Vec<TokenStream> = iftrue
+                    .into_iter()
+                    .map(|stmt| self.visit_stmt(stmt))
+                    .collect();
+                let iffalse = iffalse.into_iter().map(|stmt| self.visit_stmt(stmt));
+
+                quote! {
+                    if #v {
+                        #(#iftrue);*
+                    } else {
+                        #(#iffalse);*
+                    }
+                }
+            }
+            Stmt::Loop(stmts) => {
+                let stmts = stmts.into_iter().map(|stmt| self.visit_stmt(stmt));
+                quote! {
+                    loop {
+                        #(#stmts);*
+                    }
+                }
+            }
+            Stmt::Block(stmts) => {
+                let stmts = stmts.into_iter().map(|stmt| self.visit_stmt(stmt));
+                quote! {
+                    {
+                        #(#stmts);*
+                    }
+                }
+            }
+            Stmt::Continue => quote!(continue;),
+            Stmt::Break => quote!(break;),
         }
     }
 
@@ -416,11 +450,8 @@ impl Compiler {
             })
             .collect();
 
-        let body: TokenStream = f
-            .body
-            .bfs(&f.entry_l, false)
-            .map(|(_, instr)| self.visit_instr(instr))
-            .collect();
+        let stmts = f.body.into_iter().map(|stmt| self.visit_stmt(stmt));
+        let body = quote!(#(#stmts);*);
 
         let ret_ty = f
             .ret_v

@@ -80,7 +80,7 @@ pub enum InstrKind {
         destination: Option<Var>,
     },
     /// Asks for the truthiness of the first argument.
-    Branch(Var),
+    Branch(VarMode),
 }
 
 impl InstrKind {
