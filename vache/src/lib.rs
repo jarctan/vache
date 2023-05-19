@@ -52,7 +52,7 @@ mod steps {
     //! Only available throughout the
 
     use std::fs::{self, File};
-    use std::io::{self, Write};
+    use std::io::{self, ErrorKind, Write};
     use std::path::Path;
     use std::process::Command;
 
@@ -124,30 +124,73 @@ mod steps {
     ) -> io::Result<String> {
         let name = name.as_ref();
         cargo(compile(p), name, dest_dir)?;
+
         // Cargo run on the file
-        Command::new(format!("./{name}"))
+        let run_cmd = Command::new(format!("./{name}"))
             .current_dir(dest_dir)
-            .output()
-            .map(|output| String::from_utf8(output.stdout).unwrap())
+            .output()?;
+
+        if run_cmd.status.success() {
+            Ok(String::from_utf8(run_cmd.stdout).unwrap())
+        } else {
+            Err(io::Error::new(ErrorKind::Other, "Your program failed"))
+        }
     }
 
     /// Final stage: compiles the Rust source code down to machine code.
-    pub fn cargo(source: String, name: &str, dest_dir: &Path) -> io::Result<()> {
-        let file_path = Path::new("template/src/main.rs");
+    pub fn cargo(source_code: String, name: &str, dest_dir: &Path) -> io::Result<()> {
+        let target_dir = Path::new("vache_target");
+        let binary_name = "binary";
+        if target_dir.exists() {
+            // Check if the file exists within path A
+            let file_path = target_dir.join(".vache_info.json");
+            if !file_path.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "`{}` already exists but do not contain `{}`. Will not overwrite it.",
+                        target_dir.to_str().unwrap(),
+                        file_path.file_name().unwrap().to_str().unwrap()
+                    ),
+                ));
+            }
+        }
+
+        // Delete `/{target_dir}/src` if it exists
+        let directory_to_delete = target_dir.join("src");
+        fs::remove_dir_all(directory_to_delete)?;
+
+        // Create /{target_dir}/src
+        let file_path = target_dir.join("src/main.rs");
+        fs::create_dir_all(file_path.parent().unwrap())?;
+
+        // Write main file
         let mut file = File::create(file_path)?;
-        file.write_all(source.as_bytes())?;
+        file.write_all(source_code.as_bytes())?;
+
+        // Write config file
+        let mut file = File::create(target_dir.join(".vache_info.json"))?;
+        file.write_all(b"{\"version\": 1}")?;
+
+        // Write Cargo file
+        let mut file = File::create(target_dir.join("Cargo.toml"))?;
+        file.write_all(format!("[package]\nname = \"{binary_name}\"\nversion = \"1.0.0\"\nedition = \"2021\"\n\n[dependencies]\nrug = \"1.19.2\"\n\n[workspace]").as_bytes())?;
 
         // Cargo run on the file
-        Command::new("cargo ")
-            .current_dir("template")
+        let cargo_cmd = Command::new("cargo")
+            .current_dir(target_dir)
             .arg("run")
             .arg("--release")
             .output()?;
+        if !cargo_cmd.status.success() {
+            eprintln!("{}", String::from_utf8(cargo_cmd.stdout).unwrap());
+            eprintln!("{}", String::from_utf8(cargo_cmd.stderr).unwrap());
+            return Err(io::Error::new(ErrorKind::Other, "Cargo compilation failed"));
+        }
 
         // Copy and paste another file to a new directory
-        let source_file = Path::new("template/target/release/binary");
+        let source_file = target_dir.join(format!("target/release/{binary_name}"));
         fs::create_dir_all(dest_dir)?;
-
         let dest_file = dest_dir.join(name);
         fs::copy(source_file, dest_file)?;
 

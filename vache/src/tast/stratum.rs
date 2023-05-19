@@ -11,6 +11,15 @@ impl Stratum {
     pub const fn static_stm() -> Stratum {
         Self(0)
     }
+
+    /// Increases stratum by 1.
+    ///
+    /// # Unsafety
+    ///
+    /// Can be used to generate arbitrary stratum ids. Use with caution.
+    pub(crate) unsafe fn incr(self) -> Stratum {
+        Stratum(self.0.checked_add(1).unwrap())
+    }
 }
 
 impl fmt::Debug for Stratum {

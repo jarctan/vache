@@ -6,7 +6,9 @@ use std::hash::Hash;
 use std::ops::Index;
 use std::ops::{Deref, IndexMut};
 
-use super::{Branch, Instr};
+use priority_queue::PriorityQueue;
+
+use super::{Branch, Instr, Stratum};
 use crate::utils::boxed;
 
 /// A node index in the graph.
@@ -269,6 +271,13 @@ impl<N, E> Cfg<N, E> {
     }
 }
 
+impl Cfg {
+    /// Turns it into a Control Flow Search iterator over the graph.
+    pub fn into_cfs(self, start: CfgLabel) -> CfsSelf {
+        CfsSelf::new(self, start)
+    }
+}
+
 impl<N, E: Copy> Cfg<N, E> {
     /// Adds a block/linked-list of nodes.
     ///
@@ -467,6 +476,55 @@ impl<'a, N, E> Iterator for Dfs<'a, N, E> {
     }
 }
 
+/// Control-flow Search iterator over a graph.
+pub struct CfsSelf {
+    /// Queue of elements to visit.
+    queue: PriorityQueue<(Branch, NodeIx), Stratum>,
+    /// Already visited elements.
+    visited: HashSet<NodeIx>,
+    /// The graph to traverse.
+    graph: Cfg,
+}
+
+impl CfsSelf {
+    /// Creates a new iterator that starts from a given label and traverses
+    /// `graph`.
+    fn new(graph: Cfg, start: CfgLabel) -> Self {
+        let mut queue = PriorityQueue::new();
+        let scope = graph[&start].scope;
+        queue.push((Branch::default(), start), scope);
+        Self {
+            queue,
+            visited: HashSet::new(),
+            graph,
+        }
+    }
+}
+
+impl Iterator for CfsSelf {
+    type Item = (Branch, bool, Instr);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ((branch, label), _) = self.queue.pop()?;
+        let node = self.graph.node_map.remove(&label).unwrap();
+        let neighbors = node.outs;
+
+        let is_loop = node
+            .ins
+            .iter()
+            .any(|(edge, _)| self.graph.edge_map.get(edge).is_some());
+        for (branch, edge) in neighbors {
+            let edge = self.graph.edge_map.remove(&edge).unwrap();
+            let neighbor = edge.to;
+            if self.visited.insert(neighbor.clone()) {
+                let scope = self.graph[&neighbor].scope;
+                self.queue.push((branch, neighbor), scope);
+            }
+        }
+        Some((branch, is_loop, node.value))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -518,7 +576,7 @@ mod tests {
             edges,
             [
                 &Edge {
-                    from: NodeIx(19),
+                    from: NodeIx(20),
                     to: NodeIx(4),
                     weight: ()
                 },

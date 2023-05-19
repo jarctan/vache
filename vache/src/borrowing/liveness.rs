@@ -64,7 +64,7 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
                         + Set::from_iter(args.iter().map(|arg| &arg.var).cloned());
                     res
                 }
-                InstrKind::Branch(v) => outs.clone() + v.var.clone(),
+                InstrKind::Branch(v) => outs.clone() + v.clone(),
             };
 
             let flow = Flow { ins, outs };

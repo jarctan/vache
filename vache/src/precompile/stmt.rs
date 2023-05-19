@@ -21,7 +21,7 @@ pub enum Stmt {
     /// * 1st argument: variable to match.
     /// * 2nd argument: true branch.
     /// * 3rd argument: false branch.
-    If(VarMode, Vec<Stmt>, Vec<Stmt>),
+    If(Var, Vec<Stmt>, Vec<Stmt>),
     /// Endless loop.
     Loop(Vec<Stmt>),
     /// Nested block.

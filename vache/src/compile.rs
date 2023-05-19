@@ -399,7 +399,7 @@ impl Compiler {
                 }
             }
             Stmt::If(v, iftrue, iffalse) => {
-                let v = self.visit_var(v);
+                let v = format_ident!("{}", v.as_str());
                 let iftrue: Vec<TokenStream> = iftrue
                     .into_iter()
                     .map(|stmt| self.visit_stmt(stmt))

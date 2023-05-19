@@ -230,7 +230,7 @@ impl MIRer {
                 // The switch
                 let cond_var = self.fresh_var(BoolT, self.stm);
                 let cond_l = self.insert(
-                    self.instr(InstrKind::Branch(VarMode::new(cond_var.name.clone(), mode))),
+                    self.instr(InstrKind::Branch(cond_var.name.clone())),
                     [(TrueB, iftrue_l), (FalseB, iffalse_l)],
                 );
 
@@ -506,26 +506,27 @@ impl MIRer {
                 // If statement
                 let cond_v = self.fresh_var(BoolT, self.stm);
                 let if_l = self.insert(
-                    self.instr(InstrKind::Branch(VarMode::refed(cond_v.name.clone()))),
+                    self.instr(InstrKind::Branch(cond_v.name.clone())),
                     [(TrueB, body_l), (FalseB, dest_l)],
                 );
 
                 // Compute the condition.
                 let cond_l: CfgLabel =
                     self.visit_expr(cond, Some(cond_v.clone()), Mode::default(), if_l, structs);
+
+                // Declare the condition and loop
+                let cond_l =
+                    self.insert(self.instr(InstrKind::Declare(cond_v)), [(DefaultB, cond_l)]);
+
                 self.insert_at(
                     loop_l.clone(),
                     self.instr(InstrKind::Noop),
                     [(DefaultB, cond_l)],
                 );
 
-                // Declare the condition and loop
-                let dest_l =
-                    self.insert(self.instr(InstrKind::Declare(cond_v)), [(DefaultB, loop_l)]);
-
                 self.pop_scope();
 
-                dest_l
+                loop_l
             }
             tast::Stmt::ExprS(e) => self.visit_expr(e, None, Mode::default(), dest_l, structs),
         }
