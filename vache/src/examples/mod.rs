@@ -1,4 +1,4 @@
-//! List of examples.
+//! Examples.
 
 mod arrays;
 mod borrows;

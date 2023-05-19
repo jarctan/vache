@@ -11,5 +11,5 @@ mod unknown_struct_name;
 use super::*;
 
 fn test(p: impl Into<Program>) {
-    crate::check(p.into());
+    vache_lib::check(p.into());
 }

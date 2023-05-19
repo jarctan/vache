@@ -4,7 +4,8 @@ use super::*;
 /// One never knows, maybe it changed its mind?
 ///
 /// This test is to prove that you can reuse a variable multiple times.
-#[test]
-fn multiple_refs() {
-    test(examples::multiple_refs(), "true true false\n");
+
+#[vache_test("true true false\n")]
+fn multiple_refs() -> Program {
+    examples::multiple_refs().into()
 }

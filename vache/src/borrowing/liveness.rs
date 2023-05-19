@@ -4,8 +4,7 @@ use super::borrow::Borrows;
 use super::flow::Flow;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
-use crate::examples::Var;
-use crate::mir::{Cfg, CfgLabel, InstrKind, Mode, RValue, VarMode};
+use crate::mir::{Cfg, CfgLabel, InstrKind, Mode, RValue, Var, VarMode};
 use crate::utils::set::Set;
 
 /// Variable liveness analysis.
