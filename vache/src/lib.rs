@@ -123,7 +123,7 @@ mod steps {
         dest_dir: &Path,
     ) -> io::Result<String> {
         let name = name.as_ref();
-        cargo(compile(p), name, dest_dir);
+        cargo(compile(p), name, dest_dir)?;
         // Cargo run on the file
         Command::new(format!("./{name}"))
             .current_dir(dest_dir)

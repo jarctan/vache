@@ -38,7 +38,7 @@ struct Node<N> {
     /// Value/weight of that node.
     value: N,
     /// List of ingoing edges, indexed by their weight.
-    ins: HashMap<Branch, EdgeIx>,
+    ins: HashMap<EdgeIx, Branch>,
     /// List of outgoing edges, indexed by their weight.
     outs: HashMap<Branch, EdgeIx>,
 }
@@ -46,7 +46,7 @@ struct Node<N> {
 /// An edge in the graph.
 ///
 /// All edges are directed.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Hash)]
 struct Edge<E> {
     /// Node index of the origin of the edge.
     from: NodeIx,
@@ -128,11 +128,17 @@ impl<N, E> Cfg<N, E> {
             edge.from,
             edge.to
         );
-        self.node_map
-            .get_mut(&edge.to)
-            .unwrap()
-            .ins
-            .insert(branch, ix);
+        assert!(
+            self.node_map
+                .get_mut(&edge.to)
+                .unwrap()
+                .ins
+                .insert(ix, branch)
+                .is_none(),
+            "graph error: already an ingoing edge between {:?} and {:?} with same id",
+            edge.from,
+            edge.to
+        );
 
         // Add the edge in itself
         self.edge_map.insert(ix, edge);
@@ -150,7 +156,7 @@ impl<N, E> Cfg<N, E> {
     pub fn preneighbors<'a>(&'a self, node: &CfgLabel) -> impl Iterator<Item = &'a CfgLabel> + 'a {
         self.node_map[node]
             .ins
-            .values()
+            .keys()
             .map(|e| &self.edge_map[e].from)
     }
 
@@ -385,7 +391,7 @@ impl<'a, N, E> BfsMut<'a, N, E> {
     }
 }
 
-impl<'a, N, E> Iterator for BfsMut<'a, N, E> {
+impl<'a, N, E: fmt::Debug> Iterator for BfsMut<'a, N, E> {
     type Item = (NodeIx, &'a mut N);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -458,5 +464,72 @@ impl<'a, N, E> Iterator for Dfs<'a, N, E> {
             }
         };
         Some((node, &self.graph[node]))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Check that in edges matches out edges in a block.
+    #[test]
+    fn ins_and_outs_block() {
+        let mut cfg = Cfg::default();
+        let l = cfg.add_block([1, 1, 2, 3, 5, 8, 13], ());
+        for i in 0..6 {
+            assert_eq!(
+                cfg.node_map[&l[i]].outs.values().collect::<Vec<_>>(),
+                cfg.node_map[&l[i + 1]].ins.keys().collect::<Vec<_>>()
+            );
+        }
+    }
+
+    /// Check that in edges matches out edges in a cyclic graph.
+    #[test]
+    fn ins_and_outs_cyclic() {
+        let mut cfg = Cfg::default();
+
+        // Nodes
+        let l = [cfg.add_node(0), cfg.add_node(1), cfg.add_node(2)];
+
+        // Edges
+        for i in 0..3 {
+            cfg.add_edge(l[i].clone(), l[(i + 1) % 3].clone(), Branch::default(), ());
+        }
+        for i in 0..3 {
+            assert_eq!(
+                cfg.node_map[&l[i]].outs.values().collect::<Vec<_>>(),
+                cfg.node_map[&l[(i + 1) % 3]].ins.keys().collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn multiple_ins_mir() {
+        use crate::*;
+        let mir = borrow_check(mir(check(crate::examples::while_loop())));
+        let cfg = &mir.funs["main"].body;
+        let edges = cfg.node_map[&NodeIx(4)]
+            .ins
+            .keys()
+            .map(|ix| &cfg.edge_map[ix])
+            .collect::<HashSet<_>>();
+        assert_eq!(
+            edges,
+            [
+                &Edge {
+                    from: NodeIx(19),
+                    to: NodeIx(4),
+                    weight: ()
+                },
+                &Edge {
+                    from: NodeIx(5),
+                    to: NodeIx(4),
+                    weight: ()
+                }
+            ]
+            .into_iter()
+            .collect::<HashSet<_>>()
+        );
     }
 }
