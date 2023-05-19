@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate vache_tests_proc;
 
-pub(crate) mod interpret;
+pub(crate) mod exec;
 pub(crate) mod typing;
 
 pub use vache_lib::ast::block::*;
