@@ -12,11 +12,10 @@ use crate::utils::set::Set;
 /// Takes as arguments:
 /// * The CFG.
 /// * The entry label in the CFG.
-/// * The exit label in the CFG.
 ///
 /// Returns a map of live variables at the entry and exit of each node in the
 /// CFG.
-pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Flow<Set<Var>>> {
+pub fn var_liveness(cfg: &Cfg, entry_l: &CfgLabel) -> Cfg<Flow<Set<Var>>> {
     // Bootstrap with empty environments.
     let mut var_flow: Cfg<Flow<Set<Var>>> = cfg.map_ref(|_, _| Flow::default(), |_| ());
 
@@ -26,7 +25,7 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
     while updated {
         updated = false;
 
-        for (label, instr) in cfg.bfs(exit_l, true) {
+        for (label, instr) in cfg.postorder(entry_l) {
             let successors = cfg.neighbors(label);
 
             let outs: Set<Var> = successors.map(|x| var_flow[x].ins.clone()).sum();
@@ -83,7 +82,6 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
 /// Takes as arguments:
 /// * The CFG.
 /// * The entry label in the CFG.
-/// * The exit label in the CFG.
 /// * The variable liveliness analysis for that CFG.
 ///
 /// Returns a map of live loans at the entry and exit of each node in the
@@ -91,7 +89,6 @@ pub fn var_liveness(cfg: &Cfg, _entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg<Fl
 fn loan_liveness(
     cfg: &Cfg,
     entry_l: &CfgLabel,
-    _exit_l: &CfgLabel,
     var_flow: &Cfg<Flow<Set<Var>>>,
 ) -> Cfg<Flow<Ledger>> {
     let out_of_scope = var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
@@ -104,7 +101,7 @@ fn loan_liveness(
     while updated {
         updated = false;
 
-        for (label, instr) in cfg.bfs(entry_l, false) {
+        for (label, instr) in cfg.postorder(entry_l).rev() {
             let predecessors = cfg.preneighbors(label);
             let ins: Ledger = predecessors.map(|x| loan_flow[x].outs.clone()).sum();
             let outs: Ledger = match &instr.kind {
@@ -229,13 +226,12 @@ fn optimize_last_use(varmode: &mut VarMode, outs: &Set<Var>) {
 /// Takes as arguments:
 /// * The CFG.
 /// * The entry label in the CFG.
-/// * The exit label in the CFG.
 ///
 /// Performs liveliness analysis, determining which borrows are invalidated.
-pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel, exit_l: &CfgLabel) -> Cfg {
+pub fn liveness(mut cfg: Cfg, entry_l: &CfgLabel) -> Cfg {
     // Compute the two analyses
-    let var_flow = var_liveness(&cfg, entry_l, exit_l);
-    let loan_flow = loan_liveness(&cfg, entry_l, exit_l, &var_flow);
+    let var_flow = var_liveness(&cfg, entry_l);
+    let loan_flow = loan_liveness(&cfg, entry_l, &var_flow);
 
     // Checking last variable use and replace with a move
     for (label, instr) in cfg.bfs_mut(entry_l, false) {
@@ -331,7 +327,7 @@ mod tests {
             (),
         );
 
-        let analysis = var_liveness(&cfg, &l[0], l.last().unwrap());
+        let analysis = var_liveness(&cfg, &l[0]);
 
         // Entry and exit are trivial
         assert_eq!(analysis[&l[0]].ins.len(), 0);
@@ -397,7 +393,7 @@ mod tests {
             (),
         );
 
-        let cfg = liveness(cfg, &l[0], l.last().unwrap());
+        let cfg = liveness(cfg, &l[0]);
         assert!(
             matches!(
                 cfg[&l[3]].kind,
@@ -458,7 +454,7 @@ mod tests {
             (),
         );
 
-        let cfg = liveness(cfg, &l[0], l.last().unwrap());
+        let cfg = liveness(cfg, &l[0]);
         assert!(
             matches!(
                 cfg[&l[3]].kind,
@@ -510,7 +506,7 @@ mod tests {
             (),
         );
 
-        let cfg = liveness(cfg, &l[0], l.last().unwrap());
+        let cfg = liveness(cfg, &l[0]);
         assert!(
             matches!(
                 cfg[&l[3]].kind,

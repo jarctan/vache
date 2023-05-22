@@ -76,6 +76,11 @@ pub fn field(e: Expr, member: impl ToString) -> Expr {
     FieldE(boxed(e), member.to_string())
 }
 
+/// Shortcut to create an if expression.
+pub fn if_e(e: Expr, iftrue: impl Into<Block>, iffalse: impl Into<Block>) -> Expr {
+    IfE(boxed(e), boxed(iftrue.into()), boxed(iffalse.into()))
+}
+
 /// Shortcut to create a `x[y]` expression.
 pub fn index(e1: Expr, ix: Expr) -> Expr {
     IndexE(boxed(e1), boxed(ix))

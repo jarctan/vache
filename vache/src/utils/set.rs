@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::fmt;
 use std::hash::Hash;
-use std::iter::Sum;
+use std::iter::{Product, Sum};
 use std::ops::{Add, AddAssign, Deref, DerefMut};
 use std::ops::{BitOr, BitOrAssign, Sub};
 
@@ -144,6 +144,15 @@ impl<T: Eq + Hash> Sum for Set<T> {
     }
 }
 
+impl<'a, T: Eq + Hash + Clone> Product<&'a Set<T>> for Set<T> {
+    fn product<I: Iterator<Item = &'a Set<T>>>(mut iter: I) -> Self {
+        let first: Set<T> = iter.next().expect("Cannot do empty product").clone();
+        iter.fold(first, |acc, other| {
+            acc.into_iter().filter(|x| other.contains(x)).collect()
+        })
+    }
+}
+
 impl<T: Eq + Hash> FromIterator<T> for Set<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         Self(HashSet::from_iter(iter))
@@ -171,5 +180,22 @@ impl<T: Eq + Hash> IntoIterator for Set<T> {
 impl<T: Eq + Hash, const N: usize> From<[T; N]> for Set<T> {
     fn from(arr: [T; N]) -> Self {
         Self::from_iter(arr)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn product_sets() {
+        let set1: Set<_> = ["a", "e", "b", "c"].into_iter().collect();
+        let set2: Set<_> = ["a", "e", "c"].into_iter().collect();
+        let set3: Set<_> = ["c", "d", "f", "b", "e"].into_iter().collect();
+
+        assert_eq!(
+            [&set1, &set2, &set3].into_iter().product::<Set<_>>(),
+            ["e", "c"].into_iter().collect()
+        );
     }
 }

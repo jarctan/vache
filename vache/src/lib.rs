@@ -5,6 +5,7 @@
 #![feature(trait_alias)]
 #![feature(array_windows)]
 #![feature(iter_collect_into)]
+#![feature(default_free_fn)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 

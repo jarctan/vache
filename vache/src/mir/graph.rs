@@ -1,15 +1,15 @@
 //! Representing control flow graphs.
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fmt;
+use std::default::default;
 use std::hash::Hash;
 use std::ops::Index;
 use std::ops::{Deref, IndexMut};
+use std::{fmt, iter};
 
-use priority_queue::PriorityQueue;
-
-use super::{Branch, Instr, Stratum};
+use super::{Branch, Instr};
 use crate::utils::boxed;
+use crate::utils::set::Set;
 
 /// A node index in the graph.
 #[derive(Clone, Default, PartialEq, Eq, Hash)]
@@ -183,6 +183,11 @@ impl<N, E> Cfg<N, E> {
         Dfs::new(self, start, rev_dir)
     }
 
+    /// Returns a postorder iterator over the graph.
+    pub fn postorder<'a>(&'a self, start: &'a CfgLabel) -> PostOrder<'a, N, E> {
+        PostOrder::new(self, start)
+    }
+
     /// Maps into a new CFG.
     ///
     /// You must provide a mapping for nodes, and one for edges. Use `map_ref`
@@ -272,9 +277,84 @@ impl<N, E> Cfg<N, E> {
 }
 
 impl Cfg {
-    /// Turns it into a Control Flow Search iterator over the graph.
-    pub fn into_cfs(self, start: CfgLabel) -> CfsSelf {
-        CfsSelf::new(self, start)
+    /// Returns the set of dominators for each node.
+    ///
+    /// Dominators for node `n` are the set of nodes through which you MUST pass
+    /// to go from `start_l` to `n`.
+    pub fn dominators<'a>(
+        &'a self,
+        start_l: &'a CfgLabel,
+    ) -> HashMap<&'a CfgLabel, Set<&'a CfgLabel>> {
+        // Initially, the set of dominators are all labels, except for the start label
+        // for which we already know its set of dominators (only itself).
+        let initial_set: Set<&NodeIx> = self.node_map.keys().collect();
+        let mut dominators: HashMap<&NodeIx, Set<&NodeIx>> = self
+            .node_map
+            .keys()
+            .map(|k| (k, initial_set.clone()))
+            .collect();
+        dominators.insert(start_l, [start_l].into_iter().collect());
+
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for (label, _) in self.postorder(start_l).rev() {
+                // Skip start label
+                if label == start_l {
+                    continue;
+                }
+
+                let mut new_set = iter::once(&initial_set)
+                    .chain(self.preneighbors(label).map(|p| &dominators[p]))
+                    .product::<Set<&NodeIx>>();
+                new_set.insert(label);
+                if new_set != dominators[label] {
+                    dominators.insert(label, new_set);
+                    changed = true;
+                }
+            }
+        }
+        dominators
+    }
+
+    /// Returns the immediate dominator of each node, except for the starting
+    /// label.
+    ///
+    /// Assuming the only entry point is at `start_l`.
+    pub fn immediate_dominators<'a>(
+        &'a self,
+        start_l: &'a CfgLabel,
+    ) -> HashMap<&'a CfgLabel, &'a CfgLabel> {
+        let mut dominators = self.dominators(start_l);
+        let mut idoms: HashMap<&CfgLabel, &CfgLabel> = default();
+        for (label, _) in self.postorder(start_l).rev() {
+            let mut dominators: Set<&NodeIx> = dominators.remove(label).unwrap();
+            if label == start_l {
+                continue;
+            }
+            let prev_idoms: Vec<&CfgLabel> = dominators
+                .iter()
+                .filter_map(|&dom| {
+                    if dom != start_l && dom != label {
+                        Some(
+                            idoms
+                                .get(dom)
+                                .copied()
+                                .expect(&format!("No {dom:?} for {label:?}")),
+                        )
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            dominators.remove(label);
+            for i in prev_idoms {
+                dominators.remove(i);
+            }
+            assert!(dominators.len() == 1, "Dominators: {:?}", dominators);
+            idoms.insert(label, dominators.into_iter().next().unwrap());
+        }
+        idoms
     }
 }
 
@@ -476,52 +556,82 @@ impl<'a, N, E> Iterator for Dfs<'a, N, E> {
     }
 }
 
-/// Control-flow Search iterator over a graph.
-pub struct CfsSelf {
-    /// Queue of elements to visit.
-    queue: PriorityQueue<(Branch, NodeIx), Stratum>,
-    /// Already visited elements.
-    visited: HashSet<NodeIx>,
-    /// The graph to traverse.
-    graph: Cfg,
+/// Post-order iterator over a graph.
+///
+/// Its reverse is the standard flow control linearization you would expect: it
+/// returns items in the order you would see them in a source code.
+pub struct PostOrder<'a, N, E> {
+    /// CFG to traverse.
+    graph: &'a Cfg<N, E>,
+    /// Entry label in the CFG.
+    start: &'a NodeIx,
+    /// We'll store here the result of the post-order dfs search.
+    result: VecDeque<(&'a NodeIx, &'a N)>,
+    /// Have we computed the dfs yet.
+    ///
+    /// We only compute the dfs once the first element of the iterator is
+    /// consumed, not when it is created, which is why we need this flag.
+    computed: bool,
 }
 
-impl CfsSelf {
-    /// Creates a new iterator that starts from a given label and traverses
-    /// `graph`.
-    fn new(graph: Cfg, start: CfgLabel) -> Self {
-        let mut queue = PriorityQueue::new();
-        let scope = graph[&start].scope;
-        queue.push((Branch::default(), start), scope);
+impl<'a, N, E> PostOrder<'a, N, E> {
+    /// Creates a new iterator that starts from a given label and traverses a
+    /// `graph`. Set `rev_dir` to true to traverse it in reverse direction.
+    fn new(graph: &'a Cfg<N, E>, start: &'a CfgLabel) -> Self {
         Self {
-            queue,
-            visited: HashSet::new(),
             graph,
+            start,
+            result: VecDeque::new(),
+            computed: false,
         }
+    }
+
+    /// Performs the postorder computation.
+    ///
+    /// Called lazily only when we consume the first element of our iterator.
+    fn compute(&mut self) {
+        /// Compute DFS postorder and output the result to `result`.
+        fn dfs<'a, N, E>(
+            graph: &'a Cfg<N, E>,
+            label: &'a CfgLabel,
+            visited: &mut HashSet<&'a NodeIx>,
+            result: &mut VecDeque<(&'a NodeIx, &'a N)>,
+        ) {
+            if visited.insert(label) {
+                // If `visited` did not contain this value before
+                for node in graph.neighbors(label) {
+                    dfs(graph, node, visited, result);
+                }
+                result.push_back((label, &graph[label]));
+            }
+        }
+        let mut visited = HashSet::new();
+        dfs(self.graph, self.start, &mut visited, &mut self.result);
+        self.computed = true;
     }
 }
 
-impl Iterator for CfsSelf {
-    type Item = (Branch, bool, Instr);
+impl<'a, N, E> Iterator for PostOrder<'a, N, E> {
+    type Item = (&'a NodeIx, &'a N);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let ((branch, label), _) = self.queue.pop()?;
-        let node = self.graph.node_map.remove(&label).unwrap();
-        let neighbors = node.outs;
-
-        let is_loop = node
-            .ins
-            .iter()
-            .any(|(edge, _)| self.graph.edge_map.get(edge).is_some());
-        for (branch, edge) in neighbors {
-            let edge = self.graph.edge_map.remove(&edge).unwrap();
-            let neighbor = edge.to;
-            if self.visited.insert(neighbor.clone()) {
-                let scope = self.graph[&neighbor].scope;
-                self.queue.push((branch, neighbor), scope);
-            }
+        // If we did not compute it, compute it now.
+        if !self.computed {
+            self.compute();
         }
-        Some((branch, is_loop, node.value))
+
+        self.result.pop_front()
+    }
+}
+
+impl<'a, N, E> DoubleEndedIterator for PostOrder<'a, N, E> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        // If we did not compute it, compute it now.
+        if !self.computed {
+            self.compute();
+        }
+
+        self.result.pop_back()
     }
 }
 
@@ -589,5 +699,38 @@ mod tests {
             .into_iter()
             .collect::<HashSet<_>>()
         );
+    }
+
+    /// Checks our dominator algorithm with a simple if-then-else flow.
+    #[test]
+    fn dominators() {
+        use crate::*;
+        let mir = borrow_check(mir(check(crate::examples::simple_if())));
+        let main_fn = &mir.funs["main"];
+        let dominators = main_fn.body.dominators(&main_fn.entry_l);
+
+        // Dominators of the label _after_ the if statement are only the labels _before_
+        // the if statement.
+        let above_if: Vec<NodeIx> = (5..11).map(NodeIx).collect();
+        assert_eq!(
+            dominators[&main_fn.ret_l],
+            iter::once(&main_fn.ret_l).chain(above_if.iter()).collect()
+        );
+    }
+
+    /// Checks our immediate dominator algorithm with a simple if-then-else
+    /// flow.
+    #[test]
+    fn immediate_dominators() {
+        use crate::*;
+        let mir = borrow_check(mir(check(crate::examples::simple_if())));
+        println!("MIR: {mir:?}");
+        let main_fn = &mir.funs["main"];
+        let dominators = main_fn.body.immediate_dominators(&main_fn.entry_l);
+
+        // The immediate of the label _after_ the if statement can only be the one
+        // just before the if statement. Confer the CFG of that function for
+        // details.
+        assert_eq!(dominators[&main_fn.ret_l], &NodeIx(5));
     }
 }

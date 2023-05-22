@@ -1,5 +1,6 @@
 [package]
 name = "vache-tests-proc"
+authors=["Jonathan ARNOULT <jonathan.arnoult@polytechnique.edu>"]
 version = "0.1.0"
 edition = "2021"
 

@@ -14,7 +14,7 @@ pub mod ty;
 pub mod var;
 
 pub use block::Block;
-pub use expr::Expr;
+pub use expr::{if_e, Expr};
 pub use fun::{Fun, FunSig};
 pub use place::{idx_place, Place};
 pub use program::Program;

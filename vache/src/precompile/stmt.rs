@@ -1,3 +1,5 @@
+//! Defining statements.
+
 use super::*;
 
 /// Statements in the Rust AST.
