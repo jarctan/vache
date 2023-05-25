@@ -232,10 +232,15 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     /// location of the cloned variable.
     pub fn opt_clone(&mut self, mode: &Mode, v_ref: ValueRef, stratum: Stratum) -> ValueRef {
         match mode {
-            Mode::Cloned => self.add_value(self.get_value(v_ref).clone(), stratum),
+            Mode::Cloned | Mode::SBorrowed => {
+                self.add_value(self.get_value(v_ref).clone(), stratum)
+            }
             Mode::Moved | Mode::Borrowed | Mode::MutBorrowed => {
                 assert!(stratum >= v_ref.stratum, "Runtime error: ownership addressing should be specified as owned if moving variable out of its stratum");
                 v_ref
+            }
+            Mode::Assigning => {
+                panic!("Runtime error: expected cloning mode, but got assigning mode")
             }
         }
     }

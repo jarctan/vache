@@ -1,6 +1,7 @@
 //! Typing.
 
 use std::collections::HashMap;
+use std::default::default;
 use std::sync::atomic::AtomicU64;
 
 use Branch::*;
@@ -142,6 +143,7 @@ impl<'a> MIRer<'a> {
     /// * The expression itself (as a parser AST node).
     /// * The destination variable that will store the result of this
     ///   expression.
+    /// * `mode`: Preferred mode.
     /// * The label to jump in the CFG to after evaluating this expression.
     /// * The map of structures declarations.
     fn visit_expr<'s>(
@@ -149,6 +151,7 @@ impl<'a> MIRer<'a> {
         e: &'a mut tast::Expr,
         dest_v: Option<VarDef>,
         dest_l: CfgLabel,
+        mode: Mode,
         structs: &HashMap<String, Struct>,
     ) -> CfgLabel {
         match &mut e.kind {
@@ -174,6 +177,7 @@ impl<'a> MIRer<'a> {
                 }
             }
             tast::ExprKind::PlaceE(place) => {
+                place.mode = mode;
                 match &mut place.kind {
                     tast::PlaceKind::VarP(v) => {
                         if let Some(dest_v) = dest_v && dest_v.name != *v {
@@ -202,7 +206,7 @@ impl<'a> MIRer<'a> {
                                 dest_l
                             };
                             let dest_l =
-                                self.visit_expr(s, Some(struct_var.clone()), dest_l, structs);
+                                self.visit_expr(s, Some(struct_var.clone()), dest_l, mode, structs);
                             self.insert(
                                 self.instr(InstrKind::Declare(struct_var)),
                                 [(DefaultB, dest_l)],
@@ -226,8 +230,14 @@ impl<'a> MIRer<'a> {
 
                         // Assign the two temporary variables
                         // Note: ix is compute AFTER e, so appears first here
-                        let dest_l = self.visit_expr(ix, Some(ix_var.clone()), dest_l, structs);
-                        let dest_l = self.visit_expr(e, Some(e_var.clone()), dest_l, structs);
+                        let dest_l = self.visit_expr(
+                            ix,
+                            Some(ix_var.clone()),
+                            dest_l,
+                            Mode::SBorrowed,
+                            structs,
+                        );
+                        let dest_l = self.visit_expr(e, Some(e_var.clone()), dest_l, mode, structs);
 
                         // Declare temporary variables
                         let dest_l = self
@@ -261,7 +271,7 @@ impl<'a> MIRer<'a> {
                     .rev()
                     .zip(arg_vars.iter().rev().cloned())
                     .fold(call_l, |dest_l, (arg_expr, arg_var)| {
-                        self.visit_expr(arg_expr, Some(arg_var), dest_l, structs)
+                        self.visit_expr(arg_expr, Some(arg_var), dest_l, default(), structs)
                     });
 
                 // Declaration of the arguments
@@ -282,7 +292,7 @@ impl<'a> MIRer<'a> {
                 );
 
                 // Evaluate the condition
-                self.visit_expr(cond, Some(cond_var), cond_l, structs)
+                self.visit_expr(cond, Some(cond_var), cond_l, mode, structs)
             }
             tast::ExprKind::BlockE(box e) => self.visit_block(e, dest_v, dest_l, structs),
             tast::ExprKind::StructE {
@@ -321,7 +331,13 @@ impl<'a> MIRer<'a> {
                     .iter_mut()
                     .rev()
                     .fold(struct_l, |dest_l, (field, expr)| {
-                        self.visit_expr(expr, Some(field_vars[field].clone()), dest_l, structs)
+                        self.visit_expr(
+                            expr,
+                            Some(field_vars[field].clone()),
+                            dest_l,
+                            mode,
+                            structs,
+                        )
                     });
 
                 // Declare the temporary variables
@@ -351,13 +367,12 @@ impl<'a> MIRer<'a> {
 
                 // Compute the value of the tmp variables (remember the CFG is declared in
                 // reversed order!)
-                let compute_l = array_vars
-                    .iter()
-                    .rev()
-                    .zip(array.iter_mut().rev())
-                    .fold(struct_l, |dest_l, (var, item)| {
-                        self.visit_expr(item, Some(var.clone()), dest_l, structs)
-                    });
+                let compute_l = array_vars.iter().rev().zip(array.iter_mut().rev()).fold(
+                    struct_l,
+                    |dest_l, (var, item)| {
+                        self.visit_expr(item, Some(var.clone()), dest_l, mode, structs)
+                    },
+                );
 
                 // Declare the temporary variables
                 array_vars.into_iter().rev().fold(compute_l, |dest_l, var| {
@@ -383,8 +398,7 @@ impl<'a> MIRer<'a> {
         structs: &HashMap<String, Struct>,
     ) -> CfgLabel {
         self.push_scope();
-        //b.ret.mode = Mode::Cloned;
-        let ret_l = self.visit_expr(&mut b.ret, dest_v, dest_l, structs);
+        let ret_l = self.visit_expr(&mut b.ret, dest_v, dest_l, Mode::Cloned, structs);
         let entry_l = b
             .stmts
             .iter_mut()
@@ -409,7 +423,8 @@ impl<'a> MIRer<'a> {
     ) -> CfgLabel {
         match s {
             tast::Stmt::Declare(vardef, expr) => {
-                let expr_l = self.visit_expr(expr, Some(vardef.clone()), dest_l, structs);
+                let expr_l =
+                    self.visit_expr(expr, Some(vardef.clone()), dest_l, default(), structs);
                 self.insert(
                     self.instr(InstrKind::Declare(vardef.clone())),
                     [(DefaultB, expr_l)],
@@ -424,6 +439,7 @@ impl<'a> MIRer<'a> {
                         stm: place.stm,
                     }),
                     dest_l,
+                    default(),
                     structs,
                 ),
                 tast::PlaceKind::IndexP(box array, box ix) => {
@@ -447,13 +463,24 @@ impl<'a> MIRer<'a> {
 
                     // Assign the two temporary variables
                     // Note: ix is compute AFTER e, so appears first here
-                    let dest_l = self.visit_expr(ix, Some(ix_var.clone()), dest_l, structs);
-                    //array.mode = Mode::MutBorrowed;
-                    let dest_l = self.visit_expr(array, Some(array_var.clone()), dest_l, structs);
+                    let dest_l =
+                        self.visit_expr(ix, Some(ix_var.clone()), dest_l, Mode::SBorrowed, structs);
+                    let dest_l = self.visit_expr(
+                        array,
+                        Some(array_var.clone()),
+                        dest_l,
+                        Mode::MutBorrowed,
+                        structs,
+                    );
 
                     // Assign the tmp variable for the result of the index
-                    //expr.mode = Mode::MutBorrowed;
-                    let dest_l = self.visit_expr(expr, Some(dest_v.clone()), dest_l, structs);
+                    let dest_l = self.visit_expr(
+                        expr,
+                        Some(dest_v.clone()),
+                        dest_l,
+                        Mode::MutBorrowed,
+                        structs,
+                    );
 
                     // Declare temporary variables;
                     let dest_l =
@@ -469,7 +496,6 @@ impl<'a> MIRer<'a> {
                 }
             },
             tast::Stmt::While { cond, body } => {
-                //cond.mode = Mode::Moved;
                 let loop_l = self.fresh_label();
 
                 self.push_scope();
@@ -485,7 +511,8 @@ impl<'a> MIRer<'a> {
                 );
 
                 // Compute the condition.
-                let cond_l: CfgLabel = self.visit_expr(cond, Some(cond_v.clone()), if_l, structs);
+                let cond_l: CfgLabel =
+                    self.visit_expr(cond, Some(cond_v.clone()), if_l, Mode::Moved, structs);
 
                 // Declare the condition and loop
                 let cond_l =
@@ -501,10 +528,7 @@ impl<'a> MIRer<'a> {
 
                 loop_l
             }
-            tast::Stmt::ExprS(e) => {
-                //e.mode = Mode::Moved;
-                self.visit_expr(e, None, dest_l, structs)
-            }
+            tast::Stmt::ExprS(e) => self.visit_expr(e, None, dest_l, Mode::Moved, structs),
         }
     }
 

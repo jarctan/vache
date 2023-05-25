@@ -28,11 +28,13 @@ impl Compiler {
             #![allow(clippy::needless_late_init)]
             #![allow(unused_mut)]
             #![allow(dead_code)]
+            #[warn(unused_imports)]
 
             use std::borrow::{Borrow, BorrowMut};
             use std::fmt;
             use std::ops::{Add, Deref, DerefMut, Div, Mul, Rem, Sub};
             use num_traits::cast::FromPrimitive;
+            use num_traits::ToPrimitive;
 
             pub enum Cow<'a, B>
             where
@@ -275,8 +277,10 @@ impl Compiler {
                 match place.mode {
                     Mode::Cloned => quote!(#var.clone()),
                     Mode::Borrowed => quote!(__borrow(&#var)),
-                    Mode::MutBorrowed => quote!(__borrow_mut(&mut #var)),
+                    Mode::SBorrowed => quote!((&#var)),
+                    Mode::MutBorrowed => quote!((&mut #var)),
                     Mode::Moved => quote!(#var),
+                    Mode::Assigning => quote!(#var),
                 }
             }
             IndexP(box array, box index) => {
@@ -284,10 +288,12 @@ impl Compiler {
                 let index = self.visit_expr(index);
                 let index = quote!((#index).to_usize().unwrap());
                 match place.mode {
-                    Mode::Borrowed => quote!(__borrow((#array)[#index])),
+                    Mode::Borrowed => quote!(__borrow(&#array[#index])),
+                    Mode::SBorrowed => quote!((&#array[#index])),
                     Mode::MutBorrowed => quote!(__borrow_mut(&mut (#array)[#index])),
-                    Mode::Cloned => quote!((#array)[#index].clone()),
+                    Mode::Cloned => quote!(#array[#index].clone()),
                     Mode::Moved => quote!(Cow::remove(#array, #index)),
+                    Mode::Assigning => quote!(#array[#index]),
                 }
             }
             FieldP(box strukt, field) => {
@@ -401,6 +407,7 @@ impl Compiler {
                 }
             }
             Stmt::Assign(lhs, rhs) => {
+                assert!(matches!(lhs.mode, Mode::Assigning));
                 let lhs = self.visit_place(lhs);
                 let rhs = self.visit_expr(rhs);
                 quote! {

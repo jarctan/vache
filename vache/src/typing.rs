@@ -469,7 +469,7 @@ impl SelfVisitor for Typer {
             ast::Stmt::Assign(place, expr) => {
                 let expr = self.visit_expr(expr);
                 let expr_ty = &expr.ty;
-                let place = self.visit_place(place, Mode::Moved);
+                let place = self.visit_place(place, Mode::Assigning);
 
                 // Check the type
                 assert_eq!(&place.ty, expr_ty, "expression type ({expr_ty}) of {expr:?} should match the type of variable {place:?} ({})", place.ty);

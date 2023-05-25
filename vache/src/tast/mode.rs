@@ -8,7 +8,13 @@ pub enum Mode {
     /// Have a reference onto that value.
     #[default]
     Borrowed,
-    /// Have a mutable reference onto that value.
+    /// Have a shallow borrow onto that value.
+    ///
+    /// Shallow borrow = simply a `&mut`, not a clone of the `Cow` contents.
+    SBorrowed,
+    /// Have a (shallow) mutable reference onto that value.
+    ///
+    /// Shallow borrow = simply a `&mut`, not a clone of the `Cow` contents.
     MutBorrowed,
     /// Clone the value to own it.
     Cloned,
@@ -16,6 +22,8 @@ pub enum Mode {
     ///
     /// Is only safe when the original value is not used afterwards!
     Moved,
+    /// Assigning to a variable.
+    Assigning,
 }
 
 impl Mode {
@@ -26,7 +34,8 @@ impl Mode {
         // variants.
         match self {
             Borrowed | MutBorrowed => true,
-            Cloned | Moved => false,
+            SBorrowed => false, // Note: a shallow borrow is not considered borrowing.
+            Cloned | Moved | Assigning => false,
         }
     }
 }
@@ -35,10 +44,12 @@ impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Mode::*;
         match self {
-            Borrowed => write!(f, "&"),
+            Borrowed => write!(f, "&_"),
+            SBorrowed => write!(f, "&"),
             MutBorrowed => write!(f, "&mut "),
             Cloned => write!(f, "^"),
             Moved => write!(f, "!"),
+            Assigning => write!(f, "@"),
         }
     }
 }

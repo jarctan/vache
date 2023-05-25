@@ -232,12 +232,13 @@ fn optimize_last_use(varmode: &mut VarMode, outs: &Set<Var>) {
                 *varmode.mode = Mode::Moved;
             }
         }
-        Mode::Borrowed | Mode::MutBorrowed => {
+        Mode::Borrowed | Mode::MutBorrowed | Mode::SBorrowed => {
             if !outs.contains(&varmode.var) {
                 *varmode.mode = Mode::Moved;
             }
         }
         Mode::Moved => (),
+        Mode::Assigning => (),
     }
 }
 
