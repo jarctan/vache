@@ -1,6 +1,6 @@
 //! Parsing expressions, and defining their representation in the AST.
 
-use rug::Integer;
+use num_bigint::BigInt;
 
 use super::{Block, Var};
 use crate::utils::boxed;
@@ -13,7 +13,7 @@ pub enum Expr {
     /// Unit expression, that does nothing.
     UnitE,
     /// An unbounded integer.
-    IntegerE(Integer),
+    IntegerE(BigInt),
     /// A string.
     StringE(String),
     /// A variable.
@@ -54,7 +54,7 @@ pub fn var(v: impl ToString) -> Expr {
 }
 
 /// Shortcut to create a constant integer `Expr` based on some integer value.
-pub fn int(value: impl Into<Integer>) -> Expr {
+pub fn int(value: impl Into<BigInt>) -> Expr {
     IntegerE(value.into())
 }
 
@@ -111,7 +111,7 @@ pub fn binop(lhs: Expr, op: impl ToString, rhs: Expr) -> Expr {
 
 impl From<u64> for Expr {
     fn from(value: u64) -> Self {
-        IntegerE(Integer::from(value))
+        IntegerE(BigInt::from(value))
     }
 }
 

@@ -1,6 +1,6 @@
 //! Defining typed expressions.
 
-use rug::Integer;
+use num_bigint::BigInt;
 
 use super::{Block, Place, Stratum, Ty};
 
@@ -36,7 +36,7 @@ pub enum ExprKind {
     /// Unit expression, that does nothing.
     UnitE,
     /// An unbounded integer.
-    IntegerE(Integer),
+    IntegerE(BigInt),
     /// A string.
     StringE(String),
     /// A place.

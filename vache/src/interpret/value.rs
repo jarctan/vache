@@ -14,7 +14,7 @@ pub enum Value {
     /// Unit value.
     UnitV,
     /// Integer value.
-    IntV(rug::Integer),
+    IntV(num_bigint::BigInt),
     /// String value.
     StrV(String),
     /// Boolean value.

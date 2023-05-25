@@ -140,8 +140,9 @@ mod steps {
     pub fn cargo(source_code: String, name: &str, dest_dir: &Path) -> io::Result<()> {
         let target_dir = Path::new("vache_target");
         let binary_name = "binary";
+        let dest_file = dest_dir.join(name);
         if target_dir.exists() {
-            // Check if the file exists within path A
+            // Check if our metadata file exists within path `target_dir`
             let file_path = target_dir.join(".vache_info.json");
             if !file_path.is_file() {
                 return Err(io::Error::new(
@@ -157,7 +158,14 @@ mod steps {
 
         // Delete `/{target_dir}/src` if it exists
         let directory_to_delete = target_dir.join("src");
-        fs::remove_dir_all(directory_to_delete)?;
+        if fs::metadata(&directory_to_delete).is_ok() {
+            fs::remove_dir_all(directory_to_delete)?;
+        }
+
+        // Delete dest_file if it exists
+        if fs::metadata(&dest_file).is_ok() {
+            fs::remove_file(&dest_file)?;
+        }
 
         // Create /{target_dir}/src
         let file_path = target_dir.join("src/main.rs");
@@ -173,7 +181,7 @@ mod steps {
 
         // Write Cargo file
         let mut file = File::create(target_dir.join("Cargo.toml"))?;
-        file.write_all(format!("[package]\nname = \"{binary_name}\"\nversion = \"1.0.0\"\nedition = \"2021\"\n\n[dependencies]\nrug = \"1.19.2\"\n\n[workspace]").as_bytes())?;
+        file.write_all(format!("[package]\nname = \"{binary_name}\"\nversion = \"1.0.0\"\nedition = \"2021\"\n\n[dependencies]\nnum-bigint = \"0.4.3\"\nnum-traits = \"0.2.15\"\n\n\n[workspace]").as_bytes())?;
 
         // Cargo run on the file
         let cargo_cmd = Command::new("cargo")
@@ -181,6 +189,7 @@ mod steps {
             .arg("run")
             .arg("--release")
             .output()?;
+
         if !cargo_cmd.status.success() {
             eprintln!("{}", String::from_utf8(cargo_cmd.stdout).unwrap());
             eprintln!("{}", String::from_utf8(cargo_cmd.stderr).unwrap());
@@ -190,7 +199,6 @@ mod steps {
         // Copy and paste another file to a new directory
         let source_file = target_dir.join(format!("target/release/{binary_name}"));
         fs::create_dir_all(dest_dir)?;
-        let dest_file = dest_dir.join(name);
         fs::copy(source_file, dest_file)?;
 
         Ok(())

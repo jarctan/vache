@@ -2,6 +2,7 @@
 
 use std::default::default;
 
+use num_traits::ToPrimitive;
 use proc_macro2::TokenStream;
 use string_builder::Builder as StringBuilder;
 use ExprKind::*;
@@ -31,6 +32,7 @@ impl Compiler {
             use std::borrow::{Borrow, BorrowMut};
             use std::fmt;
             use std::ops::{Add, Deref, DerefMut, Div, Mul, Rem, Sub};
+            use num_traits::cast::FromPrimitive;
 
             pub enum Cow<'a, B>
             where
@@ -236,9 +238,9 @@ impl Compiler {
             BoolT => quote!(bool),
             IntT => {
                 if show_lifetime {
-                    quote!(Cow<'a, ::rug::Integer>)
+                    quote!(Cow<'a, ::num_bigint::BigInt>)
                 } else {
-                    quote!(Cow<::rug::Integer>)
+                    quote!(Cow<::num_bigint::BigInt>)
                 }
             }
             StrT => {
@@ -321,8 +323,10 @@ impl Compiler {
         match expr.kind {
             UnitE => quote!(()),
             IntegerE(i) => {
-                let i = i.to_f64();
-                quote!(Cow::Owned(::rug::Integer::from_f64(#i).unwrap()))
+                let i = i
+                    .to_u128()
+                    .expect("Integer {i} is too big to be represented in source code");
+                quote!(Cow::Owned(<::num_bigint::BigInt as FromPrimitive>::from_u128(#i).unwrap()))
             }
             StringE(s) => {
                 quote!(Cow::Owned(::std::string::String::from(#s)))

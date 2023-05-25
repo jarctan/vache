@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use num_bigint::BigInt;
+use num_traits::cast::ToPrimitive;
 use string_builder::Builder as StringBuilder;
 use Branch::*;
 use Place::*;
@@ -30,7 +32,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     /// `f` that takes two integers and returns a value.
     fn int_binop(
         &mut self,
-        f: impl Fn(&rug::Integer, &rug::Integer) -> Value,
+        f: impl Fn(&BigInt, &BigInt) -> Value,
         args: &Vec<ValueRef>,
         stratum: Stratum,
     ) -> Option<ValueRef> {
@@ -51,11 +53,11 @@ impl<'a, 'b> Interpreter<'a, 'b> {
         stratum: Stratum,
     ) -> Option<ValueRef> {
         match f_name {
-            "+" => self.int_binop(|x, y| IntV((x + y).into()), args, stratum),
-            "-" => self.int_binop(|x, y| IntV((x - y).into()), args, stratum),
-            "*" => self.int_binop(|x, y| IntV((x * y).into()), args, stratum),
-            "/" => self.int_binop(|x, y| IntV((x / y).into()), args, stratum),
-            "%" => self.int_binop(|x, y| IntV((x % y).into()), args, stratum),
+            "+" => self.int_binop(|x, y| IntV(x + y), args, stratum),
+            "-" => self.int_binop(|x, y| IntV(x - y), args, stratum),
+            "*" => self.int_binop(|x, y| IntV(x * y), args, stratum),
+            "/" => self.int_binop(|x, y| IntV(x / y), args, stratum),
+            "%" => self.int_binop(|x, y| IntV(x % y), args, stratum),
             "==" => self.int_binop(|x, y| BoolV(x == y), args, stratum),
             "!=" => self.int_binop(|x, y| BoolV(x != y), args, stratum),
             ">=" => self.int_binop(|x, y| BoolV(x >= y), args, stratum),

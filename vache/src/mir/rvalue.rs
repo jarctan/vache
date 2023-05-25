@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use rug::Integer;
+use num_bigint::BigInt;
 
 use super::*;
 
@@ -44,7 +44,7 @@ pub enum RValue<'a> {
     /// Unit expression, that does nothing.
     Unit,
     /// An unbounded integer.
-    Integer(Integer),
+    Integer(BigInt),
     /// A string.
     String(String),
     /// A variable.
@@ -95,8 +95,8 @@ impl<'a> From<()> for RValue<'a> {
     }
 }
 
-impl<'a> From<rug::Integer> for RValue<'a> {
-    fn from(value: rug::Integer) -> Self {
+impl<'a> From<BigInt> for RValue<'a> {
+    fn from(value: BigInt) -> Self {
         Self::Integer(value)
     }
 }
