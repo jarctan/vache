@@ -43,34 +43,37 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let Attr { expected_output } = attr;
     let TestFn { name, program } = item;
+
     quote! {
         mod #name {
             use super::*;
 
             #[test]
+            #[serial_test::serial(compiled)]
             fn compiled() {
                 let p: ::vache_lib::ast::Program = #program;
-                let mut checked = vache_lib::check(p);
-                let mir = vache_lib::borrow_check(vache_lib::mir(&mut checked));
-                println!("MIR: {:#?}", mir);
+                let mut checked = ::vache_lib::check(p);
+                let mir = ::vache_lib::borrow_check(::vache_lib::mir(&mut checked));
+                let cur_dir = ::std::env::current_dir().unwrap();
                 let binary_name = "test";
                 assert_eq!(
-                    vache_lib::run(checked, binary_name, &std::env::current_dir().unwrap()).unwrap(),
+                    ::vache_lib::run(checked, binary_name, &::std::env::current_dir().unwrap()).unwrap(),
                     #expected_output,
                     "Output mismatch for binary"
                 );
-                let dest_file = std::env::current_dir().unwrap().join(binary_name);
+                
+                let dest_file = ::std::env::current_dir().unwrap().join(binary_name);
                 ::std::fs::remove_file(&dest_file).expect("failed to remove binary at the end of the test");
             }
 
             #[test]
             fn interpreted() {
                 let p: ::vache_lib::ast::Program = #program;
-                let mut checked = vache_lib::check(p);
-                let mir = vache_lib::borrow_check(vache_lib::mir(&mut checked));
+                let mut checked = ::vache_lib::check(p);
+                let mir = ::vache_lib::borrow_check(::vache_lib::mir(&mut checked));
                 println!("MIR: {:#?}", mir);
                 assert_eq!(
-                    vache_lib::interpret(mir),
+                    ::vache_lib::interpret(mir),
                     #expected_output,
                     "Output mismatch for interpreter"
                 );

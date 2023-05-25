@@ -174,14 +174,17 @@ mod steps {
         // Write main file
         let mut file = File::create(file_path)?;
         file.write_all(source_code.as_bytes())?;
+        file.flush()?;
 
         // Write config file
         let mut file = File::create(target_dir.join(".vache_info.json"))?;
         file.write_all(b"{\"version\": 1}")?;
+        file.flush()?;
 
         // Write Cargo file
         let mut file = File::create(target_dir.join("Cargo.toml"))?;
         file.write_all(format!("[package]\nname = \"{binary_name}\"\nversion = \"1.0.0\"\nedition = \"2021\"\n\n[dependencies]\nnum-bigint = \"0.4.3\"\nnum-traits = \"0.2.15\"\n\n\n[workspace]").as_bytes())?;
+        file.flush()?;
 
         // Cargo run on the file
         let cargo_cmd = Command::new("cargo")
