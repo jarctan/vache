@@ -8,15 +8,15 @@ use super::{Fun, Struct};
 /// * structures
 /// * functions
 #[derive(Debug)]
-pub struct Program {
+pub struct Program<'a> {
     /// Collection of functions defined in the program, indexed by their names.
-    pub funs: HashMap<String, Fun>,
+    pub funs: HashMap<String, Fun<'a>>,
     /// Collection of structures defined in the program, indexed by their names.
     pub structs: HashMap<String, Struct>,
 }
 
-impl AsRef<Program> for Program {
-    fn as_ref(&self) -> &Program {
+impl<'a> AsRef<Program<'a>> for Program<'a> {
+    fn as_ref(&self) -> &Program<'a> {
         self
     }
 }

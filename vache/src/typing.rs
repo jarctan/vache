@@ -1,6 +1,7 @@
 //! Typing.
 
 use std::collections::{HashMap, HashSet};
+use std::default::default;
 
 use ExprKind::*;
 use PlaceKind::*;
@@ -176,13 +177,13 @@ impl Typer {
     }
 
     /// Types a place (lhs expression).
-    fn visit_place(&mut self, place: ast::Place) -> Place {
+    fn visit_place(&mut self, place: ast::Place, mode: Mode) -> Place {
         match place {
             ast::Place::VarP(var) => {
                 let (vardef, stm) = self
                     .get_var(&var)
                     .unwrap_or_else(|| panic!("Assigning to an undeclared variable {var}"));
-                Place::var(var, vardef.ty.clone(), stm)
+                Place::var(var, vardef.ty.clone(), stm, mode)
             }
             ast::Place::IndexP(box e, box ix) => {
                 let e = self.visit_expr(e);
@@ -194,6 +195,7 @@ impl Typer {
                         kind: IndexP(boxed(e), boxed(ix)),
                         ty,
                         stm: e_stm,
+                        mode,
                     }
                 } else {
                     panic!("Only integer indexing is supported, and for arrays only");
@@ -222,7 +224,12 @@ impl SelfVisitor for Typer {
                     .get_var(&v)
                     .unwrap_or_else(|| panic!("{v} does not exist in this context"));
                 Expr::new(
-                    VarE(VarDef::with_stratum(vardef.clone(), stm)),
+                    PlaceE(Place::var(
+                        vardef.name.clone(),
+                        vardef.ty.clone(),
+                        stm,
+                        default(),
+                    )),
                     vardef.ty.clone(),
                     stm,
                 )
@@ -299,7 +306,16 @@ impl SelfVisitor for Typer {
                     let strukt = self.get_struct(name).unwrap();
                     let ty = strukt.get_field(&field).clone();
                     let s_stm = s.stm; // Needed now because we move s after
-                    Expr::new(FieldE(boxed(s), field), ty, s_stm)
+                    Expr::new(
+                        PlaceE(Place {
+                            kind: FieldP(boxed(s), field),
+                            mode: default(),
+                            ty: ty.clone(),
+                            stm: s_stm,
+                        }),
+                        ty,
+                        s_stm,
+                    )
                 } else {
                     panic!("Cannot get a field of something which is not a struct");
                 }
@@ -310,7 +326,12 @@ impl SelfVisitor for Typer {
                 if let ArrayT(box item_ty) = &e.ty && let IntT = ix.ty {
                     let ty = item_ty.clone(); // Needed now because we move e after
                     let e_stm = e.stm; // Needed now because we move e after
-                    Expr::new(IndexE(boxed(e), boxed(ix)), ty, e_stm)
+                    Expr::new(PlaceE(Place {
+                        kind: IndexP(boxed(e), boxed(ix)),
+                        mode: default(),
+                        ty: ty.clone(),
+                        stm: e_stm
+                    }), ty, e_stm)
                 } else {
                     panic!("Only integer indexing is supported, and for arrays only");
                 }
@@ -448,7 +469,7 @@ impl SelfVisitor for Typer {
             ast::Stmt::Assign(place, expr) => {
                 let expr = self.visit_expr(expr);
                 let expr_ty = &expr.ty;
-                let place = self.visit_place(place);
+                let place = self.visit_place(place, Mode::Moved);
 
                 // Check the type
                 assert_eq!(&place.ty, expr_ty, "expression type ({expr_ty}) of {expr:?} should match the type of variable {place:?} ({})", place.ty);

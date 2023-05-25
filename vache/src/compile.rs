@@ -1,12 +1,16 @@
 //! Compiler code.
 
+use std::default::default;
+
 use proc_macro2::TokenStream;
 use string_builder::Builder as StringBuilder;
-use Place::*;
+use ExprKind::*;
+use PlaceKind::*;
 use Ty::*;
 
-use crate::mir;
-use crate::precompile::{precompile, Fun, Mode, Place, Program, RValue, Stmt, Struct, Ty, VarMode};
+use crate::tast::{
+    Block, Expr, ExprKind, Fun, Mode, Place, PlaceKind, Program, Stmt, Struct, Ty, Var,
+};
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
@@ -214,8 +218,7 @@ impl Compiler {
     }
 
     /// Compiles a program in our language into an executable source code.
-    pub fn compile(&mut self, p: mir::Program) -> String {
-        let p = precompile(p);
+    pub fn compile(&mut self, p: Program) -> String {
         let tokens = self.visit_program(p);
         let prelude = Self::prelude();
         let file = syn::parse2(quote! {
@@ -256,6 +259,43 @@ impl Compiler {
         }
     }
 
+    /// Compiles a variable.
+    fn visit_var(&mut self, var: impl Into<Var>) -> TokenStream {
+        let ident = format_ident!("{}", var.into().as_str());
+        quote!(#ident)
+    }
+
+    /// Compiles a place.
+    fn visit_place(&mut self, place: Place) -> TokenStream {
+        match place.kind {
+            VarP(var) => {
+                let var = self.visit_var(var);
+                match place.mode {
+                    Mode::Cloned => quote!(#var.clone()),
+                    Mode::Borrowed => quote!(__borrow(&#var)),
+                    Mode::MutBorrowed => quote!(__borrow_mut(&mut #var)),
+                    Mode::Moved => quote!(#var),
+                }
+            }
+            IndexP(box array, box index) => {
+                let array = self.visit_expr(array);
+                let index = self.visit_expr(index);
+                let index = quote!((#index).to_usize().unwrap());
+                match place.mode {
+                    Mode::Borrowed => quote!(__borrow((#array)[#index])),
+                    Mode::MutBorrowed => quote!(__borrow_mut(&mut (#array)[#index])),
+                    Mode::Cloned => quote!((#array)[#index].clone()),
+                    Mode::Moved => quote!(Cow::remove(#array, #index)),
+                }
+            }
+            FieldP(box strukt, field) => {
+                let strukt = self.visit_expr(strukt);
+                let field = format_ident!("{}", field);
+                quote!(#strukt.#field)
+            }
+        }
+    }
+
     /// Compiles a struct.
     fn visit_struct(&mut self, strukt: Struct) -> TokenStream {
         let name = format_ident!("{}", strukt.name);
@@ -276,93 +316,27 @@ impl Compiler {
         )
     }
 
-    /// Compiles a variable (with its addressing mode).
-    fn visit_var(&mut self, var: VarMode) -> TokenStream {
-        let name = format_ident!("{}", var.var.as_str());
-        match var.mode {
-            Mode::Cloned => quote!(#name.clone()),
-            Mode::Borrowed => quote!(__borrow(&#name)),
-            Mode::MutBorrowed => quote!(__borrow_mut(&mut #name)),
-            Mode::Moved => quote!(#name),
-        }
-    }
-
-    /// Compiles a right value.
-    fn visit_rvalue(&mut self, rvalue: RValue) -> TokenStream {
-        match rvalue {
-            RValue::Unit => quote!(()),
-            RValue::Integer(i) => {
+    /// Compiles a expression kind.
+    fn visit_expr(&mut self, expr: Expr) -> TokenStream {
+        match expr.kind {
+            UnitE => quote!(()),
+            IntegerE(i) => {
                 let i = i.to_f64();
                 quote!(Cow::Owned(::rug::Integer::from_f64(#i).unwrap()))
             }
-            RValue::String(s) => {
+            StringE(s) => {
                 quote!(Cow::Owned(::std::string::String::from(#s)))
             }
-            RValue::Var(v) => self.visit_var(v),
-            RValue::Field(s, field) => {
-                let s = self.visit_var(s);
-                let field = format_ident!("{field}");
-                quote!(#s.#field)
-            }
-            RValue::Index(array, index, mode) => {
-                let index = format_ident!("{}", index.var.as_str());
-                let index = quote!(#index.to_usize().unwrap());
-                let array = self.visit_var(array);
-                match mode {
-                    Mode::Borrowed => quote!(__borrow(#array[#index])),
-                    Mode::MutBorrowed => quote!(__borrow_mut(&mut #array[#index])),
-                    Mode::Cloned => quote!(#array[#index].clone()),
-                    Mode::Moved => quote!(Cow::remove(#array, #index)),
-                }
-            }
-            RValue::Struct { .. } => todo!(),
-            RValue::Array(array) => {
-                let items: Vec<TokenStream> =
-                    array.into_iter().map(|item| self.visit_var(item)).collect();
+            PlaceE(p) => self.visit_place(p),
+            StructE { .. } => todo!(),
+            ArrayE(array) => {
+                let items: Vec<TokenStream> = array
+                    .into_iter()
+                    .map(|item| self.visit_expr(item))
+                    .collect();
                 quote!(Cow::Owned(vec![#(#items),*]))
             }
-        }
-    }
-
-    /// Compiles a single statement.
-    fn visit_stmt(&mut self, stmt: Stmt) -> TokenStream {
-        match stmt {
-            Stmt::Declare(v) => {
-                let name = format_ident!("{}", v.name.as_str());
-                let ty = Self::translate_type(&v.ty, false);
-                quote! {
-                    let mut #name: #ty;
-                }
-            }
-            Stmt::Assign(VarP(v), rhs) => {
-                let lhs = format_ident!("{}", v.as_str());
-                let rhs = self.visit_rvalue(rhs);
-                quote! {
-                    #lhs = #rhs;
-                }
-            }
-            Stmt::Assign(IndexP(array, index), rhs) => {
-                let array = format_ident!("{}", array.as_str());
-                let index = format_ident!("{}", index.as_str());
-                let index = quote!(#index.to_usize().unwrap());
-                let rhs = self.visit_rvalue(rhs);
-                quote! {
-                    #array[#index] = #rhs;
-                }
-            }
-            Stmt::Assign(_, _) => todo!(),
-            Stmt::Call {
-                name,
-                args,
-                destination,
-            } => {
-                let prefix = destination
-                    .as_ref()
-                    .map(|dest| {
-                        let destination = format_ident!("{}", dest.as_str());
-                        quote!(#destination = )
-                    })
-                    .unwrap_or_default();
+            CallE { name, args } => {
                 if name == "print" {
                     let mut builder = StringBuilder::default();
 
@@ -375,11 +349,11 @@ impl Compiler {
                         builder.append(" {}");
                     }
 
-                    let args = args.into_iter().map(|arg| self.visit_var(arg));
+                    let args = args.into_iter().map(|arg| self.visit_expr(arg));
                     let fmt_str = builder.string().unwrap();
-                    quote!(#prefix println!(#fmt_str, #(#args),*);)
+                    quote!(println!(#fmt_str, #(#args),*))
                 } else {
-                    let args = args.into_iter().map(|arg| self.visit_var(arg));
+                    let args = args.into_iter().map(|arg| self.visit_expr(arg));
                     let name = match name.as_str() {
                         "+" => "__add".to_string(),
                         "-" => "__sub".to_string(),
@@ -395,43 +369,73 @@ impl Compiler {
                         _ => name.to_string(),
                     };
                     let name = format_ident!("{name}");
-                    quote!(#prefix #name(#(#args),*);)
+                    quote!(#name(#(#args),*))
                 }
             }
-            Stmt::If(v, iftrue, iffalse) => {
-                let v = format_ident!("{}", v.as_str());
-                let iftrue: Vec<TokenStream> = iftrue
-                    .into_iter()
-                    .map(|stmt| self.visit_stmt(stmt))
-                    .collect();
-                let iffalse = iffalse.into_iter().map(|stmt| self.visit_stmt(stmt));
+            IfE(box cond, box iftrue, box iffalse) => {
+                let cond = self.visit_expr(cond);
+                let iftrue = self.visit_block(iftrue);
+                let iffalse = self.visit_block(iffalse);
 
                 quote! {
-                    if #v {
-                        #(#iftrue);*
-                    } else {
-                        #(#iffalse);*
-                    }
+                    if #cond #iftrue #iffalse
                 }
             }
-            Stmt::Loop(stmts) => {
-                let stmts = stmts.into_iter().map(|stmt| self.visit_stmt(stmt));
+            BlockE(box block) => self.visit_block(block),
+        }
+    }
+
+    /// Compiles a single statement.
+    fn visit_stmt(&mut self, stmt: Stmt) -> TokenStream {
+        match stmt {
+            Stmt::Declare(lhs, rhs) => {
+                let name = format_ident!("{}", lhs.name.as_str());
+                let ty = Self::translate_type(&lhs.ty, false);
+                let rhs = self.visit_expr(rhs);
                 quote! {
-                    loop {
-                        #(#stmts);*
-                    }
+                    let mut #name: #ty = #rhs;
                 }
             }
-            Stmt::Block(stmts) => {
-                let stmts = stmts.into_iter().map(|stmt| self.visit_stmt(stmt));
+            Stmt::Assign(lhs, rhs) => {
+                let lhs = self.visit_place(lhs);
+                let rhs = self.visit_expr(rhs);
                 quote! {
-                    {
-                        #(#stmts);*
-                    }
+                    #lhs = #rhs;
                 }
             }
-            Stmt::Continue => quote!(continue;),
-            Stmt::Break => quote!(break;),
+            Stmt::ExprS(expr) => {
+                let expr = self.visit_expr(expr);
+                quote! {
+                    #expr;
+                }
+            }
+            Stmt::While { cond, body } => {
+                let cond = self.visit_expr(cond);
+                let body = self.visit_block(body);
+                quote! {
+                    while #cond #body
+                }
+            }
+        }
+    }
+
+    /// Compiles a block.
+    fn visit_block(&mut self, block: Block) -> TokenStream {
+        let stmts: Vec<_> = block
+            .stmts
+            .into_iter()
+            .map(|stmt| self.visit_stmt(stmt))
+            .collect();
+        let ret = if let ExprKind::UnitE = block.ret.kind {
+            default()
+        } else {
+            self.visit_expr(block.ret)
+        };
+        quote! {
+            {
+                #(#stmts);*
+                #ret
+            }
         }
     }
 
@@ -450,51 +454,23 @@ impl Compiler {
             })
             .collect();
 
-        let stmts = f.body.into_iter().map(|stmt| self.visit_stmt(stmt));
-        let body = quote!(#(#stmts);*);
+        let body = self.visit_block(f.body);
 
-        let ret_ty = f
-            .ret_v
-            .as_ref()
-            .map(|v| {
-                let ty = Self::translate_type(&v.ty, true);
+        let ret_ty = match f.ret_ty {
+            UnitT => quote!(),
+            ty => {
+                let ty = Self::translate_type(&ty, true);
                 quote!(-> #ty)
-            })
-            .unwrap_or_default();
-
-        let ret_vardef = f
-            .ret_v
-            .as_ref()
-            .map(|v| {
-                let vardef = format_ident!("{}", v.name.as_str());
-                quote!(let mut #vardef;)
-            })
-            .unwrap_or_default();
-
-        let final_return = f
-            .ret_v
-            .as_ref()
-            .map(|v| {
-                let v = format_ident!("{}", v.name.as_str());
-                quote!(#v)
-            })
-            .unwrap_or_default();
+            }
+        };
 
         if params.is_empty() {
             quote! {
-                pub fn #name(#(#params),*) #ret_ty {
-                    #ret_vardef
-                    #body;
-                    #final_return
-                }
+                pub fn #name(#(#params),*) #ret_ty #body
             }
         } else {
             quote! {
-                pub fn #name<'a>(#(#params),*) #ret_ty {
-                    #ret_vardef
-                    #body;
-                    #final_return
-                }
+                pub fn #name<'a>(#(#params),*) #ret_ty #body
             }
         }
     }

@@ -31,29 +31,29 @@ pub enum Branch {
 /// Instructions in the MIR (nodes in the CFG).
 ///
 /// Instruction = scope + kind of instruction.
-pub struct Instr {
+pub struct Instr<'a> {
     /// Instruction kind.
-    pub kind: InstrKind,
+    pub kind: InstrKind<'a>,
     /// Scope id of the instruction.
     ///
     /// This is the stratum/scope in which it is.
     pub scope: Stratum,
 }
 
-impl Deref for Instr {
-    type Target = InstrKind;
+impl<'a> Deref for Instr<'a> {
+    type Target = InstrKind<'a>;
 
     fn deref(&self) -> &Self::Target {
         &self.kind
     }
 }
-impl DerefMut for Instr {
+impl<'a> DerefMut for Instr<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.kind
     }
 }
 
-impl fmt::Debug for Instr {
+impl<'a> fmt::Debug for Instr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?} // scope {:?}", self.kind, self.scope)
     }
@@ -61,21 +61,21 @@ impl fmt::Debug for Instr {
 
 /// Instructions in the MIR (nodes in the CFG).
 #[derive(Default)]
-pub enum InstrKind {
+pub enum InstrKind<'a> {
     /// No-op instruction.
     #[default]
     Noop,
     /// Declare a new, uninitialized variable.
     Declare(VarDef),
     /// Assigns a variable.
-    Assign(Place, RValue),
+    Assign(Place, RValue<'a>),
     /// Performs a call to `name(args)`, putting the result in variable
     /// `destination`.
     Call {
         /// Name of the function to call.
         name: String,
         /// Arguments to that function.
-        args: Vec<VarMode>,
+        args: Vec<Var>,
         /// Destination variable to hold the result.
         destination: Option<Var>,
     },
@@ -83,13 +83,13 @@ pub enum InstrKind {
     Branch(Var),
 }
 
-impl InstrKind {
+impl<'a> InstrKind<'a> {
     /// If this instruction mutates a variable, returns it.
     /// Otherwise, returns `None`.
     pub fn mutated_var(&self) -> Box<dyn Iterator<Item = &Var> + '_> {
         match self {
             InstrKind::Noop | InstrKind::Branch(_) => boxed([].into_iter()),
-            InstrKind::Declare(v) => boxed([&v.name].into_iter()),
+            InstrKind::Declare(..) => boxed([].into_iter()),
             InstrKind::Call {
                 destination: Some(v),
                 ..
@@ -99,83 +99,18 @@ impl InstrKind {
             } => boxed([].into_iter()),
             InstrKind::Assign(VarP(v), RValue::Array(array)) => {
                 let mut vec = vec![v];
-                array
-                    .iter()
-                    .filter(|item| item.mode == Mode::MutBorrowed)
-                    .map(|v| &v.var)
-                    .collect_into(&mut vec);
+                array.iter().collect_into(&mut vec);
                 boxed(vec.into_iter())
             }
             InstrKind::Assign(VarP(v), RValue::Struct { name: _, fields }) => {
                 let mut vec = vec![v];
-                fields
-                    .values()
-                    .filter(|item| item.mode == Mode::MutBorrowed)
-                    .map(|v| &v.var)
-                    .collect_into(&mut vec);
+                fields.values().collect_into(&mut vec);
                 boxed(vec.into_iter())
             }
-            InstrKind::Assign(
-                VarP(lhs),
-                RValue::Field(
-                    VarMode {
-                        var: rhs,
-                        mode: Mode::MutBorrowed,
-                    },
-                    _,
-                ),
-            ) => boxed([lhs, rhs].into_iter()),
-            InstrKind::Assign(
-                VarP(lhs),
-                RValue::Index(
-                    VarMode {
-                        var: rhs1,
-                        mode: Mode::MutBorrowed,
-                    },
-                    VarMode {
-                        var: rhs2,
-                        mode: Mode::MutBorrowed,
-                    },
-                    _,
-                ),
-            ) => boxed([lhs, rhs1, rhs2].into_iter()),
-            InstrKind::Assign(
-                VarP(lhs),
-                RValue::Index(
-                    VarMode { var: rhs1, mode: _ },
-                    VarMode {
-                        var: rhs2,
-                        mode: Mode::MutBorrowed,
-                    },
-                    Mode::MutBorrowed,
-                ),
-            ) => boxed([lhs, rhs1, rhs2].into_iter()),
-            InstrKind::Assign(
-                VarP(lhs),
-                RValue::Index(
-                    VarMode {
-                        var: rhs,
-                        mode: Mode::MutBorrowed,
-                    },
-                    _,
-                    _,
-                ),
-            ) => boxed([lhs, rhs].into_iter()),
-            InstrKind::Assign(
-                VarP(lhs),
-                RValue::Index(VarMode { var: rhs, mode: _ }, _, Mode::MutBorrowed),
-            ) => boxed([lhs, rhs].into_iter()),
-            InstrKind::Assign(
-                VarP(lhs),
-                RValue::Index(
-                    _,
-                    VarMode {
-                        var: rhs,
-                        mode: Mode::MutBorrowed,
-                    },
-                    _,
-                ),
-            ) => boxed([lhs, rhs].into_iter()),
+            InstrKind::Assign(VarP(lhs), RValue::Field(rhs, _)) => boxed([lhs, rhs].into_iter()),
+            InstrKind::Assign(VarP(lhs), RValue::Index(rhs1, rhs2)) => {
+                boxed([lhs, rhs1, rhs2].into_iter())
+            }
             InstrKind::Assign(
                 VarP(lhs),
                 RValue::Var(VarMode {
@@ -195,22 +130,15 @@ impl InstrKind {
     /// Panics if the instruction does not contain `v`.
     pub fn force_clone(&mut self, v: &Var) {
         match self {
-            InstrKind::Noop | InstrKind::Branch(_) | InstrKind::Declare(_) => {
+            InstrKind::Noop
+            | InstrKind::Branch(_)
+            | InstrKind::Declare(_)
+            | InstrKind::Call { .. }
+            | InstrKind::Assign(_, RValue::Struct { .. }) => {
                 panic!("{v:?} not found in this instruction, cannot make it owned")
             }
-            InstrKind::Call { args, .. } => {
-                let var = args.iter_mut().find(|arg| &arg.var == v).unwrap();
-                var.mode = Mode::Cloned;
-            }
-            InstrKind::Assign(_, RValue::Struct { fields, .. }) => {
-                let var = fields.values_mut().find(|arg| &arg.var == v).unwrap();
-                var.mode = Mode::Cloned;
-            }
-            InstrKind::Assign(_, RValue::Var(rhs))
-            | InstrKind::Assign(_, RValue::Field(rhs, _))
-                if &rhs.var == v =>
-            {
-                rhs.mode = Mode::Cloned;
+            InstrKind::Assign(_, RValue::Var(rhs)) if &rhs.var == v => {
+                *rhs.mode = Mode::Cloned;
             }
             InstrKind::Assign(_, _) => {
                 panic!("{v:?} not found in this instruction, cannot make it owned")
@@ -219,7 +147,7 @@ impl InstrKind {
     }
 }
 
-impl fmt::Debug for InstrKind {
+impl<'a> fmt::Debug for InstrKind<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             InstrKind::Noop => write!(f, "()"),
@@ -244,7 +172,7 @@ impl fmt::Debug for InstrKind {
 
 /// Shortcut to create a instruction of a given kind and scope.
 #[cfg(test)]
-pub fn instr(kind: impl Into<InstrKind>, scope: impl Into<Stratum>) -> Instr {
+pub fn instr<'a>(kind: impl Into<InstrKind<'a>>, scope: impl Into<Stratum>) -> Instr<'a> {
     Instr {
         kind: kind.into(),
         scope: scope.into(),

@@ -1,10 +1,10 @@
 //! Defining functions in the MIR.
 
-use super::{Cfg, CfgLabel, VarDef};
+use super::{CfgI, CfgLabel, VarDef};
 
 /// A function in the parser AST.
 #[derive(Debug)]
-pub struct Fun {
+pub struct Fun<'a> {
     /// Name of that function.
     pub name: String,
     /// Parameters to that function, with their types
@@ -20,5 +20,5 @@ pub struct Fun {
     pub ret_l: CfgLabel,
     /// Body of the function: a list of statements and
     /// a final expression.
-    pub body: Cfg,
+    pub body: CfgI<'a>,
 }

@@ -42,6 +42,12 @@ impl Ledger {
         }
     }
 
+    /// Returns the list of all borrows resulting from
+    /// the move of `var` at CFG label `label`.
+    pub fn move_var(&self, var: Var) -> Borrows {
+        self.get(&var).cloned().unwrap_or_default()
+    }
+
     /// Records new `borrows` related to the borrower that living at `place`.
     pub fn add_borrows(&mut self, place: &Place, borrows: Borrows) {
         match place {

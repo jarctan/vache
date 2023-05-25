@@ -16,7 +16,6 @@ pub mod examples;
 mod interpret;
 pub mod mir;
 mod miring;
-mod precompile;
 mod tast;
 mod typing;
 mod utils;
@@ -30,12 +29,9 @@ pub use steps::{borrow_check, check, interpret, mir, run};
 
 /// Compiles `p` and puts the output program named `name` in `dest_dir`.
 pub fn compile(p: impl Into<ast::Program>, name: impl AsRef<str>, dest_dir: &Path) {
-    steps::cargo(
-        steps::compile(borrow_check(mir(check(p)))),
-        name.as_ref(),
-        dest_dir,
-    )
-    .unwrap();
+    let mut checked = check(p);
+    borrow_check(mir(&mut checked));
+    steps::cargo(steps::compile(checked), name.as_ref(), dest_dir).unwrap();
 }
 
 /// Executes program `p`, returning its standard output.
@@ -44,7 +40,9 @@ pub fn execute(
     name: impl AsRef<str>,
     dest_dir: &Path,
 ) -> io::Result<String> {
-    steps::run(borrow_check(mir(check(p))), name, dest_dir)
+    let mut checked = check(p);
+    borrow_check(mir(&mut checked));
+    steps::run(checked, name, dest_dir)
 }
 
 mod steps {
@@ -85,7 +83,7 @@ mod steps {
     ///
     /// Under the hood, this function is in charge of allocating a new
     /// `BorrowChecker` and launching it on your program.
-    pub fn borrow_check(p: impl Into<mir::Program>) -> mir::Program {
+    pub fn borrow_check<'a>(p: impl Into<mir::Program<'a>>) -> mir::Program<'a> {
         let mut borrow_checker = BorrowChecker::new();
         borrow_checker.check(p.into())
     }
@@ -94,16 +92,16 @@ mod steps {
     ///
     /// Under the hood, in charge of allocating a new `MIRer` and launching it
     /// on your program.
-    pub fn mir(p: impl Into<tast::Program>) -> mir::Program {
+    pub fn mir(p: &mut tast::Program) -> mir::Program<'_> {
         let mut mirer = MIRer::new();
-        mirer.gen_mir(p.into())
+        mirer.gen_mir(p)
     }
 
     /// Compiles a given program.
     ///
     /// Under the hood, in charge of allocating a new `Compiler` and launching
     /// it on your program.
-    pub fn compile(p: impl Into<mir::Program>) -> String {
+    pub fn compile(p: impl Into<tast::Program>) -> String {
         let mut compiler = Compiler::new();
         compiler.compile(p.into())
     }
@@ -113,13 +111,13 @@ mod steps {
     /// Under the hood, it will allocate a new `Interpreter` and launch it on
     /// your program. It will call the function `main` within your program
     /// and return the standard output of your program.
-    pub fn interpret(p: impl Into<mir::Program>) -> String {
+    pub fn interpret<'a>(p: impl Into<mir::Program<'a>>) -> String {
         interpret::interpret(p.into())
     }
 
     /// Runs a given MIR program.
     pub fn run(
-        p: impl Into<mir::Program>,
+        p: impl Into<tast::Program>,
         name: impl AsRef<str>,
         dest_dir: &Path,
     ) -> io::Result<String> {

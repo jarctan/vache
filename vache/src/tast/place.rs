@@ -1,6 +1,6 @@
 //! Defining places in the typed AST.
 
-use super::{Expr, Stratum, Ty, Var};
+use super::{Expr, Mode, Stratum, Ty, Var};
 
 /// A place in the AST: allowed left hand side expressions.
 #[derive(Debug, Clone)]
@@ -11,15 +11,18 @@ pub struct Place {
     pub ty: Ty,
     /// Stratum of the expression.
     pub stm: Stratum,
+    /// Do we transfer ownership or take by reference?
+    pub mode: Mode,
 }
 
 impl Place {
     /// Shortcut to create a place that is a variable.
-    pub fn var(var: Var, ty: Ty, stm: Stratum) -> Place {
+    pub fn var(var: Var, ty: Ty, stm: Stratum, mode: Mode) -> Place {
         Self {
             kind: PlaceKind::VarP(var),
             ty,
             stm,
+            mode,
         }
     }
 }
@@ -32,5 +35,5 @@ pub enum PlaceKind {
     /// An indexed slot into an expression.
     IndexP(Box<Expr>, Box<Expr>),
     /// An field in an expression.
-    FieldP(Box<Expr>, Box<Expr>),
+    FieldP(Box<Expr>, String),
 }

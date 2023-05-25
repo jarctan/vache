@@ -6,6 +6,7 @@
 pub mod block;
 pub mod expr;
 pub mod fun;
+pub mod mode;
 pub mod place;
 pub mod program;
 pub mod selfvisitor;
@@ -16,6 +17,7 @@ pub mod var;
 pub use block::Block;
 pub use expr::{Expr, ExprKind};
 pub use fun::{Fun, FunSig};
+pub use mode::Mode;
 pub use place::{Place, PlaceKind};
 pub use program::Program;
 pub use selfvisitor::SelfVisitor;

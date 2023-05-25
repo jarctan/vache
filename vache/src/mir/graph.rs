@@ -82,7 +82,7 @@ impl<N> From<N> for Node<N> {
 /// * `N` is the type of nodes weights
 /// * `E` is the type of edges weights
 #[derive(PartialEq, Eq)]
-pub struct Cfg<N = Instr, E = ()> {
+pub struct Cfg<N, E = ()> {
     /// Map of node indexes to node data.
     node_map: HashMap<NodeIx, Node<N>>,
     /// Map of edge indexes to the edge data.
@@ -92,6 +92,9 @@ pub struct Cfg<N = Instr, E = ()> {
     /// Fresh edge index counter.
     edge_ix_counter: u64,
 }
+
+/// A CFG with instructions as nodes.
+pub type CfgI<'a> = Cfg<Instr<'a>>;
 
 impl<N, E> Cfg<N, E> {
     /// Starting from a node, takes a given branch/path. Returns the target
@@ -276,7 +279,7 @@ impl<N, E> Cfg<N, E> {
     }
 }
 
-impl Cfg {
+impl<'b> CfgI<'b> {
     /// Returns the set of dominators for each node.
     ///
     /// Dominators for node `n` are the set of nodes through which you MUST pass
@@ -675,7 +678,8 @@ mod tests {
     #[test]
     fn multiple_ins_mir() {
         use crate::*;
-        let mir = borrow_check(mir(check(crate::examples::while_loop())));
+        let mut checked = check(crate::examples::while_loop());
+        let mir = borrow_check(mir(&mut checked));
         let cfg = &mir.funs["main"].body;
         let edges = cfg.node_map[&NodeIx(4)]
             .ins
@@ -705,7 +709,8 @@ mod tests {
     #[test]
     fn dominators() {
         use crate::*;
-        let mir = borrow_check(mir(check(crate::examples::simple_if())));
+        let mut checked = check(crate::examples::simple_if());
+        let mir = borrow_check(mir(&mut checked));
         let main_fn = &mir.funs["main"];
         let dominators = main_fn.body.dominators(&main_fn.entry_l);
 
@@ -723,7 +728,8 @@ mod tests {
     #[test]
     fn immediate_dominators() {
         use crate::*;
-        let mir = borrow_check(mir(check(crate::examples::simple_if())));
+        let mut checked = check(crate::examples::simple_if());
+        let mir = borrow_check(mir(&mut checked));
         println!("MIR: {mir:?}");
         let main_fn = &mir.funs["main"];
         let dominators = main_fn.body.immediate_dominators(&main_fn.entry_l);

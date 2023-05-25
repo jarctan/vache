@@ -12,20 +12,20 @@ use Value::*;
 
 use super::env::Env;
 use super::value::{Value, ValueRef};
-use crate::mir::{Branch, Cfg, CfgLabel, Fun, InstrKind, Mode, Place, RValue, Var};
+use crate::mir::{Branch, CfgI, CfgLabel, Fun, InstrKind, Mode, Place, RValue, Var};
 use crate::tast::Stratum;
 
 /// Interpreter for our language.
-pub(crate) struct Interpreter<'a> {
+pub(crate) struct Interpreter<'a, 'b> {
     /// The execution environment stack.
     pub env: Vec<Env>,
     /// Map between function names and their definition.
-    pub fun_env: &'a HashMap<String, Fun>,
+    pub fun_env: &'a HashMap<String, Fun<'b>>,
     /// Standard output, as a growable string.
     pub stdout: StringBuilder,
 }
 
-impl<'a> Interpreter<'a> {
+impl<'a, 'b> Interpreter<'a, 'b> {
     /// Shortcut to produce the result of a call to an integer binop operation
     /// `f` that takes two integers and returns a value.
     fn int_binop(
@@ -246,19 +246,23 @@ impl<'a> Interpreter<'a> {
             RValue::String(s) => self.add_value(StrV(s.clone()), stratum),
             RValue::Var(v) => {
                 let v_ref = self.get_var(v);
-                self.opt_clone(&v.mode, v_ref, stratum)
+                self.opt_clone(v.mode, v_ref, stratum)
+            }
+            RValue::MovedVar(v) => {
+                let v_ref = self.get_var(v);
+                self.opt_clone(&Mode::Moved, v_ref, stratum)
             }
             RValue::Field(lhs, field) => match self.get_var_value(lhs) {
                 StructV(_, strukt) => strukt[field],
                 _ => panic!("Runtime error: field access should only be on structs"),
             },
-            RValue::Index(array, index, mode) => {
+            RValue::Index(array, index) => {
                 match (self.get_var_value(array), self.get_var_value(index)) {
                     (ArrayV(array), IntV(index)) => {
                         let index = index
                             .to_usize()
                             .expect("Runtime error: array index is too big");
-                        self.opt_clone(mode, array[index], stratum)
+                        self.opt_clone(&Mode::MutBorrowed, array[index], stratum)
                     }
                     _ => panic!("Runtime error: incorrect indexing"),
                 }
@@ -279,7 +283,7 @@ impl<'a> Interpreter<'a> {
 
     /// Executes an expression, returning the first label that do not exist in
     /// the CFG. Often, this is the return/exit label.
-    fn visit_cfg(&mut self, cfg: &'a Cfg, label: &CfgLabel) {
+    fn visit_cfg(&mut self, cfg: &'a CfgI<'a>, label: &CfgLabel) {
         let branch = match &cfg[label].kind {
             InstrKind::Noop => DefaultB,
             InstrKind::Declare(v) => {

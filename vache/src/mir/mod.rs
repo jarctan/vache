@@ -19,14 +19,14 @@ pub mod rvalue;
 use std::fmt;
 
 pub use fun::Fun;
-pub use graph::{Cfg, CfgLabel};
+pub use graph::{Cfg, CfgI, CfgLabel};
 #[cfg(test)]
 pub use instr::instr;
 pub use instr::{Branch, Instr, InstrKind};
 pub use place::Place;
 pub use program::Program;
-pub use rvalue::{Mode, RValue, VarMode};
+pub use rvalue::{RValue, VarMode};
 
 #[cfg(test)]
 pub use crate::tast::vardef;
-pub use crate::tast::{Stratum, Struct, Ty, Var, VarDef};
+pub use crate::tast::{Mode, Stratum, Struct, Ty, Var, VarDef};

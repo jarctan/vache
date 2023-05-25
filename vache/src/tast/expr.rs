@@ -2,15 +2,15 @@
 
 use rug::Integer;
 
-use super::{Block, Stratum, Ty, VarDef};
+use super::{Block, Place, Stratum, Ty};
 
 /// An expression in the typed AST.
 ///
 /// Mainly a wrapper around the parser AST expression, with additional metadata.
 #[derive(Debug, Clone)]
 pub struct Expr {
-    /// The variant of the expression (unit, integer, etc.).
-    pub raw: ExprKind,
+    /// The kind of expression (unit, integer, etc.).
+    pub kind: ExprKind,
     /// Type of the expression.
     pub ty: Ty,
     /// Stratum of the expression.
@@ -19,9 +19,9 @@ pub struct Expr {
 
 impl Expr {
     /// Creates a new expression.
-    pub fn new(raw: impl Into<ExprKind>, ty: impl Into<Ty>, stm: impl Into<Stratum>) -> Self {
+    pub fn new(kind: impl Into<ExprKind>, ty: impl Into<Ty>, stm: impl Into<Stratum>) -> Self {
         Self {
-            raw: raw.into(),
+            kind: kind.into(),
             ty: ty.into(),
             stm: stm.into(),
         }
@@ -39,10 +39,8 @@ pub enum ExprKind {
     IntegerE(Integer),
     /// A string.
     StringE(String),
-    /// A variable.
-    VarE(VarDef),
-    /// A field in a structure.
-    FieldE(Box<Expr>, String),
+    /// A place.
+    PlaceE(Place),
     /// An instance of a structure.
     StructE {
         /// Name (identifier).
@@ -52,8 +50,6 @@ pub enum ExprKind {
         /// Ordered because we need to specify here the evaluation order.
         fields: Vec<(String, Expr)>,
     },
-    /// An index in an array/a map.
-    IndexE(Box<Expr>, Box<Expr>),
     /// Array creation.
     ArrayE(Vec<Expr>),
     /// A function call.

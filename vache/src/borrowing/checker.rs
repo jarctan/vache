@@ -17,18 +17,18 @@ impl BorrowChecker {
     }
 
     /// Borrow-checks a given program.
-    pub fn check(&mut self, p: Program) -> Program {
+    pub fn check<'a>(&mut self, p: Program<'a>) -> Program<'a> {
         self.visit_program(p)
     }
 
     /// Borrow-checks a function.
-    fn visit_fun(&mut self, mut f: Fun) -> Fun {
+    fn visit_fun<'a>(&mut self, mut f: Fun<'a>) -> Fun<'a> {
         f.body = liveness(f.body, &f.entry_l);
         f
     }
 
     /// Borrow-checks a program.
-    fn visit_program(&mut self, mut p: Program) -> Program {
+    fn visit_program<'a>(&mut self, mut p: Program<'a>) -> Program<'a> {
         p.funs = p
             .funs
             .into_iter()

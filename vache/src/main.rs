@@ -3,7 +3,9 @@
 use vache_lib::{borrow_check, check, mir, run};
 
 fn main() {
-    let mir = borrow_check(mir(check(vache_lib::examples::while_loop())));
+    let mut checked = check(vache_lib::examples::while_loop());
+    let mir = borrow_check(mir(&mut checked));
     println!("{mir:?}");
-    run(mir, "binary", &std::env::current_dir().unwrap()).expect("error");
+    let res = run(checked, "binary", &std::env::current_dir().unwrap()).expect("error");
+    println!("{}", res);
 }
