@@ -64,6 +64,42 @@ impl Expr {
         }
     }
 
+    /// Sees this expression as an index.
+    ///
+    /// # Errors
+    /// Returns `None` if the expression is not a index.
+    pub fn as_index(&self) -> Option<(&Expr, &Expr)> {
+        if let IndexE(box array, box index) = self {
+            Some((array, index))
+        } else {
+            None
+        }
+    }
+
+    /// Sees this expression as an function call.
+    ///
+    /// # Errors
+    /// Returns `None` if the expression is not a function call.
+    pub fn as_call(&self) -> Option<(String, Vec<Expr>)> {
+        if let CallE { name, args } = self {
+            Some((name.clone(), args.clone()))
+        } else {
+            None
+        }
+    }
+
+    /// Sees this expression as a string.
+    ///
+    /// # Errors
+    /// Returns `None` if the expression is not a string.
+    pub fn as_string(&self) -> Option<&str> {
+        if let StringE(ref s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
     /// Sees this expression as a variable.
     ///
     /// # Errors
@@ -273,6 +309,67 @@ mod test {
         assert!(lhs == "test");
         assert!(rhs1 == "a");
         assert!(rhs2 == "b");
+    }
+
+    #[test]
+    fn array_indexing() {
+        let input = "test[\"a\"]";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        let (array, index) = expr.as_index().unwrap();
+        assert!(array.as_var().unwrap() == "test");
+        assert!(index.as_string().unwrap() == "a");
+    }
+
+    #[test]
+    fn matrix_indexing() {
+        let input = "blah[\"a\"][\"b\"]";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        let (nested_index, ix2) = expr.as_index().unwrap();
+        let (array, ix1) = nested_index.as_index().unwrap();
+        assert!(array.as_var().unwrap() == "blah");
+        assert!(ix1.as_string().unwrap() == "a");
+        assert!(ix2.as_string().unwrap() == "b");
+    }
+
+    #[test]
+    fn mix_array_index() {
+        let input = "blah.a[\"b\"]";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        let (nested, ix) = expr.as_index().unwrap();
+        let (array, field) = nested.as_field().unwrap();
+        assert!(array.as_var().unwrap() == "blah");
+        assert!(field == "a");
+        assert!(ix.as_string().unwrap() == "b");
+    }
+
+    #[test]
+    fn call_expression() {
+        let input = "my_call(a, b, c)";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        let (call, args) = expr.as_call().unwrap();
+        assert!(call == "my_call");
+        assert!(
+            args.into_iter()
+                .map(|arg| arg.as_var().unwrap().as_str().to_owned())
+                .collect::<Vec<String>>()
+                == ["a", "b", "c"]
+        );
     }
 
     #[test]
