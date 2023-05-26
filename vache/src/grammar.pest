@@ -18,7 +18,7 @@ expr = _{ struct_instance | if | block | with_postfix }
 
 with_postfix = { primitive ~ (field_postfix | index_postfix | call_postfix)* }
 
-primitive = _{ unit | integer | string | ident | "(" ~ expr ~ ")" | array }
+primitive = _{ array | unit | integer | string | ident | "(" ~ expr ~ ")" }
 
 field_postfix = { "." ~ primitive }
 
@@ -44,6 +44,6 @@ if = { "if" ~ expr ~ block ~ ("else" ~ block) }
 
 array = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
 
-WHITESPACE = _{ " " ~ "\t" ~ "\n" ~ "\r" }
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
 
 COMMENT = _{ ("//" ~ (!"\n" ~ ANY)* ~ "\n") | ("/*" ~ (!"*/" ~ ANY)* ~ "*/") }

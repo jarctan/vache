@@ -54,6 +54,8 @@ use Expr::*;
 impl Expr {
     /// Sees this expression as a field.
     ///
+    /// Returns: `(strukt, field)`.
+    ///
     /// # Errors
     /// Returns `None` if the expression is not a field.
     pub fn as_field(&self) -> Option<(&Expr, &str)> {
@@ -65,6 +67,8 @@ impl Expr {
     }
 
     /// Sees this expression as an index.
+    ///
+    /// Returns: `(array, index)`.
     ///
     /// # Errors
     /// Returns `None` if the expression is not a index.
@@ -78,11 +82,25 @@ impl Expr {
 
     /// Sees this expression as an function call.
     ///
+    /// Returns: `(name, args)`.
+    ///
     /// # Errors
     /// Returns `None` if the expression is not a function call.
-    pub fn as_call(&self) -> Option<(String, Vec<Expr>)> {
+    pub fn as_call(&self) -> Option<(&str, &Vec<Expr>)> {
         if let CallE { name, args } = self {
-            Some((name.clone(), args.clone()))
+            Some((name, args))
+        } else {
+            None
+        }
+    }
+
+    /// Sees this expression as an integer.
+    ///
+    /// # Errors
+    /// Returns `None` if the expression is not an integer.
+    pub fn as_integer(&self) -> Option<&BigInt> {
+        if let IntegerE(ref i) = self {
+            Some(i)
         } else {
             None
         }
@@ -107,6 +125,18 @@ impl Expr {
     pub fn as_var(&self) -> Option<&Var> {
         if let VarE(var) = self {
             Some(var)
+        } else {
+            None
+        }
+    }
+
+    /// Sees this expression as an array declaration.
+    ///
+    /// # Errors
+    /// Returns `None` if the expression is not an array declaration.
+    pub fn as_array(&self) -> Option<&Vec<Expr>> {
+        if let ArrayE(ref array) = self {
+            Some(array)
         } else {
             None
         }
@@ -193,6 +223,7 @@ impl<'a> Parsable<Pair<'a, Rule>> for Expr {
             Rule::integer => IntegerE(ctx.parse(pair)),
             Rule::string => StringE(ctx.parse(pair)),
             Rule::ident => VarE(ctx.parse(pair)),
+            Rule::array => ArrayE(pair.into_inner().map(|pair| ctx.parse(pair)).collect()),
             Rule::with_postfix => {
                 let mut pairs = pair.into_inner();
                 let expr = ctx.parse(pairs.next().unwrap());
@@ -253,7 +284,7 @@ mod test {
         let mut ctx = Context::new(input);
         let expr: Expr = ctx.parse(pair);
         eprintln!("{expr:?}");
-        assert!(matches!(expr, StringE(_)));
+        assert_eq!(expr.as_string().unwrap(), &input[1..input.len() - 1]);
     }
 
     #[test]
@@ -264,7 +295,7 @@ mod test {
         let mut ctx = Context::new(input);
         let expr: Expr = ctx.parse(pair);
         eprintln!("{expr:?}");
-        assert!(matches!(expr, IntegerE(_)));
+        assert_eq!(expr.as_integer().unwrap(), &BigInt::from(1234567890));
     }
 
     #[test]
@@ -364,11 +395,45 @@ mod test {
         eprintln!("{expr:?}");
         let (call, args) = expr.as_call().unwrap();
         assert!(call == "my_call");
-        assert!(
-            args.into_iter()
+        assert_eq!(
+            args.iter()
                 .map(|arg| arg.as_var().unwrap().as_str().to_owned())
-                .collect::<Vec<String>>()
-                == ["a", "b", "c"]
+                .collect::<Vec<String>>(),
+            ["a", "b", "c"]
+        );
+    }
+
+    #[test]
+    fn empty_array_decl() {
+        let input = "[]";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        let items = expr.as_array().unwrap();
+        assert!(items
+            .iter()
+            .map(|arg| arg.as_integer().unwrap())
+            .collect::<Vec<&BigInt>>()
+            .is_empty());
+    }
+
+    #[test]
+    fn array_decl() {
+        let input = "[1, 2, 3, 4, 5]";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        let items = expr.as_array().unwrap();
+        assert_eq!(
+            items
+                .iter()
+                .map(|arg| arg.as_integer().unwrap())
+                .collect::<Vec<&BigInt>>(),
+            [&BigInt::from(1), &2.into(), &3.into(), &4.into(), &5.into()]
         );
     }
 
