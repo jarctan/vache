@@ -2,7 +2,10 @@
 
 use std::fmt;
 
-use super::Ty;
+use pest::iterators::Pair;
+
+use super::{Context, Parsable, Ty};
+use crate::grammar::*;
 
 /// A variable in the code.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -96,4 +99,29 @@ impl From<VarDef> for Var {
 pub fn vardef(name: impl ToString, ty: Ty) -> VarDef {
     let name = name.to_string().into();
     VarDef { name, ty }
+}
+
+impl<'a> Parsable<Pair<'a, Rule>> for Var {
+    fn parse(pair: Pair<'a, Rule>, _ctx: &mut Context) -> Self {
+        assert!(pair.as_rule() == Rule::ident);
+        Var(pair.as_str().to_owned())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use pest::Parser;
+
+    use super::*;
+    use crate::grammar::Grammar;
+
+    #[test]
+    fn simple_var() {
+        let input = "test123";
+        let mut parsed = Grammar::parse(Rule::ident, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let var: Var = ctx.parse(pair);
+        assert_eq!(&*var.0, input);
+    }
 }

@@ -1,0 +1,41 @@
+program = { SOI ~ (fun | struct)* ~ &EOI }
+
+fun = { "fn" ~ "(" ~ (ident ~ ":" ~ ty )* ~ ")" ~ "->" ~ ty ~ block }
+
+struct = { "struct" ~ ident ~ "{" ~ (ident ~ ":" ~ ty ~ "," )* ~ "}" }
+
+block = { "{" ~ (stmt ~ ";")* ~ (expr)? ~ "}" }
+
+stmt = { while | assign | declare | expr }
+
+while = { "while" ~ expr ~ block }
+
+assign = { ident ~ "=" ~ expr }
+
+declare = { "let" ~ ident ~ ":" ~ ty ~ "=" ~ expr }
+
+expr = { struct_instance | if | block | (primitive ~ postfix?) }
+
+primitive = { unit | integer | string | ident | "(" ~ expr ~ ")" | array }
+
+postfix = { ("." ~ primitive) | ("[" ~ primitive ~ "]") | ("(" ~ (expr ~ ("," ~ expr)*)? ~ ")") }
+
+struct_instance = { ident ~ "{" ~ (ident ~ ":" ~ expr ~ ",")* ~ "}" }
+
+unit = { "()" }
+
+integer = ${ '1'..'9' ~ ('0'..'9' | "_")* }
+
+string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+
+ty = { ("[" ~ ty ~ "]") | "int" | "str" | "bool" | "()" | ident }
+
+ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+if = { "if" ~ expr ~ block ~ ("else" ~ block) }
+
+array = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
+
+WHITESPACE = _{ " " ~ "\t" ~ "\n" ~ "\r" }
+
+COMMENT = _{ ("//" ~ (!"\n" ~ ANY)* ~ "\n") | ("/*" ~ (!"*/" ~ ANY)* ~ "*/") }
