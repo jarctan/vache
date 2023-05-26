@@ -68,6 +68,25 @@ impl fmt::Display for Var {
     }
 }
 
+impl<'a> Parsable<Pair<'a, Rule>> for Var {
+    fn parse(pair: Pair<'a, Rule>, _ctx: &mut Context) -> Self {
+        assert!(pair.as_rule() == Rule::ident);
+        Var(pair.as_str().to_owned())
+    }
+}
+
+impl PartialEq<str> for Var {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for Var {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
 /// A variable definition.
 #[derive(Clone, PartialEq, Eq)]
 pub struct VarDef {
@@ -101,13 +120,6 @@ pub fn vardef(name: impl ToString, ty: Ty) -> VarDef {
     VarDef { name, ty }
 }
 
-impl<'a> Parsable<Pair<'a, Rule>> for Var {
-    fn parse(pair: Pair<'a, Rule>, _ctx: &mut Context) -> Self {
-        assert!(pair.as_rule() == Rule::ident);
-        Var(pair.as_str().to_owned())
-    }
-}
-
 #[cfg(test)]
 mod test {
     use pest::Parser;
@@ -122,6 +134,6 @@ mod test {
         let pair = parsed.next().expect("Nothing parsed");
         let mut ctx = Context::new(input);
         let var: Var = ctx.parse(pair);
-        assert_eq!(&*var.0, input);
+        assert_eq!(var, input);
     }
 }

@@ -1,8 +1,11 @@
 //! Parsing expressions, and defining their representation in the AST.
 
 use num_bigint::BigInt;
+use pest::iterators::Pair;
 
 use super::{Block, Var};
+use super::{Context, Parsable};
+use crate::grammar::*;
 use crate::utils::boxed;
 
 /// An expression in the parser AST.
@@ -47,6 +50,32 @@ pub enum Expr {
 }
 
 use Expr::*;
+
+impl Expr {
+    /// Sees this expression as a field.
+    ///
+    /// # Errors
+    /// Returns `None` if the expression is not a field.
+    pub fn as_field(&self) -> Option<(&Expr, &str)> {
+        if let FieldE(box strukt, field) = self {
+            Some((strukt, field))
+        } else {
+            None
+        }
+    }
+
+    /// Sees this expression as a variable.
+    ///
+    /// # Errors
+    /// Returns `None` if the expression is not a variable.
+    pub fn as_var(&self) -> Option<&Var> {
+        if let VarE(var) = self {
+            Some(var)
+        } else {
+            None
+        }
+    }
+}
 
 /// Shortcut to create an `Expr` which is just a variable, based on its name.
 pub fn var(v: impl ToString) -> Expr {
@@ -118,5 +147,142 @@ impl From<u64> for Expr {
 impl From<Var> for Expr {
     fn from(v: Var) -> Self {
         VarE(v)
+    }
+}
+
+impl<'a> Parsable<Pair<'a, Rule>> for Expr {
+    fn parse(pair: Pair<'a, Rule>, ctx: &mut Context) -> Self {
+        match pair.as_rule() {
+            Rule::unit => UnitE,
+            Rule::integer => IntegerE(ctx.parse(pair)),
+            Rule::string => StringE(ctx.parse(pair)),
+            Rule::ident => VarE(ctx.parse(pair)),
+            Rule::with_postfix => {
+                let mut pairs = pair.into_inner();
+                let expr = ctx.parse(pairs.next().unwrap());
+                pairs.fold(expr, |acc, pair| match pair.as_rule() {
+                    Rule::field_postfix => {
+                        let inner = pair.into_inner().next().unwrap();
+                        if let VarE(field) = ctx.parse(inner) {
+                            FieldE(boxed(acc), field.into())
+                        } else {
+                            panic!("Expected a variable on left-hand side of field access.")
+                        }
+                    }
+                    Rule::index_postfix => IndexE(
+                        boxed(acc),
+                        boxed(ctx.parse(pair.into_inner().next().unwrap())),
+                    ),
+                    Rule::call_postfix => {
+                        if let VarE(name) = acc {
+                            CallE {
+                                name: name.into(),
+                                args: pair.into_inner().map(|pair| ctx.parse(pair)).collect(),
+                            }
+                        } else {
+                            panic!("Expected a function name")
+                        }
+                    }
+                    rule => panic!("expected postfix, found {rule:?}"),
+                })
+            }
+            rule => panic!("expected expression, found {rule:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use pest::Parser;
+
+    use super::*;
+    use crate::grammar::Grammar;
+
+    #[test]
+    fn simple_var() {
+        let input = "test123";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        assert_eq!(expr.as_var().unwrap(), input);
+    }
+
+    #[test]
+    fn simple_string() {
+        let input = "\"this is a test\nAnd another\"";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        assert!(matches!(expr, StringE(_)));
+    }
+
+    #[test]
+    fn simple_decimal() {
+        let input = "1234567890";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        assert!(matches!(expr, IntegerE(_)));
+    }
+
+    #[test]
+    fn unit() {
+        let input = "()";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        assert!(matches!(expr, UnitE));
+    }
+
+    #[test]
+    fn field() {
+        let input = "test.a";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        let field = expr.as_field().unwrap();
+        let lhs = field.0.as_var().unwrap();
+        let rhs = field.1;
+        assert!(lhs == "test");
+        assert!(rhs == "a");
+    }
+
+    #[test]
+    fn nested_fields() {
+        let input = "test.a.b";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        let field = expr.as_field().unwrap();
+        let lhs = field.0.as_field().unwrap();
+        let rhs1 = lhs.1;
+        let lhs = lhs.0.as_var().unwrap();
+        let rhs2 = field.1;
+        assert!(lhs == "test");
+        assert!(rhs1 == "a");
+        assert!(rhs2 == "b");
+    }
+
+    #[test]
+    fn if_then() {
+        let input = "if x { y } else { z } ";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        assert!(matches!(expr, IntegerE(_)));
     }
 }

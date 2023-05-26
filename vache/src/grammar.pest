@@ -14,11 +14,17 @@ assign = { ident ~ "=" ~ expr }
 
 declare = { "let" ~ ident ~ ":" ~ ty ~ "=" ~ expr }
 
-expr = { struct_instance | if | block | (primitive ~ postfix?) }
+expr = _{ struct_instance | if | block | with_postfix }
 
-primitive = { unit | integer | string | ident | "(" ~ expr ~ ")" | array }
+with_postfix = { primitive ~ (field_postfix | index_postfix | call_postfix)* }
 
-postfix = { ("." ~ primitive) | ("[" ~ primitive ~ "]") | ("(" ~ (expr ~ ("," ~ expr)*)? ~ ")") }
+primitive = _{ unit | integer | string | ident | "(" ~ expr ~ ")" | array }
+
+field_postfix = { "." ~ primitive }
+
+index_postfix = { "[" ~ primitive ~ "]" }
+
+call_postfix = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
 
 struct_instance = { ident ~ "{" ~ (ident ~ ":" ~ expr ~ ",")* ~ "}" }
 
@@ -30,7 +36,9 @@ string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
 ty = { ("[" ~ ty ~ "]") | "int" | "str" | "bool" | "()" | ident }
 
-ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+keyword = { "if" | "else" | "while" | "int" | "str" | "bool" | "fn" }
+
+ident = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 if = { "if" ~ expr ~ block ~ ("else" ~ block) }
 
