@@ -68,8 +68,8 @@ impl fmt::Display for Var {
     }
 }
 
-impl<'a> Parsable<Pair<'a, Rule>> for Var {
-    fn parse(pair: Pair<'a, Rule>, _ctx: &mut Context) -> Self {
+impl Parsable<Pair<'_, Rule>> for Var {
+    fn parse(pair: Pair<Rule>, _ctx: &mut Context) -> Self {
         assert!(pair.as_rule() == Rule::ident);
         Var(pair.as_str().to_owned())
     }
@@ -114,6 +114,18 @@ impl From<VarDef> for Var {
     }
 }
 
+impl Parsable<Pair<'_, Rule>> for VarDef {
+    fn parse(pair: Pair<Rule>, ctx: &mut Context) -> Self {
+        assert!(pair.as_rule() == Rule::vardef);
+        let mut pairs = pair.into_inner();
+
+        let name = ctx.parse(pairs.next().unwrap());
+        let ty = ctx.parse(pairs.next().unwrap());
+
+        VarDef { name, ty }
+    }
+}
+
 /// Shortcut to create a new variable definition.
 pub fn vardef(name: impl ToString, ty: Ty) -> VarDef {
     let name = name.to_string().into();
@@ -121,8 +133,9 @@ pub fn vardef(name: impl ToString, ty: Ty) -> VarDef {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use pest::Parser;
+    use Ty::*;
 
     use super::*;
     use crate::grammar::Grammar;
@@ -135,5 +148,16 @@ mod test {
         let mut ctx = Context::new(input);
         let var: Var = ctx.parse(pair);
         assert_eq!(var, input);
+    }
+
+    #[test]
+    fn simple_vardef() {
+        let input = "test: str";
+        let mut parsed = Grammar::parse(Rule::vardef, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let vardef: VarDef = ctx.parse(pair);
+        assert_eq!(vardef.name, "test");
+        assert_eq!(vardef.ty, StrT);
     }
 }

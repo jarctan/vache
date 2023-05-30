@@ -1,12 +1,14 @@
+//! Parsing primitives (integers, strings, etc.).
+
 use num_bigint::BigInt;
 use pest::iterators::Pair;
 
 use super::{Context, Parsable};
 use crate::grammar::*;
 
-impl<'a> Parsable<Pair<'a, Rule>> for String {
-    fn parse(pair: Pair<'a, Rule>, _ctx: &mut Context) -> Self {
-        assert!(pair.as_rule() == Rule::string);
+impl Parsable<Pair<'_, Rule>> for String {
+    fn parse(pair: Pair<Rule>, _ctx: &mut Context) -> Self {
+        debug_assert!(pair.as_rule() == Rule::string);
 
         // Takes care of escaped newlines and tabs
         let value = pair.as_str().replace("\\n", "\n").replace("\\t", "\t");
@@ -14,9 +16,9 @@ impl<'a> Parsable<Pair<'a, Rule>> for String {
     }
 }
 
-impl<'a> Parsable<Pair<'a, Rule>> for BigInt {
-    fn parse(pair: Pair<'a, Rule>, _ctx: &mut Context) -> Self {
-        assert!(pair.as_rule() == Rule::integer);
+impl Parsable<Pair<'_, Rule>> for BigInt {
+    fn parse(pair: Pair<Rule>, _ctx: &mut Context) -> Self {
+        debug_assert!(pair.as_rule() == Rule::integer);
 
         let value = pair.as_str().replace('_', "");
         BigInt::parse_bytes(value.as_bytes(), 10).unwrap()
@@ -24,7 +26,7 @@ impl<'a> Parsable<Pair<'a, Rule>> for BigInt {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use pest::Parser;
 
     use super::*;

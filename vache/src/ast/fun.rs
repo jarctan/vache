@@ -2,10 +2,12 @@
 
 use std::vec;
 
+use pest::iterators::Pair;
 use Ty::*;
 
 use super::var::vardef;
-use super::{Block, Ty, VarDef};
+use super::{Block, Context, Parsable, Ty, VarDef};
+use crate::grammar::*;
 
 /// A function in the parser AST.
 #[derive(Debug, Clone)]
@@ -66,5 +68,60 @@ pub fn binop_int_sig(op: impl ToString, ret_ty: Ty) -> FunSig {
         name: op.to_string(),
         params: vec![vardef("n1", IntT), vardef("n2", IntT)],
         ret_ty,
+    }
+}
+
+impl Parsable<Pair<'_, Rule>> for Fun {
+    fn parse(pair: Pair<Rule>, ctx: &mut Context) -> Self {
+        debug_assert!(matches!(pair.as_rule(), Rule::fun));
+        let mut pairs = pair.into_inner();
+
+        let name = pairs.next().unwrap().as_str().to_string();
+
+        let params_pair = pairs.next().unwrap();
+        debug_assert!(matches!(params_pair.as_rule(), Rule::params));
+        let params = params_pair
+            .into_inner()
+            .map(|param| ctx.parse(param))
+            .collect();
+
+        let ret_ty = ctx.parse(pairs.next().unwrap());
+        let body = ctx.parse(pairs.next().unwrap());
+
+        Fun {
+            name,
+            params,
+            ret_ty,
+            body,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pest::Parser;
+
+    use super::super::{Stmt, VarDef};
+    use super::*;
+    use crate::grammar::Grammar;
+
+    #[test]
+    fn main_fn() {
+        let input = "fn main(x: int, y: str) -> () { let x: int = 5; y = 7; x }";
+        let mut parsed = Grammar::parse(Rule::fun, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let fun: Fun = ctx.parse(pair);
+        eprintln!("{fun:?}");
+        assert_eq!(fun.name, "main");
+        assert!(matches!(
+            &fun.params[..],
+            [VarDef { ty: IntT, .. }, VarDef { ty: StrT, .. }]
+        ));
+        assert!(matches!(&fun.ret_ty, UnitT));
+        assert!(matches!(
+            &fun.body.stmts[..],
+            [Stmt::Declare(..), Stmt::Assign(..)]
+        ));
     }
 }

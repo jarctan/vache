@@ -35,6 +35,7 @@
         "uninit",
         "unparse",
         "vache",
+        "vardef",
         "varmode"
     ],
     "rust-analyzer.showUnlinkedFileNotification": false

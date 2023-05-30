@@ -2,6 +2,11 @@
 
 use std::fmt;
 
+use pest::iterators::Pair;
+
+use super::{Context, Parsable};
+use crate::grammar::*;
+
 /// Types in our language.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ty {
@@ -22,6 +27,21 @@ pub enum Ty {
 }
 
 use Ty::*;
+
+impl Parsable<Pair<'_, Rule>> for Ty {
+    fn parse(pair: Pair<Rule>, _ctx: &mut Context) -> Self {
+        assert_eq!(pair.as_rule(), Rule::ty);
+        let mut pairs = pair.into_inner();
+        let pair = pairs.next().unwrap();
+        match pair.as_rule() {
+            Rule::unit => UnitT,
+            Rule::bool_ty => BoolT,
+            Rule::int_ty => IntT,
+            Rule::str_ty => StrT,
+            rule => panic!("parser internal error: expected type, found {rule:?}"),
+        }
+    }
+}
 
 impl Ty {
     /// Is this type `Copy` in Rust (no deep clone needed).
@@ -67,5 +87,53 @@ impl fmt::Display for Ty {
             StructT(s) => write!(f, "{s}{{}}"),
             ArrayT(box ty) => write!(f, "{ty}[]"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pest::Parser;
+
+    use super::*;
+    use crate::grammar::Grammar;
+
+    #[test]
+    fn unit_ty() {
+        let input = "()";
+        let mut parsed = Grammar::parse(Rule::ty, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let ty: Ty = ctx.parse(pair);
+        assert_eq!(ty, UnitT);
+    }
+
+    #[test]
+    fn str_ty() {
+        let input = "str";
+        let mut parsed = Grammar::parse(Rule::ty, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let ty: Ty = ctx.parse(pair);
+        assert_eq!(ty, StrT);
+    }
+
+    #[test]
+    fn int_ty() {
+        let input = "int";
+        let mut parsed = Grammar::parse(Rule::ty, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let ty: Ty = ctx.parse(pair);
+        assert_eq!(ty, IntT);
+    }
+
+    #[test]
+    fn bool_ty() {
+        let input = "bool";
+        let mut parsed = Grammar::parse(Rule::ty, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let ty: Ty = ctx.parse(pair);
+        assert_eq!(ty, BoolT);
     }
 }

@@ -2,18 +2,27 @@
 
 use num_bigint::BigInt;
 use pest::iterators::Pair;
+use pest::pratt_parser::*;
 
 use super::{Block, Var};
 use super::{Context, Parsable};
 use crate::grammar::*;
 use crate::utils::boxed;
 
+lazy_static! {
+    static ref PRATT_PARSER: PrattParser<Rule> = PrattParser::new()
+        .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
+        .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::div, Assoc::Left))
+        .op(Op::infix(Rule::pow, Assoc::Right));
+}
+
 /// An expression in the parser AST.
 ///
 /// Rule: all variants end with a capital `E`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Expr {
     /// Unit expression, that does nothing.
+    #[default]
     UnitE,
     /// An unbounded integer.
     IntegerE(BigInt),
@@ -141,6 +150,20 @@ impl Expr {
             None
         }
     }
+
+    /// Sees this expression as a if-then expression.
+    ///
+    /// Format of the output: `(condition, iftrue_block, iffalse_block)`.
+    ///
+    /// # Errors
+    /// Returns `None` if the expression is not an if-then expression.
+    pub fn as_if_then(&self) -> Option<(&Expr, &Block, &Block)> {
+        if let IfE(box cond, box iftrue, box iffalse) = self {
+            Some((cond, iftrue, iffalse))
+        } else {
+            None
+        }
+    }
 }
 
 /// Shortcut to create an `Expr` which is just a variable, based on its name.
@@ -216,14 +239,36 @@ impl From<Var> for Expr {
     }
 }
 
-impl<'a> Parsable<Pair<'a, Rule>> for Expr {
-    fn parse(pair: Pair<'a, Rule>, ctx: &mut Context) -> Self {
+impl Parsable<Pair<'_, Rule>> for Expr {
+    fn parse(pair: Pair<Rule>, ctx: &mut Context) -> Self {
         match pair.as_rule() {
-            Rule::unit => UnitE,
-            Rule::integer => IntegerE(ctx.parse(pair)),
-            Rule::string => StringE(ctx.parse(pair)),
-            Rule::ident => VarE(ctx.parse(pair)),
-            Rule::array => ArrayE(pair.into_inner().map(|pair| ctx.parse(pair)).collect()),
+            Rule::expr | Rule::primitive => {
+                let pair = pair.into_inner().next().unwrap();
+                match pair.as_rule() {
+                    Rule::unit => UnitE,
+                    Rule::integer => IntegerE(ctx.parse(pair)),
+                    Rule::string => StringE(ctx.parse(pair)),
+                    Rule::ident => VarE(ctx.parse(pair)),
+                    Rule::array => ArrayE(pair.into_inner().map(|pair| ctx.parse(pair)).collect()),
+                    Rule::with_postfix => ctx.parse(pair),
+                    Rule::if_then => {
+                        let mut pairs = pair.into_inner();
+                        let cond = ctx.parse(pairs.next().unwrap());
+                        let if_block = ctx.parse(pairs.next().unwrap());
+                        let else_block =
+                            pairs.next().map(|pair| ctx.parse(pair)).unwrap_or_default();
+                        IfE(boxed(cond), boxed(if_block), boxed(else_block))
+                    }
+                    Rule::binop => PRATT_PARSER
+                        .map_primary(|primary| Expr::parse(primary, ctx))
+                        .map_infix(|lhs, op, rhs| CallE {
+                            name: op.as_str().to_owned(),
+                            args: vec![lhs, rhs],
+                        })
+                        .parse(pair.into_inner()),
+                    rule => panic!("parser internal error: expected expression, found {rule:?}"),
+                }
+            }
             Rule::with_postfix => {
                 let mut pairs = pair.into_inner();
                 let expr = ctx.parse(pairs.next().unwrap());
@@ -253,15 +298,20 @@ impl<'a> Parsable<Pair<'a, Rule>> for Expr {
                     rule => panic!("expected postfix, found {rule:?}"),
                 })
             }
-            rule => panic!("expected expression, found {rule:?}"),
+            _ => panic!(
+                "expected primitive or an expr, found {:?} for {}",
+                pair.as_rule(),
+                pair.as_str()
+            ),
         }
     }
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use pest::Parser;
 
+    use super::super::Stmt;
     use super::*;
     use crate::grammar::Grammar;
 
@@ -439,12 +489,47 @@ mod test {
 
     #[test]
     fn if_then() {
-        let input = "if x { y } else { z } ";
+        let input = "if x { y } else { z }";
         let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
         let pair = parsed.next().expect("Nothing parsed");
         let mut ctx = Context::new(input);
         let expr: Expr = ctx.parse(pair);
         eprintln!("{expr:?}");
-        assert!(matches!(expr, IntegerE(_)));
+        let (cond, if_block, else_block) = expr.as_if_then().unwrap();
+        assert!(cond.as_var().unwrap() == "x");
+        assert!(if_block.stmts.is_empty());
+        assert!(if_block.ret.as_var().unwrap() == "y");
+        assert!(else_block.stmts.is_empty());
+        assert!(else_block.ret.as_var().unwrap() == "z");
+    }
+
+    #[test]
+    fn more_complex_if_then_else() {
+        let input = "if x { let k: int = 12; y } else { let w: int = 16; z }";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        let (cond, if_block, else_block) = expr.as_if_then().unwrap();
+        assert!(cond.as_var().unwrap() == "x");
+        assert!(matches!(&if_block.stmts[..], [Stmt::Declare(..)]));
+        assert!(if_block.ret.as_var().unwrap() == "y");
+        assert!(matches!(&else_block.stmts[..], [Stmt::Declare(..)]));
+        assert!(else_block.ret.as_var().unwrap() == "z");
+    }
+
+    #[test]
+    fn binary_operations() {
+        let input = "x + 2 * 7";
+        let mut parsed = Grammar::parse(Rule::expr, input).expect("failed to parse");
+        let pair = parsed.next().expect("Nothing parsed");
+        let mut ctx = Context::new(input);
+        let expr: Expr = ctx.parse(pair);
+        eprintln!("{expr:?}");
+        let (name1, args) = expr.as_call().unwrap();
+        let (name2, _) = args[1].as_call().unwrap();
+        assert_eq!(name1, "+");
+        assert_eq!(name2, "*");
     }
 }

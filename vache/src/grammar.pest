@@ -1,24 +1,30 @@
-program = { SOI ~ (fun | struct)* ~ &EOI }
+program = { SOI ~ (fun | struct_def)* ~ &EOI }
 
-fun = { "fn" ~ "(" ~ (ident ~ ":" ~ ty )* ~ ")" ~ "->" ~ ty ~ block }
+fun = { "fn" ~ ident ~ params ~ "->" ~ ty ~ block }
 
-struct = { "struct" ~ ident ~ "{" ~ (ident ~ ":" ~ ty ~ "," )* ~ "}" }
+params = {"(" ~ (vardef ~ ("," ~ vardef)*)? ~ ")"}
+
+struct_def = { "struct" ~ ident ~ "{" ~ (ident ~ ":" ~ ty ~ "," )* ~ "}" }
 
 block = { "{" ~ (stmt ~ ";")* ~ (expr)? ~ "}" }
 
-stmt = { while | assign | declare | expr }
+stmt = { while_loop | declare | assign | expr }
 
-while = { "while" ~ expr ~ block }
+while_loop = { "while" ~ expr ~ block }
 
 assign = { ident ~ "=" ~ expr }
 
-declare = { "let" ~ ident ~ ":" ~ ty ~ "=" ~ expr }
+declare = { "let" ~ vardef ~ "=" ~ expr }
 
-expr = _{ struct_instance | if | block | with_postfix }
+vardef = {ident ~ ":" ~ ty}
+
+expr = { struct_instance | if_then | block | binop | with_postfix }
+
+binop = { with_postfix ~ (infix ~ with_postfix)+ }
 
 with_postfix = { primitive ~ (field_postfix | index_postfix | call_postfix)* }
 
-primitive = _{ array | unit | integer | string | ident | "(" ~ expr ~ ")" }
+primitive = { array | unit | integer | string | ident | "(" ~ expr ~ ")" }
 
 field_postfix = { "." ~ primitive }
 
@@ -34,13 +40,28 @@ integer = ${ '1'..'9' ~ ('0'..'9' | "_")* }
 
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
-ty = { ("[" ~ ty ~ "]") | "int" | "str" | "bool" | "()" | ident }
+ty = { ("[" ~ ty ~ "]") | int_ty | str_ty | bool_ty | unit | ident }
+
+bool_ty = { "bool" }
+
+str_ty = { "str" }
+
+int_ty = { "int" }
 
 keyword = { "if" | "else" | "while" | "int" | "str" | "bool" | "fn" }
 
+infix = _{ add | sub | mul | div | mod | pow }
+
+add = { "+" }
+sub = { "-" }
+mul = { "*" }
+div = { "/" }
+mod = { "%" }
+pow = { "^" }
+
 ident = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
-if = { "if" ~ expr ~ block ~ ("else" ~ block) }
+if_then = { "if" ~ expr ~ block ~ ("else" ~ block) }
 
 array = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
 

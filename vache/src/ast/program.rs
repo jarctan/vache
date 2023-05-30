@@ -1,8 +1,11 @@
 //! Parsing programs, and defining their representation in the AST.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, default::default};
 
-use super::{Fun, Struct};
+use pest::iterators::Pair;
+
+use super::{Context, Fun, Parsable, Struct};
+use crate::grammar::*;
 
 /// A program: a collection of:
 /// * structures
@@ -37,5 +40,28 @@ impl From<Vec<Fun>> for Program {
 impl From<Fun> for Program {
     fn from(f: Fun) -> Self {
         Program::from(vec![f])
+    }
+}
+
+impl Parsable<Pair<'_, Rule>> for Program {
+    fn parse(pair: Pair<Rule>, ctx: &mut Context) -> Self {
+        debug_assert!(matches!(pair.as_rule(), Rule::program));
+        let pairs = pair.into_inner();
+
+        let mut funs: HashMap<String, _> = default();
+        let structs = default();
+
+        for pair in pairs {
+            match pair.as_rule() {
+                Rule::fun => {
+                    let fun: Fun = ctx.parse(pair);
+                    funs.insert(fun.name.clone(), fun);
+                }
+                Rule::struct_def => todo!(),
+                _ => unreachable!(),
+            }
+        }
+
+        Program { funs, structs }
     }
 }
