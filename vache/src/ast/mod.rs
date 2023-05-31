@@ -16,6 +16,9 @@ pub mod var;
 
 use std::fs;
 
+pub use anyhow::Context as AnyhowContext;
+use anyhow::Error;
+pub use anyhow::Result;
 pub use block::Block;
 pub use expr::{if_e, Expr};
 pub use fun::{Fun, FunSig};
@@ -56,19 +59,19 @@ impl<'a> Context<'a> {
 }
 
 /// Parses a file, and returns the parsed program, and the input.
-pub fn parse_file(filepath: &str) -> Option<(Program, String)> {
-    let input = fs::read_to_string(filepath).ok()?;
+pub fn parse_file(filepath: &str) -> Result<(Program, String)> {
+    let input = fs::read_to_string(filepath).with_context(|| {
+        format!(
+            "Failed to open file `{filepath}` in {}",
+            std::env::current_dir().unwrap_or_default().display()
+        )
+    })?;
 
-    let mut pairs = match Grammar::parse(Rule::program, &input) {
-        Err(err) => {
-            println!("Parsing errors :\n{}", err);
-            return None;
-        }
-        Ok(pairs) => pairs,
-    };
+    let mut pairs =
+        Grammar::parse(Rule::program, &input).with_context(|| "Parsing errors found.")?;
 
     let mut ctx = Context::new(&input);
-    let program = ctx.parse(pairs.next()?);
+    let program: Program = ctx.parse(pairs.next().ok_or(Error::msg("Parser grammar error"))?);
 
-    Some((program, input.clone()))
+    Ok((program, input.clone()))
 }

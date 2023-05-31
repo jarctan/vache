@@ -27,6 +27,7 @@ pest = "2.6.0"
 pest_derive = "2.6.0"
 lazy_static = "1.4.0"
 clap = { version = "4.3.0", features = ["derive"] }
+anyhow = "1.0.71"
 
 [dev-dependencies]
 vache-tests-proc = { path = "../vache-tests-proc" }

@@ -1,5 +1,6 @@
 //! Toy Vache language compiler.
 
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use vache_lib::{borrow_check, check, examples::parse_file, mir, run};
 
@@ -25,7 +26,7 @@ enum Commands {
     },
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     /*let mut checked = check(vache_lib::examples::assignment_while_borrowed());
     let mir = borrow_check(mir(&mut checked));
     println!("{mir:?}");
@@ -33,18 +34,20 @@ fn main() {
     println!("{}", res);*/
     match Cli::parse().command {
         Commands::Compile { filename } => {
-            let (program, _) = parse_file(&filename).unwrap();
+            let (program, _) = parse_file(&filename).with_context(|| "Compilation failed")?;
             let mut checked = check(program);
             let mir = borrow_check(mir(&mut checked));
             println!("{mir:?}");
         }
         Commands::Run { filename } => {
-            let (program, _) = parse_file(&filename).unwrap();
+            let (program, _) = parse_file(&filename).with_context(|| "Compilation failed")?;
             let mut checked = check(program);
             let mir = borrow_check(mir(&mut checked));
             println!("{mir:?}");
-            let res = run(checked, "binary", &std::env::current_dir().unwrap()).expect("error");
+            let res = run(checked, "binary", &std::env::current_dir()?)
+                .with_context(|| "runtime error")?;
             println!("{}", res);
         }
     }
+    Ok(())
 }
