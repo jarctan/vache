@@ -14,9 +14,12 @@ pub mod structure;
 pub mod ty;
 pub mod var;
 
+use std::fs;
+
 pub use block::Block;
 pub use expr::{if_e, Expr};
 pub use fun::{Fun, FunSig};
+use pest::Parser;
 pub use place::{idx_place, Place};
 pub use program::Program;
 pub use selfvisitor::SelfVisitor;
@@ -24,6 +27,8 @@ pub use stmt::Stmt;
 pub use structure::Struct;
 pub use ty::Ty;
 pub use var::{Var, VarDef};
+
+use crate::grammar::{Grammar, Rule};
 
 /// Can be parsed from elements of `T`.
 pub trait Parsable<T> {
@@ -48,4 +53,22 @@ impl<'a> Context<'a> {
     pub fn parse<U, T: Parsable<U>>(&mut self, pair: U) -> T {
         T::parse(pair, self)
     }
+}
+
+/// Parses a file, and returns the parsed program, and the input.
+pub fn parse_file(filepath: &str) -> Option<(Program, String)> {
+    let input = fs::read_to_string(filepath).ok()?;
+
+    let mut pairs = match Grammar::parse(Rule::program, &input) {
+        Err(err) => {
+            println!("Parsing errors :\n{}", err);
+            return None;
+        }
+        Ok(pairs) => pairs,
+    };
+
+    let mut ctx = Context::new(&input);
+    let program = ctx.parse(pairs.next()?);
+
+    Some((program, input.clone()))
 }
