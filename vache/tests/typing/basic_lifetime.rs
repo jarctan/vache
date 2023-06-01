@@ -6,7 +6,7 @@ use super::*;
 #[test]
 fn basic_lifetime() {
     test(vec![Fun {
-        name: "main".to_string(),
+        name: "main",
         params: vec![],
         ret_ty: UnitT,
         body: Block {

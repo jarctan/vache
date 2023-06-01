@@ -4,28 +4,20 @@ use super::{Block, Expr, Place, VarDef};
 
 /// A statement.
 #[derive(Debug, Clone)]
-pub enum Stmt {
+pub enum Stmt<'ctx> {
     /// A declaration. We assign the computation
     /// of the 2nd argument to the newly created variable
     /// defined in the 1st argument.
-    Declare(VarDef, Expr),
+    Declare(VarDef<'ctx>, Expr<'ctx>),
     /// An assignment.
-    Assign(Place, Expr),
+    Assign(Place<'ctx>, Expr<'ctx>),
     /// An expression, whose final value is discarded.
-    ExprS(Expr),
+    ExprS(Expr<'ctx>),
     /// A while statement.
     While {
         /// Condition.
-        cond: Expr,
+        cond: Expr<'ctx>,
         /// While body.
-        body: Block,
+        body: Block<'ctx>,
     },
 }
-
-impl PartialEq for Stmt {
-    fn eq(&self, _other: &Self) -> bool {
-        todo!()
-    }
-}
-
-impl Eq for Stmt {}

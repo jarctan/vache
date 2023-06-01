@@ -5,7 +5,7 @@ use super::*;
 #[test]
 fn simple_fun() {
     test(vec![Fun {
-        name: "simple".to_string(),
+        name: "simple",
         params: vec![vardef("n", IntT)],
         ret_ty: UnitT,
         body: stmts(vec![

@@ -7,7 +7,7 @@ use crate::tast::Stratum;
 
 /// Values in our language.
 #[derive(Default, Clone)]
-pub enum Value {
+pub enum Value<'ctx> {
     /// Uninit value.
     #[default]
     UninitV,
@@ -24,14 +24,14 @@ pub enum Value {
     /// `StructV(name, fields)`
     ///
     /// We keep the name to display structures nicely in the end.
-    StructV(String, HashMap<String, ValueRef>),
+    StructV(&'ctx str, HashMap<&'ctx str, ValueRef>),
     /// Array.
     ArrayV(Vec<ValueRef>),
 }
 
 use Value::*;
 
-impl fmt::Debug for Value {
+impl fmt::Debug for Value<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UninitV => write!(f, "!"),
@@ -51,7 +51,7 @@ impl fmt::Debug for Value {
     }
 }
 
-impl fmt::Display for Value {
+impl fmt::Display for Value<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UninitV => panic!("Runtime error: Requested to display an uninitialized value"),
@@ -65,7 +65,7 @@ impl fmt::Display for Value {
     }
 }
 
-impl Value {
+impl Value<'_> {
     /// Truthiness of the value.
     pub fn truth(&self) -> bool {
         if let BoolV(b) = self {

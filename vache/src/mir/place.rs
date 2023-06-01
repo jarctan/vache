@@ -5,19 +5,19 @@ use std::fmt;
 use super::Var;
 
 /// Kinds of places.
-#[derive(Clone)]
-pub enum Place {
+#[derive(Clone, Copy)]
+pub enum Place<'ctx> {
     /// A mere variable.
-    VarP(Var),
+    VarP(Var<'ctx>),
     /// An indexed slot into an expression.
-    IndexP(Var, Var),
+    IndexP(Var<'ctx>, Var<'ctx>),
     /// An field in an expression.
-    FieldP(Var, Var),
+    FieldP(Var<'ctx>, Var<'ctx>),
 }
 
-impl Place {
+impl<'ctx> Place<'ctx> {
     /// Gets the defined (overwritten) variable by that place.
-    pub fn defs(&self) -> &Var {
+    pub fn defs(&self) -> &Var<'ctx> {
         use Place::*;
         match self {
             VarP(v) => v,
@@ -28,23 +28,23 @@ impl Place {
 
     /// Gets the variables used by that place (variables that need to exist
     /// beforehand).
-    pub fn uses(&self) -> Option<Var> {
+    pub fn uses(&self) -> Option<Var<'ctx>> {
         use Place::*;
         match self {
             VarP(_) => None,
-            IndexP(array, _) => Some(array.clone()),
-            FieldP(strukt, _) => Some(strukt.clone()),
+            IndexP(array, _) => Some(*array),
+            FieldP(strukt, _) => Some(*strukt),
         }
     }
 }
 
-impl From<Var> for Place {
-    fn from(var: Var) -> Self {
+impl<'ctx> From<Var<'ctx>> for Place<'ctx> {
+    fn from(var: Var<'ctx>) -> Self {
         Place::VarP(var)
     }
 }
 
-impl fmt::Debug for Place {
+impl fmt::Debug for Place<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Place::VarP(v) => write!(f, "{v:?}"),

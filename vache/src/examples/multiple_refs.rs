@@ -3,10 +3,10 @@
 
 use super::*;
 
-pub fn multiple_refs() -> impl Into<Program> {
+pub fn multiple_refs() -> impl Into<Program<'static>> {
     vec![
         Fun {
-            name: "is_even".to_string(),
+            name: "is_even",
             params: vec![vardef("n", IntT)],
             ret_ty: BoolT,
             body: Block {
@@ -18,7 +18,7 @@ pub fn multiple_refs() -> impl Into<Program> {
             },
         },
         Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: Block {

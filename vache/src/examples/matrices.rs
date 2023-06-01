@@ -5,11 +5,11 @@ use super::*;
 
 /// Modify a cell, but no read afterwards on the matrix: therefore we should
 /// consume when modifying.
-pub fn simple_matrix_modify_consume() -> impl Into<Program> {
+pub fn simple_matrix_modify_consume() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![
@@ -25,11 +25,11 @@ pub fn simple_matrix_modify_consume() -> impl Into<Program> {
 
 /// Modify a cell, but read afterwards a cell in the matrix: therefore we should
 /// only `&mut`.
-pub fn simple_matrix_modify() -> impl Into<Program> {
+pub fn simple_matrix_modify() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![

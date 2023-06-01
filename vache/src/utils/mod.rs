@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+pub mod arena;
 pub mod set;
 
 /// Checks if the keys match a list (more precisely, an iterator) of keys.

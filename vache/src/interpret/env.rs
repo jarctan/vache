@@ -14,17 +14,17 @@ use crate::{mir::Var, tast::Stratum};
 ///
 /// You can however shadow variables definitions, effectively changing the value
 /// they point to.
-pub struct Env {
+pub struct Env<'ctx> {
     /// Slab of actual values.
-    slab: Slab<Value>,
+    slab: Slab<Value<'ctx>>,
     /// Map between vars and their keys in the slab.
-    var_env: HashMap<Var, ValueRef>,
+    var_env: HashMap<Var<'ctx>, ValueRef>,
     /// Stratum id for this environment.
     stratum: Stratum,
     /// Reference to the dummy value for uninitialized variables.
     uninit: ValueRef,
 }
-impl Env {
+impl<'ctx> Env<'ctx> {
     /// Creates a new, empty environment.
     pub fn new(stratum: Stratum) -> Self {
         let mut slab = Slab::new();
@@ -44,7 +44,7 @@ impl Env {
     }
 
     /// Gets a value from the environment, based on the key in the slab.
-    pub fn get_value(&self, key: usize) -> Option<&Value> {
+    pub fn get_value(&self, key: usize) -> Option<&Value<'ctx>> {
         let value = self.slab.get(key)?;
         assert!(
             !matches!(value, Value::UninitV),
@@ -55,7 +55,7 @@ impl Env {
 
     /// Gets a mutable reference to a value from the environment, based on the
     /// key in the slab.
-    pub fn get_value_mut(&mut self, key: usize) -> Option<&mut Value> {
+    pub fn get_value_mut(&mut self, key: usize) -> Option<&mut Value<'ctx>> {
         let value = self.slab.get_mut(key)?;
         assert!(
             !matches!(value, Value::UninitV),
@@ -65,7 +65,7 @@ impl Env {
     }
 
     /// Adds a value to that environment, returning the key to it in the slab.
-    pub fn add_value(&mut self, value: Value) -> ValueRef {
+    pub fn add_value(&mut self, value: Value<'ctx>) -> ValueRef {
         ValueRef {
             key: self.slab.insert(value),
             stratum: self.stratum,
@@ -73,12 +73,12 @@ impl Env {
     }
 
     /// Gets the definition of a variable.
-    pub fn get_var(&self, v: impl AsRef<Var>) -> Option<&ValueRef> {
+    pub fn get_var(&self, v: impl AsRef<Var<'ctx>>) -> Option<&ValueRef> {
         self.var_env.get(v.as_ref())
     }
 
     /// Gets a mutable reference into the definition of a variable.
-    pub fn get_var_mut(&mut self, v: impl AsRef<Var>) -> Option<&mut ValueRef> {
+    pub fn get_var_mut(&mut self, v: impl AsRef<Var<'ctx>>) -> Option<&mut ValueRef> {
         self.var_env.get_mut(v.as_ref())
     }
 
@@ -88,7 +88,7 @@ impl Env {
     /// Panics if the var is not stated as declared in that stratum/environment.
     /// You should only add a var definition in the stratum in which it is
     /// tied to.
-    pub fn add_var(&mut self, name: impl Into<Var>) {
+    pub fn add_var(&mut self, name: impl Into<Var<'ctx>>) {
         self.var_env.insert(name.into(), self.uninit);
     }
 
@@ -101,7 +101,7 @@ impl Env {
     ///
     /// # Panics
     /// Panics if the value was defined in a more _internal_ environment.
-    pub fn close(mut self, value: ValueRef) -> Option<Value> {
+    pub fn close(mut self, value: ValueRef) -> Option<Value<'ctx>> {
         assert!(value.stratum <= self.stratum);
         if value.stratum == self.stratum {
             Some(self.slab.remove(value.key))
@@ -111,7 +111,7 @@ impl Env {
     }
 }
 
-impl fmt::Debug for Env {
+impl fmt::Debug for Env<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Env")
             .field("stratum", &self.stratum)

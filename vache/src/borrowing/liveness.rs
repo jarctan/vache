@@ -15,7 +15,7 @@ use crate::utils::set::Set;
 ///
 /// Returns a map of live variables at the entry and exit of each node in the
 /// CFG.
-pub fn var_liveness<'a>(cfg: &'a CfgI, entry_l: &'a CfgLabel) -> Cfg<Flow<Set<Var>>> {
+pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<Set<Var<'ctx>>>> {
     // Bootstrap with empty environments.
     let mut var_flow: Cfg<Flow<Set<Var>>> = cfg.map_ref(|_, _| Flow::default(), |_| ());
 
@@ -28,7 +28,7 @@ pub fn var_liveness<'a>(cfg: &'a CfgI, entry_l: &'a CfgLabel) -> Cfg<Flow<Set<Va
         for (label, instr) in cfg.postorder(entry_l) {
             let successors = cfg.neighbors(label);
 
-            let outs: Set<Var> = successors.map(|x| var_flow[x].ins.clone()).sum();
+            let outs: Set<Var> = successors.map(|x| var_flow[&x].ins.clone()).sum();
             let ins: Set<Var> = match &instr.kind {
                 InstrKind::Noop => outs.clone(),
                 InstrKind::Declare(var) => outs.clone() - &var.name,
@@ -38,24 +38,24 @@ pub fn var_liveness<'a>(cfg: &'a CfgI, entry_l: &'a CfgLabel) -> Cfg<Flow<Set<Va
                     outs.clone() - lhs.defs() + lhs.uses()
                 }
                 InstrKind::Assign(lhs, RValue::Var(rhs)) => {
-                    outs.clone() - lhs.defs() + lhs.uses() + rhs.var.clone()
+                    outs.clone() - lhs.defs() + lhs.uses() + rhs.var
                 }
                 InstrKind::Assign(lhs, RValue::MovedVar(rhs)) => {
-                    outs.clone() - lhs.defs() + lhs.uses() + rhs.clone()
+                    outs.clone() - lhs.defs() + lhs.uses() + *rhs
                 }
                 InstrKind::Assign(lhs, RValue::Field(rhs, _)) => {
-                    outs.clone() - lhs.defs() + lhs.uses() + rhs.clone()
+                    outs.clone() - lhs.defs() + lhs.uses() + *rhs
                 }
                 InstrKind::Assign(lhs, RValue::Index(array, index)) => {
-                    outs.clone() - lhs.defs() + lhs.uses() + array.clone() + index.clone()
+                    outs.clone() - lhs.defs() + lhs.uses() + *array + *index
                 }
                 InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
                     outs.clone() - lhs.defs()
                         + lhs.uses()
-                        + Set::from_iter(fields.values().cloned())
+                        + Set::from_iter(fields.values().copied())
                 }
                 InstrKind::Assign(lhs, RValue::Array(array)) => {
-                    outs.clone() - lhs.defs() + lhs.uses() + Set::from_iter(array.iter().cloned())
+                    outs.clone() - lhs.defs() + lhs.uses() + Set::from_iter(array.iter().copied())
                 }
                 InstrKind::Call {
                     name: _,
@@ -63,15 +63,15 @@ pub fn var_liveness<'a>(cfg: &'a CfgI, entry_l: &'a CfgLabel) -> Cfg<Flow<Set<Va
                     destination,
                 } => {
                     let res =
-                        outs.clone() - destination.as_ref() + Set::from_iter(args.iter().cloned());
+                        outs.clone() - destination.as_ref() + Set::from_iter(args.iter().copied());
                     res
                 }
-                InstrKind::Branch(v) => outs.clone() + v.clone(),
+                InstrKind::Branch(v) => outs.clone() + *v,
             };
 
             let flow = Flow { ins, outs };
-            if var_flow[label] != flow {
-                var_flow[label] = flow;
+            if var_flow[&label] != flow {
+                var_flow[&label] = flow;
                 updated = true;
             }
         }
@@ -89,12 +89,13 @@ pub fn var_liveness<'a>(cfg: &'a CfgI, entry_l: &'a CfgLabel) -> Cfg<Flow<Set<Va
 ///
 /// Returns a map of live loans at the entry and exit of each node in the
 /// CFG.
-fn loan_liveness(
-    cfg: &CfgI<'_>,
-    entry_l: &CfgLabel,
-    var_flow: &Cfg<Flow<Set<Var>>>,
-) -> Cfg<Flow<Ledger>> {
-    let out_of_scope = var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
+fn loan_liveness<'ctx>(
+    cfg: &CfgI<'ctx>,
+    entry_l: CfgLabel,
+    var_flow: &Cfg<Flow<Set<Var<'ctx>>>>,
+) -> Cfg<Flow<Ledger<'ctx>>> {
+    let out_of_scope: Cfg<Set<Var>> =
+        var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
 
     // Same, for loans.
     let mut loan_flow: Cfg<Flow<Ledger>> = cfg.map_ref(|_, _| Flow::default(), |_| ());
@@ -106,7 +107,7 @@ fn loan_liveness(
 
         for (label, instr) in cfg.postorder(entry_l).rev() {
             let predecessors = cfg.preneighbors(label);
-            let ins: Ledger = predecessors.map(|x| loan_flow[x].outs.clone()).sum();
+            let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
             let outs: Ledger = match &instr.kind {
                 InstrKind::Noop => ins.clone(),
                 InstrKind::Declare(var) => ins.clone() - &var.name,
@@ -115,8 +116,8 @@ fn loan_liveness(
                 | InstrKind::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs.defs(),
                 InstrKind::Assign(lhs, RValue::MovedVar(rhs)) => {
                     let mut ledger = ins.clone();
-                    if var_flow[label].outs.contains(lhs.defs()) {
-                        ledger.add_borrows(lhs, ins.move_var(rhs.clone()));
+                    if var_flow[&label].outs.contains(lhs.defs()) {
+                        ledger.add_borrows(lhs, ins.move_var(*rhs));
                     } else {
                         ledger.remove(lhs.defs());
                     }
@@ -124,8 +125,8 @@ fn loan_liveness(
                 }
                 InstrKind::Assign(lhs, RValue::Var(rhs)) => {
                     let mut ledger = ins.clone();
-                    if var_flow[label].outs.contains(lhs.defs()) {
-                        ledger.add_borrows(lhs, ins.borrow(rhs, label.clone()));
+                    if var_flow[&label].outs.contains(lhs.defs()) {
+                        ledger.add_borrows(lhs, ins.borrow(rhs, label));
                     } else {
                         ledger.remove(lhs.defs());
                     }
@@ -133,8 +134,8 @@ fn loan_liveness(
                 }
                 InstrKind::Assign(lhs, RValue::Field(rhs, _)) => {
                     let mut ledger = ins.clone();
-                    if var_flow[label].outs.contains(lhs.defs()) {
-                        ledger.add_borrows(lhs, ins.move_var(rhs.clone()));
+                    if var_flow[&label].outs.contains(lhs.defs()) {
+                        ledger.add_borrows(lhs, ins.move_var(*rhs));
                     } else {
                         ledger.remove(lhs.defs());
                     }
@@ -142,11 +143,8 @@ fn loan_liveness(
                 }
                 InstrKind::Assign(lhs, RValue::Index(array, index)) => {
                     let mut ledger = ins.clone();
-                    if var_flow[label].outs.contains(lhs.defs()) {
-                        ledger.add_borrows(
-                            lhs,
-                            ins.move_var(array.clone()) + ins.move_var(index.clone()),
-                        );
+                    if var_flow[&label].outs.contains(lhs.defs()) {
+                        ledger.add_borrows(lhs, ins.move_var(*array) + ins.move_var(*index));
                     } else {
                         ledger.remove(lhs.defs());
                     }
@@ -154,12 +152,12 @@ fn loan_liveness(
                 }
                 InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
                     let mut ledger = ins.clone();
-                    if var_flow[label].outs.contains(lhs.defs()) {
+                    if var_flow[&label].outs.contains(lhs.defs()) {
                         ledger.add_borrows(
                             lhs,
                             fields
                                 .values()
-                                .map(|field| ins.move_var(field.clone()))
+                                .map(|field| ins.move_var(*field))
                                 .sum::<Borrows>(),
                         );
                     } else {
@@ -169,12 +167,12 @@ fn loan_liveness(
                 }
                 InstrKind::Assign(lhs, RValue::Array(array)) => {
                     let mut ledger = ins.clone();
-                    if var_flow[label].outs.contains(lhs.defs()) {
+                    if var_flow[&label].outs.contains(lhs.defs()) {
                         ledger.add_borrows(
                             lhs,
                             array
                                 .iter()
-                                .map(|item| ins.move_var(item.clone()))
+                                .map(|item| ins.move_var(*item))
                                 .sum::<Borrows>(),
                         );
                     } else {
@@ -188,13 +186,11 @@ fn loan_liveness(
                     destination: Some(destination),
                 } => {
                     let mut res = ins.clone() - destination;
-                    if var_flow[label].outs.contains(destination) {
+                    if var_flow[&label].outs.contains(destination) {
                         res = res
                             + (
-                                destination.clone(),
-                                args.iter()
-                                    .map(|arg| ins.move_var(arg.clone()))
-                                    .sum::<Borrows>(),
+                                *destination,
+                                args.iter().map(|arg| ins.move_var(*arg)).sum::<Borrows>(),
                             );
                     }
                     res
@@ -203,11 +199,11 @@ fn loan_liveness(
                 | InstrKind::Call {
                     destination: None, ..
                 } => ins.clone(),
-            } - &out_of_scope[label];
+            } - &out_of_scope[&label];
 
             let flow = Flow { ins, outs };
-            if loan_flow[label] != flow {
-                loan_flow[label] = flow;
+            if loan_flow[&label] != flow {
+                loan_flow[&label] = flow;
                 updated = true;
             }
         }
@@ -225,7 +221,7 @@ fn loan_liveness(
 ///
 /// Mutates in place `varmode` to switch its mode to `Moved` if it's the last
 /// use of the variable.
-fn optimize_last_use(varmode: &mut VarMode, outs: &Set<Var>) {
+fn optimize_last_use<'ctx>(varmode: &mut VarMode<'ctx>, outs: &Set<Var<'ctx>>) {
     match varmode.mode {
         Mode::Cloned => {
             if !outs.contains(&varmode.var) {
@@ -249,7 +245,7 @@ fn optimize_last_use(varmode: &mut VarMode, outs: &Set<Var>) {
 /// * The entry label in the CFG.
 ///
 /// Performs liveliness analysis, determining which borrows are invalidated.
-pub fn liveness<'a>(mut cfg: CfgI<'a>, entry_l: &CfgLabel) -> CfgI<'a> {
+pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel) -> CfgI<'ctx> {
     // Compute the two analyses
     let var_flow = var_liveness(&cfg, entry_l);
     let loan_flow = loan_liveness(&cfg, entry_l, &var_flow);
@@ -270,11 +266,11 @@ pub fn liveness<'a>(mut cfg: CfgI<'a>, entry_l: &CfgLabel) -> CfgI<'a> {
     }
 
     // List all invalidated borrows.
-    let mut invalidated: Borrows = Borrows::new();
+    let mut invalidated: Borrows<'ctx> = Borrows::new();
     for (label, instr) in cfg.bfs(entry_l, false) {
         for lhs in instr.mutated_var() {
-            for borrow in loan_flow[label].ins.borrows(lhs) {
-                invalidated.insert(borrow.clone());
+            for borrow in loan_flow[&label].ins.borrows(lhs) {
+                invalidated.insert(*borrow);
             }
         }
     }
@@ -299,6 +295,9 @@ mod tests {
         let mut cfg = Cfg::default();
         let stm = Stratum::static_stm();
 
+        // Constants
+        let forty_two = 42.into();
+
         // Variables
         let x = Var::from("x");
         let x_def = vardef("x", Ty::IntT, stm);
@@ -312,12 +311,12 @@ mod tests {
             [
                 instr(InstrKind::Declare(y_def), stm),
                 instr(
-                    InstrKind::Assign(y.clone().into(), RValue::Integer(42.into())),
+                    InstrKind::Assign(y.into(), RValue::Integer(&forty_two)),
                     stm,
                 ),
                 instr(InstrKind::Declare(x_def), stm),
                 instr(
-                    InstrKind::Assign(x.into(), RValue::Var(VarMode::new(y.clone(), &mut y_mode))),
+                    InstrKind::Assign(x.into(), RValue::Var(VarMode::new(y, &mut y_mode))),
                     stm,
                 ),
                 instr(InstrKind::Noop, stm),
@@ -325,7 +324,7 @@ mod tests {
             (),
         );
 
-        let analysis = var_liveness(&cfg, &l[0]);
+        let analysis = var_liveness(&cfg, l[0]);
 
         // Entry and exit are trivial
         assert_eq!(analysis[&l[0]].ins.len(), 0);
@@ -333,8 +332,8 @@ mod tests {
         assert_eq!(analysis[&l[4]].outs.len(), 0);
 
         // During l2, we still need y
-        assert_eq!(analysis[&l[2]].ins, Set::from_iter([y.clone()]));
-        assert_eq!(analysis[&l[2]].outs, Set::from_iter([y.clone()]));
+        assert_eq!(analysis[&l[2]].ins, Set::from_iter([y]));
+        assert_eq!(analysis[&l[2]].outs, Set::from_iter([y]));
 
         // During l3, we still need y but not afterwards anymore
         assert_eq!(analysis[&l[3]].ins, Set::from_iter([y]));
@@ -347,6 +346,9 @@ mod tests {
     fn test_clone_on_invalidation() {
         let mut cfg = Cfg::default();
         let stm = Stratum::static_stm();
+
+        // Constants
+        let forty_two = 42.into();
 
         // Variables
         let x = Var::from("x");
@@ -361,21 +363,21 @@ mod tests {
             [
                 instr(InstrKind::Declare(y_def), stm),
                 instr(
-                    InstrKind::Assign(y.clone().into(), RValue::Integer(42.into())),
+                    InstrKind::Assign(y.into(), RValue::Integer(&forty_two)),
                     stm,
                 ),
                 instr(InstrKind::Declare(x_def), stm),
                 instr(
                     InstrKind::Assign(
-                        x.clone().into(),
-                        RValue::Var(VarMode::new(y.clone(), &mut y_mode1)),
+                        x.into(),
+                        RValue::Var(VarMode::new(y, &mut y_mode1)),
                     ), // We assign y to x
                     stm,
                 ),
                 instr(
                     InstrKind::Call {
-                        name: "+".to_string(),
-                        args: vec![y.clone(), y.clone()], /* We mutate y
+                        name: "+",
+                        args: vec![y, y], /* We mutate y
                                                            * afterwards,
                                                            * invalidating
                                                            * the loan because we also... */
@@ -385,7 +387,7 @@ mod tests {
                 ),
                 instr(
                     InstrKind::Call {
-                        name: "print".to_string(),
+                        name: "print",
                         args: vec![x], // ...use x after so x is live
                         destination: None,
                     },
@@ -396,7 +398,7 @@ mod tests {
             (),
         );
 
-        let cfg = liveness(cfg, &l[0]);
+        let cfg = liveness(cfg, l[0]);
         assert!(
             matches!(
                 cfg[&l[3]].kind,
@@ -419,6 +421,9 @@ mod tests {
         let mut cfg = Cfg::default();
         let stm = Stratum::static_stm();
 
+        // Constants
+        let forty_two = 42.into();
+
         // Variables
         let x = Var::from("x");
         let x_def = vardef("x", Ty::IntT, stm);
@@ -433,21 +438,21 @@ mod tests {
                 [
                     instr(InstrKind::Declare(y_def), stm),
                     instr(
-                        InstrKind::Assign(y.clone().into(), RValue::Integer(42.into())),
+                        InstrKind::Assign(y.into(), RValue::Integer(&forty_two)),
                         stm,
                     ),
                     instr(InstrKind::Declare(x_def), stm),
                     instr(
                         InstrKind::Assign(
                             x.into(),
-                            RValue::Var(VarMode::new(y.clone(), &mut y_mode1)),
+                            RValue::Var(VarMode::new(y, &mut y_mode1)),
                         ), /* We assign y to x */
                         stm,
                     ),
                     instr(
                         InstrKind::Call {
-                            name: "+".to_string(),
-                            args: vec![y.clone(), y.clone()], /* We mutate y
+                            name: "+",
+                            args: vec![y, y], /* We mutate y
                                                                * afterwards,
                                                                * invalidating
                                                                * BUT don't invalidate since x
@@ -462,7 +467,7 @@ mod tests {
                 (),
             );
 
-        let cfg = liveness(cfg, &l[0]);
+        let cfg = liveness(cfg, l[0]);
         assert!(
             matches!(
                 cfg[&l[3]].kind,
@@ -485,6 +490,10 @@ mod tests {
         let mut cfg = Cfg::default();
         let stm = Stratum::static_stm();
 
+        // Constants
+        let forty_two = 42.into();
+        let thirty_six = 36.into();
+
         // Variables
         let x = Var::from("x");
         let x_def = vardef("x", Ty::IntT, stm);
@@ -498,15 +507,15 @@ mod tests {
             [
                 instr(InstrKind::Declare(y_def), stm),
                 instr(
-                    InstrKind::Assign(y.clone().into(), RValue::Integer(42.into())),
+                    InstrKind::Assign(y.into(), RValue::Integer(&forty_two)),
                     stm,
                 ),
                 instr(InstrKind::Declare(x_def), stm),
                 instr(
-                    InstrKind::Assign(x.into(), RValue::Var(VarMode::new(y.clone(), &mut y_mode))), /* We assign y to x */
+                    InstrKind::Assign(x.into(), RValue::Var(VarMode::new(y, &mut y_mode))), /* We assign y to x */
                     stm,
                 ),
-                instr(InstrKind::Assign(y.into(), RValue::Integer(36.into())), stm), /* We mutate y
+                instr(InstrKind::Assign(y.into(), RValue::Integer(&thirty_six)), stm), /* We mutate y
                                                                                * but we don't
                                                                                * need y,
                                                                                * so x can own it */
@@ -515,7 +524,7 @@ mod tests {
             (),
         );
 
-        let cfg = liveness(cfg, &l[0]);
+        let cfg = liveness(cfg, l[0]);
         assert!(
             matches!(
                 cfg[&l[3]].kind,

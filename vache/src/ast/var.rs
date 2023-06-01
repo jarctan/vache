@@ -5,19 +5,21 @@ use std::fmt;
 use pest::iterators::Pair;
 
 use super::{Context, Parsable, Ty};
-use crate::grammar::*;
+use crate::utils::boxed;
+use crate::{grammar::*, Arena};
 
 /// A variable in the code.
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct Var(String);
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Var<'ctx>(&'ctx str);
 
-impl Var {
+impl<'ctx> Var<'ctx> {
     /// A control-flow graph variable.
     ///
     /// These are variables used internally by the CFG, that starts with `__cfg`
     /// followed by a unique numeral ID.
-    pub(crate) fn cfg(number: u64) -> Var {
-        Var(format!("__cfg{number:?}"))
+    pub(crate) fn cfg(arena: &'ctx Arena, number: u64) -> Var<'ctx> {
+        let value = arena.alloc(boxed(format!("__cfg{number:?}")));
+        Var(value)
     }
 
     /// See the variable as a string.
@@ -26,62 +28,56 @@ impl Var {
     }
 }
 
-impl AsRef<Var> for Var {
-    fn as_ref(&self) -> &Var {
+impl<'ctx> AsRef<Var<'ctx>> for Var<'ctx> {
+    fn as_ref(&self) -> &Var<'ctx> {
         self
     }
 }
 
-impl From<Var> for String {
-    fn from(value: Var) -> Self {
+impl<'ctx> From<Var<'ctx>> for &'ctx str {
+    fn from(value: Var<'ctx>) -> Self {
         value.0
     }
 }
 
-impl AsRef<str> for Var {
+impl AsRef<str> for Var<'_> {
     fn as_ref(&self) -> &str {
-        &self.0
+        self.0
     }
 }
 
-impl From<&str> for Var {
-    fn from(v: &str) -> Self {
-        Self(v.to_owned())
-    }
-}
-
-impl From<String> for Var {
-    fn from(v: String) -> Self {
+impl<'ctx> From<&'ctx str> for Var<'ctx> {
+    fn from(v: &'ctx str) -> Self {
         Self(v)
     }
 }
 
-impl fmt::Debug for Var {
+impl fmt::Debug for Var<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         <Self as fmt::Display>::fmt(self, f)
     }
 }
 
-impl fmt::Display for Var {
+impl fmt::Display for Var<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl Parsable<Pair<'_, Rule>> for Var {
-    fn parse(pair: Pair<Rule>, _ctx: &mut Context) -> Self {
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Var<'ctx> {
+    fn parse(pair: Pair<'ctx, Rule>, _ctx: &mut Context) -> Self {
         assert!(pair.as_rule() == Rule::ident);
-        Var(pair.as_str().to_owned())
+        Var(pair.as_str())
     }
 }
 
-impl PartialEq<str> for Var {
+impl<'ctx> PartialEq<str> for Var<'ctx> {
     fn eq(&self, other: &str) -> bool {
         self.0 == other
     }
 }
 
-impl PartialEq<&str> for Var {
+impl<'ctx> PartialEq<&str> for Var<'ctx> {
     fn eq(&self, other: &&str) -> bool {
         self.0 == *other
     }
@@ -89,33 +85,33 @@ impl PartialEq<&str> for Var {
 
 /// A variable definition.
 #[derive(Clone, PartialEq, Eq)]
-pub struct VarDef {
+pub struct VarDef<'ctx> {
     /// Variable name.
-    pub(crate) name: Var,
+    pub(crate) name: Var<'ctx>,
     /// Type of the variable.
-    pub(crate) ty: Ty,
+    pub(crate) ty: Ty<'ctx>,
 }
 
-impl fmt::Debug for VarDef {
+impl fmt::Debug for VarDef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}:{}", self.name, self.ty)
     }
 }
 
-impl AsRef<Var> for VarDef {
-    fn as_ref(&self) -> &Var {
+impl<'ctx> AsRef<Var<'ctx>> for VarDef<'ctx> {
+    fn as_ref(&self) -> &Var<'ctx> {
         &self.name
     }
 }
 
-impl From<VarDef> for Var {
-    fn from(vardef: VarDef) -> Self {
+impl<'ctx> From<VarDef<'ctx>> for Var<'ctx> {
+    fn from(vardef: VarDef<'ctx>) -> Self {
         vardef.name
     }
 }
 
-impl Parsable<Pair<'_, Rule>> for VarDef {
-    fn parse(pair: Pair<Rule>, ctx: &mut Context) -> Self {
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for VarDef<'ctx> {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
         assert!(pair.as_rule() == Rule::vardef);
         let mut pairs = pair.into_inner();
 
@@ -127,8 +123,8 @@ impl Parsable<Pair<'_, Rule>> for VarDef {
 }
 
 /// Shortcut to create a new variable definition.
-pub fn vardef(name: impl ToString, ty: Ty) -> VarDef {
-    let name = name.to_string().into();
+pub fn vardef<'ctx>(name: &'ctx str, ty: Ty<'ctx>) -> VarDef<'ctx> {
+    let name = name.into();
     VarDef { name, ty }
 }
 
@@ -140,23 +136,15 @@ mod tests {
     use super::*;
     use crate::grammar::Grammar;
 
+    #[parses("test123" as ident)]
     #[test]
-    fn simple_var() {
-        let input = "test123";
-        let mut parsed = Grammar::parse(Rule::ident, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let var: Var = ctx.parse(pair);
+    fn simple_var(var: Var) {
         assert_eq!(var, input);
     }
 
+    #[parses("test: str" as vardef)]
     #[test]
-    fn simple_vardef() {
-        let input = "test: str";
-        let mut parsed = Grammar::parse(Rule::vardef, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let vardef: VarDef = ctx.parse(pair);
+    fn simple_vardef(vardef: VarDef) {
         assert_eq!(vardef.name, "test");
         assert_eq!(vardef.ty, StrT);
     }

@@ -61,55 +61,57 @@ impl<'a> fmt::Debug for Instr<'a> {
 
 /// Instructions in the MIR (nodes in the CFG).
 #[derive(Default)]
-pub enum InstrKind<'a> {
+pub enum InstrKind<'ctx> {
     /// No-op instruction.
     #[default]
     Noop,
     /// Declare a new, uninitialized variable.
-    Declare(VarDef),
+    Declare(VarDef<'ctx>),
     /// Assigns a variable.
-    Assign(Place, RValue<'a>),
+    Assign(Place<'ctx>, RValue<'ctx>),
     /// Performs a call to `name(args)`, putting the result in variable
     /// `destination`.
     Call {
         /// Name of the function to call.
-        name: String,
+        name: &'ctx str,
         /// Arguments to that function.
-        args: Vec<Var>,
+        args: Vec<Var<'ctx>>,
         /// Destination variable to hold the result.
-        destination: Option<Var>,
+        destination: Option<Var<'ctx>>,
     },
     /// Asks for the truthiness of the first argument.
-    Branch(Var),
+    Branch(Var<'ctx>),
 }
 
-impl<'a> InstrKind<'a> {
+impl<'cfg> InstrKind<'cfg> {
     /// If this instruction mutates a variable, returns it.
     /// Otherwise, returns `None`.
-    pub fn mutated_var(&self) -> Box<dyn Iterator<Item = &Var> + '_> {
+    pub fn mutated_var<'a>(&'a self) -> Box<dyn Iterator<Item = Var<'cfg>> + 'a> {
         match self {
             InstrKind::Noop | InstrKind::Branch(_) => boxed([].into_iter()),
             InstrKind::Declare(..) => boxed([].into_iter()),
             InstrKind::Call {
                 destination: Some(v),
                 ..
-            } => boxed([v].into_iter()),
+            } => boxed([*v].into_iter()),
             InstrKind::Call {
                 destination: None, ..
             } => boxed([].into_iter()),
             InstrKind::Assign(VarP(v), RValue::Array(array)) => {
                 let mut vec = vec![v];
                 array.iter().collect_into(&mut vec);
-                boxed(vec.into_iter())
+                boxed(vec.into_iter().copied())
             }
             InstrKind::Assign(VarP(v), RValue::Struct { name: _, fields }) => {
                 let mut vec = vec![v];
                 fields.values().collect_into(&mut vec);
-                boxed(vec.into_iter())
+                boxed(vec.into_iter().copied())
             }
-            InstrKind::Assign(VarP(lhs), RValue::Field(rhs, _)) => boxed([lhs, rhs].into_iter()),
+            InstrKind::Assign(VarP(lhs), RValue::Field(rhs, _)) => {
+                boxed([lhs, rhs].into_iter().copied())
+            }
             InstrKind::Assign(VarP(lhs), RValue::Index(rhs1, rhs2)) => {
-                boxed([lhs, rhs1, rhs2].into_iter())
+                boxed([lhs, rhs1, rhs2].into_iter().copied())
             }
             InstrKind::Assign(
                 VarP(lhs),
@@ -117,9 +119,9 @@ impl<'a> InstrKind<'a> {
                     var: rhs,
                     mode: Mode::MutBorrowed,
                 }),
-            ) => boxed([lhs, rhs].into_iter()),
-            InstrKind::Assign(VarP(v), _) => boxed([v].into_iter()),
-            InstrKind::Assign(IndexP(array, _), _) => boxed([array].into_iter()),
+            ) => boxed([lhs, rhs].into_iter().copied()),
+            InstrKind::Assign(VarP(v), _) => boxed([v].into_iter().copied()),
+            InstrKind::Assign(IndexP(array, _), _) => boxed([array].into_iter().copied()),
             InstrKind::Assign(_, _) => todo!(),
         }
     }

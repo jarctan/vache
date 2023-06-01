@@ -9,7 +9,7 @@ use crate::grammar::*;
 
 /// Types in our language.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Ty {
+pub enum Ty<'ctx> {
     /// Unit type.
     UnitT,
     /// The usual boolean type.
@@ -21,15 +21,15 @@ pub enum Ty {
     /// Structures.
     ///
     /// Structures are identified by their names.
-    StructT(String),
+    StructT(&'ctx str),
     /// Arrays.
-    ArrayT(Box<Ty>),
+    ArrayT(Box<Ty<'ctx>>),
 }
 
 use Ty::*;
 
-impl Parsable<Pair<'_, Rule>> for Ty {
-    fn parse(pair: Pair<Rule>, _ctx: &mut Context) -> Self {
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Ty<'ctx> {
+    fn parse(pair: Pair<'ctx, Rule>, _ctx: &mut Context) -> Self {
         assert_eq!(pair.as_rule(), Rule::ty);
         let mut pairs = pair.into_inner();
         let pair = pairs.next().unwrap();
@@ -43,7 +43,7 @@ impl Parsable<Pair<'_, Rule>> for Ty {
     }
 }
 
-impl Ty {
+impl Ty<'_> {
     /// Is this type `Copy` in Rust (no deep clone needed).
     pub fn copyable(&self) -> bool {
         match self {
@@ -53,15 +53,15 @@ impl Ty {
     }
 }
 
-impl Default for Ty {
+impl Default for Ty<'_> {
     /// The default type: the unit type.
     fn default() -> Self {
         Self::UnitT
     }
 }
 
-impl Extend<Ty> for Ty {
-    fn extend<T: IntoIterator<Item = Ty>>(&mut self, iter: T) {
+impl<'ctx> Extend<Ty<'ctx>> for Ty<'ctx> {
+    fn extend<T: IntoIterator<Item = Ty<'ctx>>>(&mut self, iter: T) {
         // The type of a collection of types is the last type.
         if let Some(ty) = iter.into_iter().last() {
             *self = ty;
@@ -69,15 +69,15 @@ impl Extend<Ty> for Ty {
     }
 }
 
-impl Extend<()> for Ty {
+impl Extend<()> for Ty<'_> {
     fn extend<T: IntoIterator<Item = ()>>(&mut self, _: T) {}
 }
 
-impl From<Ty> for () {
-    fn from(_: Ty) -> Self {}
+impl<'ctx> From<Ty<'ctx>> for () {
+    fn from(_: Ty<'ctx>) -> Self {}
 }
 
-impl fmt::Display for Ty {
+impl fmt::Display for Ty<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UnitT => write!(f, "()"),
@@ -92,48 +92,33 @@ impl fmt::Display for Ty {
 
 #[cfg(test)]
 mod tests {
+    use bumpalo::Bump;
     use pest::Parser;
 
     use super::*;
     use crate::grammar::Grammar;
 
+    #[parses("()" as ty)]
     #[test]
-    fn unit_ty() {
-        let input = "()";
-        let mut parsed = Grammar::parse(Rule::ty, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let ty: Ty = ctx.parse(pair);
+    fn unit_ty(ty: Ty) {
         assert_eq!(ty, UnitT);
     }
 
+    #[parses("()" as ty)]
     #[test]
-    fn str_ty() {
-        let input = "str";
-        let mut parsed = Grammar::parse(Rule::ty, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let ty: Ty = ctx.parse(pair);
+    fn str_ty(ty: Ty) {
         assert_eq!(ty, StrT);
     }
 
+    #[parses("int" as ty)]
     #[test]
-    fn int_ty() {
-        let input = "int";
-        let mut parsed = Grammar::parse(Rule::ty, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let ty: Ty = ctx.parse(pair);
+    fn int_ty(ty: Ty) {
         assert_eq!(ty, IntT);
     }
 
+    #[parses("bool" as ty)]
     #[test]
-    fn bool_ty() {
-        let input = "bool";
-        let mut parsed = Grammar::parse(Rule::ty, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let ty: Ty = ctx.parse(pair);
+    fn bool_ty(ty: Ty) {
         assert_eq!(ty, BoolT);
     }
 }

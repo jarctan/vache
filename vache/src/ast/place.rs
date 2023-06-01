@@ -9,36 +9,30 @@ use crate::utils::boxed;
 
 /// A place in the AST: allowed left hand side expressions.
 #[derive(Debug, Clone)]
-pub enum Place {
+pub enum Place<'ctx> {
     /// A mere variable.
-    VarP(Var),
+    VarP(Var<'ctx>),
     /// An indexed slot into an expression.
-    IndexP(Box<Expr>, Box<Expr>),
+    IndexP(Box<Expr<'ctx>>, Box<Expr<'ctx>>),
     /// An field in an expression.
-    FieldP(Box<Expr>, Box<Expr>),
+    FieldP(Box<Expr<'ctx>>, Box<Expr<'ctx>>),
 }
 
 use Place::*;
 
 /// Shortcut to create an indexed variable.
-pub fn idx_place(array: impl Into<Expr>, index: impl Into<Expr>) -> Place {
+pub fn idx_place<'ctx>(array: impl Into<Expr<'ctx>>, index: impl Into<Expr<'ctx>>) -> Place<'ctx> {
     Place::IndexP(boxed(array.into()), boxed(index.into()))
 }
 
-impl From<&str> for Place {
-    fn from(v: &str) -> Self {
+impl<'ctx> From<&'ctx str> for Place<'ctx> {
+    fn from(v: &'ctx str) -> Self {
         Place::VarP(Var::from(v))
     }
 }
 
-impl From<String> for Place {
-    fn from(v: String) -> Self {
-        Place::VarP(Var::from(v))
-    }
-}
-
-impl Parsable<Pair<'_, Rule>> for Place {
-    fn parse(pair: Pair<Rule>, ctx: &mut Context) -> Self {
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Place<'ctx> {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
         match pair.as_rule() {
             Rule::ident => VarP(ctx.parse(pair)),
             rule => panic!("parser internal error: expected place, found {rule:?}"),
@@ -46,7 +40,7 @@ impl Parsable<Pair<'_, Rule>> for Place {
     }
 }
 
-impl PartialEq<str> for Place {
+impl<'ctx> PartialEq<str> for Place<'ctx> {
     fn eq(&self, other: &str) -> bool {
         match self {
             Place::VarP(v) => v == other,
@@ -55,7 +49,7 @@ impl PartialEq<str> for Place {
     }
 }
 
-impl PartialEq<&str> for Place {
+impl<'ctx> PartialEq<&str> for Place<'ctx> {
     fn eq(&self, other: &&str) -> bool {
         match self {
             Place::VarP(v) => v == other,

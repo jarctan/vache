@@ -8,8 +8,14 @@ mod simple;
 mod structures;
 mod unknown_struct_name;
 
+use ::vache_lib::{config::Config, Context};
+use vache_lib::Arena;
+
 use super::*;
 
-fn test(p: impl Into<Program>) {
-    vache_lib::check(p.into());
+fn test<'ctx>(p: impl Into<Program<'ctx>>) {
+    let arena = Arena::new();
+    let config = Config { input: "" };
+    let mut context = Context::new(config, &arena);
+    vache_lib::check(&mut context, p.into());
 }

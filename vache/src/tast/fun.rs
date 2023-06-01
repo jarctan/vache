@@ -4,27 +4,27 @@ use super::{Block, Ty, VarDef};
 
 /// A function in the typed AST.
 #[derive(Debug, Clone)]
-pub struct Fun {
+pub struct Fun<'ctx> {
     /// Name of that function.
-    pub name: String,
+    pub name: &'ctx str,
     /// Parameters to that function, with their types
     /// and stratum.
-    pub params: Vec<VarDef>,
+    pub params: Vec<VarDef<'ctx>>,
     /// Return type.
-    pub ret_ty: Ty,
+    pub ret_ty: Ty<'ctx>,
     /// Body of the function: a list of statements and
     /// a final expression.
-    pub body: Block,
+    pub body: Block<'ctx>,
 }
 
-impl Fun {
+impl<'ctx> Fun<'ctx> {
     /// Gets the (generic) function signature.
     ///
     /// Note: if you want to consume the `Fun`, prefer to
     /// use the `From`/`Into` trait.
-    pub fn signature(&self) -> FunSig {
+    pub fn signature(&self) -> FunSig<'ctx> {
         FunSig {
-            name: self.name.clone(),
+            name: self.name,
             params: self.params.clone(),
             ret_ty: self.ret_ty.clone(),
         }
@@ -33,18 +33,18 @@ impl Fun {
 
 /// A function signature in the parser AST.
 #[derive(Debug, Clone)]
-pub struct FunSig {
+pub struct FunSig<'ctx> {
     /// Name of that function.
-    pub name: String,
+    pub name: &'ctx str,
     /// Parameters to that function, with their types
     /// and stratum.
-    pub params: Vec<VarDef>,
+    pub params: Vec<VarDef<'ctx>>,
     /// Return type.
-    pub ret_ty: Ty,
+    pub ret_ty: Ty<'ctx>,
 }
 
-impl From<Fun> for FunSig {
-    fn from(f: Fun) -> Self {
+impl<'ctx> From<Fun<'ctx>> for FunSig<'ctx> {
+    fn from(f: Fun<'ctx>) -> Self {
         FunSig {
             name: f.name,
             params: f.params,

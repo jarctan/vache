@@ -7,7 +7,7 @@ fn simple_array() {
     test(Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![Declare(
@@ -24,7 +24,7 @@ fn heterogeneous_list() {
     test(Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![Declare(
@@ -41,7 +41,7 @@ fn heterogeneous_list2() {
     test(Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![Declare(
@@ -64,7 +64,7 @@ fn empty_list() {
     test(Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![Declare(vardef("l", ArrayT(boxed(IntT))), array([]))]),
@@ -77,7 +77,7 @@ fn simple_array_indexing() {
     test(Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![

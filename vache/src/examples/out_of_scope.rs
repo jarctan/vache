@@ -3,9 +3,9 @@
 
 use super::*;
 
-pub fn out_of_scope() -> impl Into<Program> {
+pub fn out_of_scope() -> impl Into<Program<'static>> {
     vec![Fun {
-        name: "main".to_string(),
+        name: "main",
         params: vec![],
         ret_ty: UnitT,
         body: Block {

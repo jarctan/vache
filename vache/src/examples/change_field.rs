@@ -3,31 +3,27 @@
 use super::*;
 
 #[allow(missing_docs)]
-pub fn change_field() -> impl Into<Program> {
+pub fn change_field() -> impl Into<Program<'static>> {
     Program::new(
         vec![Struct {
-            name: "Person".to_string(),
-            fields: vec![
-                ("name".to_string(), StrT),
-                ("age".to_string(), IntT),
-                ("country".to_string(), StrT),
-            ]
-            .into_iter()
-            .collect(),
+            name: "Person",
+            fields: vec![("name", StrT), ("age", IntT), ("country", StrT)]
+                .into_iter()
+                .collect(),
         }],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![
                 Declare(
-                    vardef("john", StructT("Person".to_string())),
+                    vardef("john", StructT("Person")),
                     structure(
                         "Person",
                         vec![
-                            ("name".to_string(), string("doe")),
-                            ("age".to_string(), int(21)),
-                            ("country".to_string(), string("US")),
+                            ("name", string("doe")),
+                            ("age", int(21)),
+                            ("country", string("US")),
                         ],
                     ),
                 ),

@@ -7,21 +7,21 @@ use ExprKind::*;
 use PlaceKind::*;
 use Ty::*;
 
-use crate::ast;
 use crate::ast::fun::binop_int_sig;
 use crate::ast::SelfVisitor;
 use crate::tast::*;
 use crate::utils::{boxed, keys_match};
+use crate::{ast, Context};
 
 /// A typing environment.
 ///
 /// Contains definitions for variables and functions.
-struct Env {
+struct Env<'ctx> {
     /// Map between vars and their definitions.
-    var_env: HashMap<Var, ast::VarDef>,
+    var_env: HashMap<Var<'ctx>, ast::VarDef<'ctx>>,
 }
 
-impl Env {
+impl<'ctx> Env<'ctx> {
     /// Creates a new, empty environment.
     fn new() -> Self {
         Self {
@@ -30,7 +30,7 @@ impl Env {
     }
 
     /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<Var>) -> Option<&ast::VarDef> {
+    fn get_var(&self, v: impl AsRef<Var<'ctx>>) -> Option<&ast::VarDef<'ctx>> {
         self.var_env.get(v.as_ref())
     }
 
@@ -40,13 +40,13 @@ impl Env {
     /// Panics if the var is not stated as declared in that stratum/environment.
     /// You should only add a var definition in the stratum in which it is
     /// tied to.
-    fn add_var(&mut self, vardef: impl Into<ast::VarDef>) {
+    fn add_var(&mut self, vardef: impl Into<ast::VarDef<'ctx>>) {
         let vardef = vardef.into();
         self.var_env.insert(vardef.name.to_owned(), vardef);
     }
 }
 
-impl Default for Env {
+impl Default for Env<'_> {
     fn default() -> Self {
         Self::new()
     }
@@ -54,22 +54,25 @@ impl Default for Env {
 
 /// A typer that will type-check some program by
 /// visiting it.
-pub(crate) struct Typer {
+pub(crate) struct Typer<'t, 'ctx> {
+    /// Compilation context.
+    ctx: &'t mut Context<'ctx>,
     /// Map between function names and their definitions.
-    fun_env: HashMap<String, ast::FunSig>,
+    fun_env: HashMap<&'ctx str, ast::FunSig<'ctx>>,
     /// Map between function names and their definitions.
-    struct_env: HashMap<String, Struct>,
+    struct_env: HashMap<&'ctx str, Struct<'ctx>>,
     /// Set of valid type names. Initialized at the very beginning,
     /// allows to have mutually-referencing structures.
-    valid_type_names: HashSet<String>,
+    valid_type_names: HashSet<&'ctx str>,
     /// The typing environment stack.
-    env: Vec<Env>,
+    env: Vec<Env<'ctx>>,
 }
 
-impl Typer {
+impl<'t, 'ctx> Typer<'t, 'ctx> {
     /// Creates a new typer.
-    pub fn new() -> Self {
+    pub fn new(ctx: &'t mut Context<'ctx>) -> Self {
         let mut typer = Self {
+            ctx,
             fun_env: HashMap::new(),
             struct_env: HashMap::new(),
             valid_type_names: HashSet::new(),
@@ -93,7 +96,7 @@ impl Typer {
     }
 
     /// Type-checks a piece of code.
-    pub fn check(&mut self, p: ast::Program) -> Program {
+    pub fn check(&mut self, p: ast::Program<'ctx>) -> Program<'ctx> {
         self.visit_program(p)
     }
 
@@ -116,7 +119,7 @@ impl Typer {
     ///
     /// It will return a reference into that definition, and the id of the
     /// stratum in which the variables resides.
-    fn get_var(&self, v: impl AsRef<Var>) -> Option<(&ast::VarDef, Stratum)> {
+    fn get_var(&self, v: impl AsRef<Var<'ctx>>) -> Option<(&ast::VarDef<'ctx>, Stratum)> {
         // Iterate over environments in reverse (last declared first processed)
         // order
         // Returns the first environment that has that variable declared
@@ -129,32 +132,31 @@ impl Typer {
     }
 
     /// Declares a new variable in the context.
-    fn add_var(&mut self, vardef: impl Into<ast::VarDef>) {
+    fn add_var(&mut self, vardef: impl Into<ast::VarDef<'ctx>>) {
         let vardef = vardef.into();
         self.env.last_mut().unwrap().add_var(vardef);
     }
 
     /// Gets the definition of a function.
-    fn get_fun(&self, f: impl AsRef<str>) -> Option<&ast::FunSig> {
+    fn get_fun(&self, f: impl AsRef<str>) -> Option<&ast::FunSig<'ctx>> {
         self.fun_env.get(f.as_ref())
     }
 
     /// Declares a new function in the context.
-    fn add_fun(&mut self, fun_def: impl Into<ast::FunSig>) {
+    fn add_fun(&mut self, fun_def: impl Into<ast::FunSig<'ctx>>) {
         let fun_def = fun_def.into();
-        self.fun_env.insert(fun_def.name.to_owned(), fun_def);
+        self.fun_env.insert(fun_def.name, fun_def);
     }
 
     /// Gets the definition of a structure.
-    fn get_struct(&self, s: impl AsRef<str>) -> Option<&Struct> {
+    fn get_struct(&self, s: impl AsRef<str>) -> Option<&Struct<'ctx>> {
         self.struct_env.get(s.as_ref())
     }
 
     /// Declares a new structure in the context.
-    fn add_struct(&mut self, struct_def: impl Into<Struct>) {
+    fn add_struct(&mut self, struct_def: impl Into<Struct<'ctx>>) {
         let struct_def = struct_def.into();
-        self.struct_env
-            .insert(struct_def.name.to_owned(), struct_def);
+        self.struct_env.insert(struct_def.name, struct_def);
     }
 
     /// Returns the current stratum/scope id.
@@ -177,11 +179,11 @@ impl Typer {
     }
 
     /// Types a place (lhs expression).
-    fn visit_place(&mut self, place: ast::Place, mode: Mode) -> Place {
+    fn visit_place(&mut self, place: ast::Place<'ctx>, mode: Mode) -> Place<'ctx> {
         match place {
             ast::Place::VarP(var) => {
                 let (vardef, stm) = self
-                    .get_var(&var)
+                    .get_var(var)
                     .unwrap_or_else(|| panic!("Assigning to an undeclared variable {var}"));
                 Place::var(var, vardef.ty.clone(), stm, mode)
             }
@@ -206,30 +208,25 @@ impl Typer {
     }
 }
 
-impl SelfVisitor for Typer {
-    type BOutput = Block;
-    type EOutput = Expr;
-    type FOutput = Fun;
-    type POutput = Program;
-    type SOutput = Stmt;
-    type TOutput = Struct;
+impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
+    type BOutput = Block<'ctx>;
+    type EOutput = Expr<'ctx>;
+    type FOutput = Fun<'ctx>;
+    type POutput = Program<'ctx>;
+    type SOutput = Stmt<'ctx>;
+    type TOutput = Struct<'ctx>;
 
-    fn visit_expr(&mut self, e: ast::Expr) -> Expr {
+    fn visit_expr(&mut self, e: ast::Expr<'ctx>) -> Expr<'ctx> {
         match e {
             ast::Expr::UnitE => Expr::new(UnitE, UnitT, self.current_stratum()),
             ast::Expr::IntegerE(i) => Expr::new(IntegerE(i), IntT, self.current_stratum()),
             ast::Expr::StringE(s) => Expr::new(StringE(s), StrT, self.current_stratum()),
             ast::Expr::VarE(v) => {
                 let (vardef, stm) = self
-                    .get_var(&v)
+                    .get_var(v)
                     .unwrap_or_else(|| panic!("{v} does not exist in this context"));
                 Expr::new(
-                    PlaceE(Place::var(
-                        vardef.name.clone(),
-                        vardef.ty.clone(),
-                        stm,
-                        default(),
-                    )),
+                    PlaceE(Place::var(vardef.name, vardef.ty.clone(), stm, default())),
                     vardef.ty.clone(),
                     stm,
                 )
@@ -244,7 +241,7 @@ impl SelfVisitor for Typer {
             ast::Expr::CallE { name, args } => {
                 let args: Vec<Expr> = args.into_iter().map(|arg| self.visit_expr(arg)).collect();
                 let fun = self
-                    .get_fun(&name)
+                    .get_fun(name)
                     .unwrap_or_else(|| panic!("Function {name} does not exist in this scope"));
 
                 // Check the number of arguments.
@@ -304,7 +301,7 @@ impl SelfVisitor for Typer {
                 let s = self.visit_expr(s);
                 if let StructT(name) = &s.ty {
                     let strukt = self.get_struct(name).unwrap();
-                    let ty = strukt.get_field(&field).clone();
+                    let ty = strukt.get_field(field).clone();
                     let s_stm = s.stm; // Needed now because we move s after
                     Expr::new(
                         PlaceE(Place {
@@ -344,12 +341,12 @@ impl SelfVisitor for Typer {
                 // Because of borrowing rules, we need to do that before we immutably borrow
                 // `self` through `.get_struct()` since we need a mutable borrow into `self`
                 // here.
-                let fields: Vec<(String, Expr)> = fields
+                let fields: Vec<(&str, Expr)> = fields
                     .into_iter()
                     .map(|(name, expr)| (name, self.visit_expr(expr)))
                     .collect();
 
-                let strukt = self.get_struct(&s_name).unwrap();
+                let strukt = self.get_struct(s_name).unwrap();
 
                 // Check that the instance has the same field names as the declaration
                 assert!(
@@ -376,7 +373,7 @@ impl SelfVisitor for Typer {
                     });
                 Expr::new(
                     StructE {
-                        name: s_name.clone(),
+                        name: s_name,
                         fields,
                     },
                     StructT(s_name),
@@ -409,7 +406,7 @@ impl SelfVisitor for Typer {
         }
     }
 
-    fn visit_block(&mut self, b: ast::Block) -> Block {
+    fn visit_block(&mut self, b: ast::Block<'ctx>) -> Block<'ctx> {
         self.push_scope();
         let stmts = b.stmts.into_iter().map(|s| self.visit_stmt(s)).collect();
         let ret = self.visit_expr(b.ret);
@@ -417,7 +414,7 @@ impl SelfVisitor for Typer {
         Block { stmts, ret }
     }
 
-    fn visit_fun(&mut self, f: ast::Fun) -> Fun {
+    fn visit_fun(&mut self, f: ast::Fun<'ctx>) -> Fun<'ctx> {
         let stm = self.current_stratum();
         // Introduce arguments in the typing context
         for arg in &f.params {
@@ -445,7 +442,7 @@ impl SelfVisitor for Typer {
         }
     }
 
-    fn visit_stmt(&mut self, s: ast::Stmt) -> Stmt {
+    fn visit_stmt(&mut self, s: ast::Stmt<'ctx>) -> Stmt<'ctx> {
         use Stmt::*;
         match s {
             ast::Stmt::Declare(vardef, expr) => {
@@ -492,20 +489,20 @@ impl SelfVisitor for Typer {
         }
     }
 
-    fn visit_program(&mut self, p: ast::Program) -> Program {
+    fn visit_program(&mut self, p: ast::Program<'ctx>) -> Program<'ctx> {
         let ast::Program { funs, structs } = p;
 
         // Add all function signatures to the context to allow for (mutual) recursion.
-        for (name, f) in &funs {
-            assert_eq!(*name, *f.name);
+        for (&name, f) in &funs {
+            assert_eq!(name, f.name);
             self.add_fun(f.signature());
         }
 
         // Add all valid type names in the context, so they may be referenced
         // everywhere.
-        for name in structs.keys() {
+        for &name in structs.keys() {
             assert!(
-                self.valid_type_names.insert(name.clone()),
+                self.valid_type_names.insert(name),
                 "{name} is defined twice"
             );
         }
@@ -513,6 +510,7 @@ impl SelfVisitor for Typer {
         // Note: order is important.
         // We must visit structures first.
         Program {
+            arena: self.ctx.arena,
             structs: structs
                 .into_iter()
                 .map(|(name, s)| (name, self.visit_struct(s)))
@@ -524,7 +522,7 @@ impl SelfVisitor for Typer {
         }
     }
 
-    fn visit_struct(&mut self, strukt: ast::Struct) -> Struct {
+    fn visit_struct(&mut self, strukt: ast::Struct<'ctx>) -> Struct<'ctx> {
         // Check that all types in the structure exist.
         for ty in strukt.fields.values() {
             self.check_ty(ty);
@@ -543,10 +541,14 @@ impl SelfVisitor for Typer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{config::Config, Arena};
 
     #[test]
     fn check_pop_option() {
-        let mut typer = Typer::new();
+        let arena = Arena::new();
+        let config = Config { input: "" };
+        let mut ctx = Context::new(config, &arena);
+        let mut typer = Typer::new(&mut ctx);
         assert_eq!(typer.pop_scope(), None); // Cannot pop the static stratum
 
         typer.push_scope();

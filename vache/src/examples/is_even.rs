@@ -3,9 +3,9 @@
 use super::*;
 
 /// Is n even.
-pub fn is_even() -> Fun {
+pub fn is_even() -> Fun<'static> {
     Fun {
-        name: "is_even".to_string(),
+        name: "is_even",
         params: vec![vardef("n", IntT)],
         ret_ty: BoolT,
         body: Block {
@@ -19,9 +19,9 @@ pub fn is_even() -> Fun {
 }
 
 /// Is 10 even.
-pub fn is_10_even() -> impl Into<Program> {
+pub fn is_10_even() -> impl Into<Program<'static>> {
     let main = Fun {
-        name: "main".to_string(),
+        name: "main",
         params: vec![],
         ret_ty: UnitT,
         body: stmts(vec![call_stmt(
@@ -34,9 +34,9 @@ pub fn is_10_even() -> impl Into<Program> {
 }
 
 /// Is 11 even.
-pub fn is_11_even() -> impl Into<Program> {
+pub fn is_11_even() -> impl Into<Program<'static>> {
     let main = Fun {
-        name: "main".to_string(),
+        name: "main",
         params: vec![],
         ret_ty: UnitT,
         body: stmts(vec![call_stmt(

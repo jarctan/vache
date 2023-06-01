@@ -6,16 +6,16 @@ use super::Ty;
 
 /// A C-like `struct`.
 #[derive(Debug, Clone)]
-pub struct Struct {
+pub struct Struct<'ctx> {
     /// Name of the structure.
-    pub name: String,
+    pub name: &'ctx str,
     /// Map of field names and their types.
-    pub fields: HashMap<String, Ty>,
+    pub fields: HashMap<&'ctx str, Ty<'ctx>>,
 }
 
-impl Struct {
+impl<'ctx> Struct<'ctx> {
     /// Gets the type of a field in the structure.
-    pub fn get_field(&self, field: impl AsRef<str>) -> &Ty {
+    pub fn get_field(&self, field: impl AsRef<str>) -> &Ty<'ctx> {
         &self.fields[field.as_ref()]
     }
 }

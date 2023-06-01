@@ -18,21 +18,21 @@ use crate::mir::{Branch, CfgI, CfgLabel, Fun, InstrKind, Mode, Place, RValue, Va
 use crate::tast::Stratum;
 
 /// Interpreter for our language.
-pub(crate) struct Interpreter<'a, 'b> {
+pub(crate) struct Interpreter<'a, 'ctx> {
     /// The execution environment stack.
-    pub env: Vec<Env>,
+    pub env: Vec<Env<'ctx>>,
     /// Map between function names and their definition.
-    pub fun_env: &'a HashMap<String, Fun<'b>>,
+    pub fun_env: &'a HashMap<&'ctx str, Fun<'ctx>>,
     /// Standard output, as a growable string.
     pub stdout: StringBuilder,
 }
 
-impl<'a, 'b> Interpreter<'a, 'b> {
+impl<'a, 'ctx> Interpreter<'a, 'ctx> {
     /// Shortcut to produce the result of a call to an integer binop operation
     /// `f` that takes two integers and returns a value.
     fn int_binop(
         &mut self,
-        f: impl Fn(&BigInt, &BigInt) -> Value,
+        f: impl Fn(&BigInt, &BigInt) -> Value<'ctx>,
         args: &Vec<ValueRef>,
         stratum: Stratum,
     ) -> Option<ValueRef> {
@@ -118,16 +118,16 @@ impl<'a, 'b> Interpreter<'a, 'b> {
 
             // Introduce arguments in the typing context
             for (arg, value) in f.params.iter().zip(args.iter()) {
-                self.add_var(arg.name.clone());
-                self.set_var(&arg.name, *value);
+                self.add_var(arg.name);
+                self.set_var(arg.name, *value);
             }
 
             // Introduce return variable
             if let Some(ret_v) = &f.ret_v {
-                self.add_var(ret_v.name.clone());
+                self.add_var(ret_v.name);
             }
 
-            self.visit_cfg(&f.body, &f.entry_l);
+            self.visit_cfg(&f.body, f.entry_l);
 
             // Request the final value (if the function returns a value, of course)
             self.pop_scope(f.ret_v.as_ref().map(|ret_v| self.get_var(ret_v)))
@@ -158,7 +158,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     }
 
     /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<Var>) -> ValueRef {
+    fn get_var(&self, v: impl AsRef<Var<'ctx>>) -> ValueRef {
         let v = v.as_ref();
         // Iterate over environments in reverse (last declared first processed)
         // order
@@ -172,7 +172,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     }
 
     /// Gets a mutable reference into the value of a variable.
-    fn get_var_mut(&mut self, v: impl AsRef<Var>) -> &mut ValueRef {
+    fn get_var_mut(&mut self, v: impl AsRef<Var<'ctx>>) -> &mut ValueRef {
         // Iterate over environments in reverse (last declared first processed)
         // order
         // Returns the first environment that has that variable declared
@@ -185,38 +185,38 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     }
 
     /// Declares a new variable in the context.
-    fn add_var(&mut self, name: impl Into<Var>) {
+    fn add_var(&mut self, name: impl Into<Var<'ctx>>) {
         self.env.last_mut().unwrap().add_var(name.into());
     }
 
     /// Assigns a variable in the context.
-    fn set_var(&mut self, name: impl AsRef<Var>, value: impl Into<ValueRef>) {
+    fn set_var(&mut self, name: impl AsRef<Var<'ctx>>, value: impl Into<ValueRef>) {
         let name = name.as_ref();
         *self.get_var_mut(name) = value.into();
     }
 
     /// Adds a value to the dynamic store/slab.
-    fn add_value(&mut self, value: Value, stratum: Stratum) -> ValueRef {
+    fn add_value(&mut self, value: Value<'ctx>, stratum: Stratum) -> ValueRef {
         let stratum: usize = stratum.into();
         self.env[stratum].add_value(value)
     }
 
     /// Gets a value from the dynamic store/slab.
-    fn get_value(&self, value: ValueRef) -> &Value {
+    fn get_value(&self, value: ValueRef) -> &Value<'ctx> {
         self.env[usize::from(value.stratum)]
             .get_value(value.key)
             .unwrap()
     }
 
     /// Gets a value from the dynamic store/slab.
-    fn get_value_mut(&mut self, value: ValueRef) -> &mut Value {
+    fn get_value_mut(&mut self, value: ValueRef) -> &mut Value<'ctx> {
         self.env[usize::from(value.stratum)]
             .get_value_mut(value.key)
             .unwrap()
     }
 
     /// Gets the value of a variable.
-    fn get_var_value(&self, v: impl AsRef<Var>) -> &Value {
+    fn get_var_value(&self, v: impl AsRef<Var<'ctx>>) -> &Value<'ctx> {
         self.get_value(self.get_var(v))
     }
 
@@ -246,11 +246,11 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     }
 
     /// Visit a right-value.
-    fn visit_rvalue(&mut self, rvalue: &'a RValue, stratum: Stratum) -> ValueRef {
+    fn visit_rvalue(&mut self, rvalue: &RValue<'ctx>, stratum: Stratum) -> ValueRef {
         match rvalue {
             RValue::Unit => self.add_value(UnitV, stratum),
-            RValue::Integer(i) => self.add_value(IntV(i.clone()), stratum),
-            RValue::String(s) => self.add_value(StrV(s.clone()), stratum),
+            RValue::Integer(i) => self.add_value(IntV((*i).clone()), stratum),
+            RValue::String(s) => self.add_value(StrV(s.to_string()), stratum),
             RValue::Var(v) => {
                 let v_ref = self.get_var(v);
                 self.opt_clone(v.mode, v_ref, stratum)
@@ -275,11 +275,8 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 }
             }
             RValue::Struct { name, fields } => {
-                let fields = fields
-                    .iter()
-                    .map(|(k, v)| (k.clone(), self.get_var(v)))
-                    .collect();
-                self.add_value(StructV(name.to_owned(), fields), stratum)
+                let fields = fields.iter().map(|(&k, v)| (k, self.get_var(v))).collect();
+                self.add_value(StructV(name, fields), stratum)
             }
             RValue::Array(array) => {
                 let array = array.iter().map(|v| self.get_var(v)).collect();
@@ -290,8 +287,8 @@ impl<'a, 'b> Interpreter<'a, 'b> {
 
     /// Executes an expression, returning the first label that do not exist in
     /// the CFG. Often, this is the return/exit label.
-    fn visit_cfg(&mut self, cfg: &'a CfgI<'a>, label: &CfgLabel) {
-        let branch = match &cfg[label].kind {
+    fn visit_cfg(&mut self, cfg: &CfgI<'ctx>, label: CfgLabel) {
+        let branch = match &cfg[&label].kind {
             InstrKind::Noop => DefaultB,
             InstrKind::Declare(v) => {
                 self.add_var(v.clone());

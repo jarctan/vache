@@ -7,19 +7,19 @@ use crate::ast;
 
 /// A variable definition, with stratum and type information.
 #[derive(Clone, PartialEq, Eq)]
-pub struct VarDef {
+pub struct VarDef<'ctx> {
     /// Variable name.
-    pub(crate) name: Var,
+    pub(crate) name: Var<'ctx>,
     /// Type of the variable.
-    pub(crate) ty: Ty,
+    pub(crate) ty: Ty<'ctx>,
     /// Type of the variable.
     pub(crate) stm: Stratum,
 }
 
-impl VarDef {
+impl<'ctx> VarDef<'ctx> {
     /// Constructs a typed `VarDef` based on the parser `Vardef` by adding the
     /// stratum information.
-    pub fn with_stratum(vardef: ast::VarDef, stm: Stratum) -> Self {
+    pub fn with_stratum(vardef: ast::VarDef<'ctx>, stm: Stratum) -> Self {
         Self {
             name: vardef.name,
             ty: vardef.ty,
@@ -28,27 +28,27 @@ impl VarDef {
     }
 }
 
-impl fmt::Debug for VarDef {
+impl fmt::Debug for VarDef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}:{}:{}", self.name, self.ty, self.stm)
     }
 }
 
-impl AsRef<Var> for VarDef {
-    fn as_ref(&self) -> &Var {
+impl<'ctx> AsRef<Var<'ctx>> for VarDef<'ctx> {
+    fn as_ref(&self) -> &Var<'ctx> {
         &self.name
     }
 }
 
-impl From<VarDef> for Var {
-    fn from(vardef: VarDef) -> Self {
+impl<'ctx> From<VarDef<'ctx>> for Var<'ctx> {
+    fn from(vardef: VarDef<'ctx>) -> Self {
         vardef.name
     }
 }
 
 /// Shortcut to create a new variable definition.
 #[cfg(test)]
-pub fn vardef(name: impl ToString, ty: Ty, stm: Stratum) -> VarDef {
-    let name = name.to_string().into();
+pub fn vardef<'ctx>(name: &'ctx str, ty: Ty<'ctx>, stm: Stratum) -> VarDef<'ctx> {
+    let name = name.into();
     VarDef { name, ty, stm }
 }

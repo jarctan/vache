@@ -1,6 +1,7 @@
 //! Compiler code.
 
 use std::default::default;
+use std::marker::PhantomData;
 
 use num_traits::ToPrimitive;
 use proc_macro2::TokenStream;
@@ -15,11 +16,16 @@ use crate::tast::{
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
-pub(crate) struct Compiler {}
-impl Compiler {
+pub(crate) struct Compiler<'ctx> {
+    /// Phantom argument to bind to the `'ctx` lifetime.
+    _lifetime: PhantomData<&'ctx ()>,
+}
+impl<'ctx> Compiler<'ctx> {
     /// Creates a new compiler.
     pub fn new() -> Self {
-        Self {}
+        Self {
+            _lifetime: PhantomData,
+        }
     }
 
     /// Producing the necessary prelude for all our outputs.
@@ -222,7 +228,7 @@ impl Compiler {
     }
 
     /// Compiles a program in our language into an executable source code.
-    pub fn compile(&mut self, p: Program) -> String {
+    pub fn compile(&mut self, p: Program<'ctx>) -> String {
         let tokens = self.visit_program(p);
         let prelude = Self::prelude();
         let file = syn::parse2(quote! {
@@ -264,13 +270,13 @@ impl Compiler {
     }
 
     /// Compiles a variable.
-    fn visit_var(&mut self, var: impl Into<Var>) -> TokenStream {
+    fn visit_var(&mut self, var: impl Into<Var<'ctx>>) -> TokenStream {
         let ident = format_ident!("{}", var.into().as_str());
         quote!(#ident)
     }
 
     /// Compiles a place.
-    fn visit_place(&mut self, place: Place) -> TokenStream {
+    fn visit_place(&mut self, place: Place<'ctx>) -> TokenStream {
         match place.kind {
             VarP(var) => {
                 let var = self.visit_var(var);
@@ -325,7 +331,7 @@ impl Compiler {
     }
 
     /// Compiles a expression kind.
-    fn visit_expr(&mut self, expr: Expr) -> TokenStream {
+    fn visit_expr(&mut self, expr: Expr<'ctx>) -> TokenStream {
         match expr.kind {
             UnitE => quote!(()),
             IntegerE(i) => {
@@ -364,7 +370,7 @@ impl Compiler {
                     quote!(println!(#fmt_str, #(#args),*))
                 } else {
                     let args = args.into_iter().map(|arg| self.visit_expr(arg));
-                    let name = match name.as_str() {
+                    let name = match name {
                         "+" => "__add".to_string(),
                         "-" => "__sub".to_string(),
                         "*" => "__mul".to_string(),
@@ -396,7 +402,7 @@ impl Compiler {
     }
 
     /// Compiles a single statement.
-    fn visit_stmt(&mut self, stmt: Stmt) -> TokenStream {
+    fn visit_stmt(&mut self, stmt: Stmt<'ctx>) -> TokenStream {
         match stmt {
             Stmt::Declare(lhs, rhs) => {
                 let name = format_ident!("{}", lhs.name.as_str());
@@ -431,7 +437,7 @@ impl Compiler {
     }
 
     /// Compiles a block.
-    fn visit_block(&mut self, block: Block) -> TokenStream {
+    fn visit_block(&mut self, block: Block<'ctx>) -> TokenStream {
         let stmts: Vec<_> = block
             .stmts
             .into_iter()
@@ -451,13 +457,13 @@ impl Compiler {
     }
 
     /// Compiles a function.
-    fn visit_fun(&mut self, f: Fun) -> TokenStream {
+    fn visit_fun(&mut self, f: Fun<'ctx>) -> TokenStream {
         let name = format_ident!("{}", f.name);
         let params: Vec<TokenStream> = f
             .params
             .into_iter()
             .map(|param| {
-                let name = format_ident!("{}", String::from(param.name));
+                let name = format_ident!("{}", param.name.as_str());
                 let ty = Self::translate_type(&param.ty, true);
                 quote! {
                     #name: #ty
@@ -487,8 +493,12 @@ impl Compiler {
     }
 
     /// Compiles a program.
-    pub fn visit_program(&mut self, p: Program) -> TokenStream {
-        let Program { funs, structs } = p;
+    pub fn visit_program(&mut self, p: Program<'ctx>) -> TokenStream {
+        let Program {
+            funs,
+            structs,
+            arena: _,
+        } = p;
         let funs: Vec<TokenStream> = funs.into_values().map(|f| self.visit_fun(f)).collect();
         let structs: Vec<TokenStream> = structs
             .into_values()

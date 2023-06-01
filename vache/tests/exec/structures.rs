@@ -1,15 +1,11 @@
 use super::*;
 
-fn person_struct() -> Struct {
+fn person_struct<'ctx>() -> Struct<'ctx> {
     Struct {
-        name: "Person".to_string(),
-        fields: vec![
-            ("name".to_string(), StrT),
-            ("age".to_string(), IntT),
-            ("country".to_string(), StrT),
-        ]
-        .into_iter()
-        .collect(),
+        name: "Person",
+        fields: vec![("name", StrT), ("age", IntT), ("country", StrT)]
+            .into_iter()
+            .collect(),
     }
 }
 
@@ -18,18 +14,18 @@ fn simple_field_access() -> Program {
     Program::new(
         vec![person_struct()],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![
                 Declare(
-                    vardef("john", StructT("Person".to_string())),
+                    vardef("john", StructT("Person")),
                     structure(
                         "Person",
                         vec![
-                            ("name".to_string(), string("doe")),
-                            ("age".to_string(), int(21)),
-                            ("country".to_string(), string("US")),
+                            ("name", string("doe")),
+                            ("age", int(21)),
+                            ("country", string("US")),
                         ],
                     ),
                 ),

@@ -3,11 +3,11 @@
 
 use super::*;
 
-pub fn one_borrow() -> impl Into<Program> {
+pub fn one_borrow() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![
@@ -20,11 +20,11 @@ pub fn one_borrow() -> impl Into<Program> {
     )
 }
 
-pub fn two_borrows() -> impl Into<Program> {
+pub fn two_borrows() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![

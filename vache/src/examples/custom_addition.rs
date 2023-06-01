@@ -7,16 +7,16 @@
 use super::*;
 
 #[allow(missing_docs)]
-pub fn custom_addition() -> impl Into<Program> {
+pub fn custom_addition() -> impl Into<Program<'static>> {
     vec![
         Fun {
-            name: "add".to_string(),
+            name: "add",
             params: vec![vardef("n", IntT), vardef("m", IntT)],
             ret_ty: IntT,
             body: expr(binop(var("m"), "+", var("n"))),
         },
         Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: Block {

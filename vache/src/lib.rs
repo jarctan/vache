@@ -12,6 +12,8 @@
 pub mod ast;
 mod borrowing;
 mod compile;
+pub mod config;
+pub mod context;
 pub mod examples;
 mod grammar;
 mod interpret;
@@ -20,6 +22,10 @@ mod miring;
 mod tast;
 mod typing;
 mod utils;
+
+#[cfg(test)]
+#[macro_use]
+extern crate vache_tests_proc;
 
 #[macro_use]
 extern crate quote;
@@ -31,26 +37,36 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
-use std::{io, path::Path};
+use std::path::Path;
 
+use anyhow::Result;
+pub use context::Context;
 pub use steps::{borrow_check, check, interpret, mir, run};
+pub use utils::arena::Arena;
 
 /// Compiles `p` and puts the output program named `name` in `dest_dir`.
-pub fn compile(p: impl Into<ast::Program>, name: impl AsRef<str>, dest_dir: &Path) {
-    let mut checked = check(p);
+pub fn compile<'ctx>(
+    ctx: &mut Context<'ctx>,
+    p: impl Into<ast::Program<'ctx>>,
+    name: impl AsRef<str>,
+    dest_dir: &Path,
+) {
+    let mut checked = check(ctx, p);
     borrow_check(mir(&mut checked));
     steps::cargo(steps::compile(checked), name.as_ref(), dest_dir).unwrap();
 }
 
 /// Executes program `p`, returning its standard output.
-pub fn execute(
-    p: impl Into<ast::Program>,
+pub fn execute<'ctx>(
+    ctx: &mut Context<'ctx>,
+    p: impl Into<ast::Program<'ctx>>,
     name: impl AsRef<str>,
     dest_dir: &Path,
-) -> io::Result<String> {
-    let mut checked = check(p);
+) -> Result<String> {
+    let mut checked: tast::Program<'ctx> = check(ctx, p);
     borrow_check(mir(&mut checked));
-    steps::run(checked, name, dest_dir)
+    let res = steps::run(checked, name, dest_dir)?;
+    Ok(res)
 }
 
 mod steps {
@@ -78,8 +94,11 @@ mod steps {
     ///
     /// Under the hood, this function is in charge of allocating a new `Typer`
     /// and launching it on your program.
-    pub fn check(p: impl Into<ast::Program>) -> tast::Program {
-        let mut typer = Typer::new();
+    pub fn check<'ctx>(
+        ctx: &mut Context<'ctx>,
+        p: impl Into<ast::Program<'ctx>>,
+    ) -> tast::Program<'ctx> {
+        let mut typer = Typer::new(ctx);
         typer.check(p.into())
     }
 
@@ -91,7 +110,7 @@ mod steps {
     ///
     /// Under the hood, this function is in charge of allocating a new
     /// `BorrowChecker` and launching it on your program.
-    pub fn borrow_check<'a>(p: impl Into<mir::Program<'a>>) -> mir::Program<'a> {
+    pub fn borrow_check<'ctx>(p: impl Into<mir::Program<'ctx>>) -> mir::Program<'ctx> {
         let mut borrow_checker = BorrowChecker::new();
         borrow_checker.check(p.into())
     }
@@ -100,8 +119,8 @@ mod steps {
     ///
     /// Under the hood, in charge of allocating a new `MIRer` and launching it
     /// on your program.
-    pub fn mir(p: &mut tast::Program) -> mir::Program<'_> {
-        let mut mirer = MIRer::new();
+    pub fn mir<'ctx, 'mir>(p: &'mir mut tast::Program<'ctx>) -> mir::Program<'mir> {
+        let mut mirer = MIRer::new(p.arena);
         mirer.gen_mir(p)
     }
 
@@ -109,7 +128,7 @@ mod steps {
     ///
     /// Under the hood, in charge of allocating a new `Compiler` and launching
     /// it on your program.
-    pub fn compile(p: impl Into<tast::Program>) -> String {
+    pub fn compile<'ctx>(p: impl Into<tast::Program<'ctx>>) -> String {
         let mut compiler = Compiler::new();
         compiler.compile(p.into())
     }
@@ -119,13 +138,13 @@ mod steps {
     /// Under the hood, it will allocate a new `Interpreter` and launch it on
     /// your program. It will call the function `main` within your program
     /// and return the standard output of your program.
-    pub fn interpret<'a>(p: impl Into<mir::Program<'a>>) -> String {
+    pub fn interpret<'ctx>(p: impl Into<mir::Program<'ctx>>) -> String {
         interpret::interpret(p.into())
     }
 
     /// Runs a given MIR program.
-    pub fn run(
-        p: impl Into<tast::Program>,
+    pub fn run<'ctx>(
+        p: impl Into<tast::Program<'ctx>>,
         name: impl AsRef<str>,
         dest_dir: &Path,
     ) -> io::Result<String> {

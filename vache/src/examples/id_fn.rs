@@ -5,18 +5,18 @@
 
 use super::*;
 
-pub fn id_fn() -> impl Into<Program> {
+pub fn id_fn() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
         vec![
             Fun {
-                name: "id".to_string(),
+                name: "id",
                 params: vec![vardef("n", IntT)],
                 ret_ty: IntT,
                 body: expr(var("n")),
             },
             Fun {
-                name: "main".to_string(),
+                name: "main",
                 params: vec![],
                 ret_ty: UnitT,
                 body: stmts(vec![

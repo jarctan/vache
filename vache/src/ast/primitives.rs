@@ -6,17 +6,18 @@ use pest::iterators::Pair;
 use super::{Context, Parsable};
 use crate::grammar::*;
 
-impl Parsable<Pair<'_, Rule>> for String {
-    fn parse(pair: Pair<Rule>, _ctx: &mut Context) -> Self {
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for &'ctx str {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
         debug_assert!(pair.as_rule() == Rule::string);
 
         // Takes care of escaped newlines and tabs
         let value = pair.as_str().replace("\\n", "\n").replace("\\t", "\t");
-        value[1..value.len() - 1].to_string()
+        let value: &str = ctx.alloc(value);
+        &value[1..value.len() - 1]
     }
 }
 
-impl Parsable<Pair<'_, Rule>> for BigInt {
+impl<'ctx> Parsable<'ctx, Pair<'_, Rule>> for BigInt {
     fn parse(pair: Pair<Rule>, _ctx: &mut Context) -> Self {
         debug_assert!(pair.as_rule() == Rule::integer);
 
@@ -27,28 +28,17 @@ impl Parsable<Pair<'_, Rule>> for BigInt {
 
 #[cfg(test)]
 mod tests {
-    use pest::Parser;
-
     use super::*;
-    use crate::grammar::Grammar;
 
+    #[parses("\"this is a test\nAnd another\"" as string)]
     #[test]
-    fn simple_string() {
-        let input = "\"this is a test\nAnd another\"";
-        let mut parsed = Grammar::parse(Rule::string, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let string: String = ctx.parse(pair);
+    fn simple_string(string: &str) {
         assert_eq!(string, "this is a test\nAnd another");
     }
 
+    #[parses("1234567890" as integer)]
     #[test]
-    fn simple_decimal() {
-        let input = "1234567890";
-        let mut parsed = Grammar::parse(Rule::integer, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let integer: BigInt = ctx.parse(pair);
+    fn simple_decimal(integer: BigInt) {
         assert_eq!(integer, BigInt::from(1234567890));
     }
 }

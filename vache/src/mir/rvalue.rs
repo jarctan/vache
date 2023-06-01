@@ -9,16 +9,16 @@ use super::*;
 
 /// An variable with an ownership modality.
 #[derive(PartialEq, Eq)]
-pub struct VarMode<'a> {
+pub struct VarMode<'ctx> {
     /// The variable.
-    pub var: Var,
+    pub var: Var<'ctx>,
     /// Do we transfer ownership or take by reference?
-    pub mode: &'a mut Mode,
+    pub mode: &'ctx mut Mode,
 }
 
-impl<'a> VarMode<'a> {
+impl<'ctx> VarMode<'ctx> {
     /// Constructor.
-    pub fn new(var: impl Into<Var>, mode: &'a mut Mode) -> Self {
+    pub fn new(var: impl Into<Var<'ctx>>, mode: &'ctx mut Mode) -> Self {
         Self {
             var: var.into(),
             mode,
@@ -26,47 +26,47 @@ impl<'a> VarMode<'a> {
     }
 }
 
-impl<'a> fmt::Debug for VarMode<'a> {
+impl fmt::Debug for VarMode<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}", self.mode, self.var)
     }
 }
 
-impl<'a> AsRef<Var> for VarMode<'a> {
-    fn as_ref(&self) -> &Var {
+impl<'ctx> AsRef<Var<'ctx>> for VarMode<'ctx> {
+    fn as_ref(&self) -> &Var<'ctx> {
         &self.var
     }
 }
 
 /// Possible right values in the CFG.
 #[derive(PartialEq, Eq)]
-pub enum RValue<'a> {
+pub enum RValue<'ctx> {
     /// Unit expression, that does nothing.
     Unit,
     /// An unbounded integer.
-    Integer(BigInt),
+    Integer(&'ctx BigInt),
     /// A string.
-    String(String),
+    String(&'ctx str),
     /// A variable.
-    Var(VarMode<'a>),
+    Var(VarMode<'ctx>),
     /// A variable you will always want to move out.
-    MovedVar(Var),
+    MovedVar(Var<'ctx>),
     /// A field in a structure.
-    Field(Var, String),
+    Field(Var<'ctx>, &'ctx str),
     /// Index into an array/map.
-    Index(Var, Var),
+    Index(Var<'ctx>, Var<'ctx>),
     /// Structure instantiation.
     Struct {
         /// Name of the structure to instantiate.
-        name: String,
+        name: &'ctx str,
         /// Value for each field.
-        fields: HashMap<String, Var>,
+        fields: HashMap<&'ctx str, Var<'ctx>>,
     },
     /// Array creation.
-    Array(Vec<Var>),
+    Array(Vec<Var<'ctx>>),
 }
 
-impl<'a> fmt::Debug for RValue<'a> {
+impl<'ctx> fmt::Debug for RValue<'ctx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use RValue::*;
         match self {
@@ -89,32 +89,32 @@ impl<'a> fmt::Debug for RValue<'a> {
     }
 }
 
-impl<'a> From<()> for RValue<'a> {
+impl<'ctx> From<()> for RValue<'ctx> {
     fn from(_: ()) -> Self {
         Self::Unit
     }
 }
 
-impl<'a> From<BigInt> for RValue<'a> {
-    fn from(value: BigInt) -> Self {
+impl<'ctx> From<&'ctx BigInt> for RValue<'ctx> {
+    fn from(value: &'ctx BigInt) -> Self {
         Self::Integer(value)
     }
 }
 
-impl<'a> From<String> for RValue<'a> {
-    fn from(value: String) -> Self {
+impl<'ctx> From<&'ctx str> for RValue<'ctx> {
+    fn from(value: &'ctx str) -> Self {
         Self::String(value)
     }
 }
 
-impl<'a> From<VarMode<'a>> for RValue<'a> {
-    fn from(var: VarMode<'a>) -> Self {
+impl<'ctx> From<VarMode<'ctx>> for RValue<'ctx> {
+    fn from(var: VarMode<'ctx>) -> Self {
         Self::Var(var)
     }
 }
 
-impl From<Var> for RValue<'_> {
-    fn from(var: Var) -> Self {
+impl<'ctx> From<Var<'ctx>> for RValue<'ctx> {
+    fn from(var: Var<'ctx>) -> Self {
         Self::MovedVar(var)
     }
 }

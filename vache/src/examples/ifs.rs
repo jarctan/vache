@@ -3,9 +3,9 @@
 
 use super::*;
 
-pub fn simple_if() -> impl Into<Program> {
+pub fn simple_if<'ctx>() -> impl Into<Program<'ctx>> {
     vec![Fun {
-        name: "main".to_string(),
+        name: "main",
         params: vec![],
         ret_ty: UnitT,
         body: expr(if_e(

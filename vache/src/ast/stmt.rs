@@ -9,25 +9,25 @@ use crate::utils::boxed;
 
 /// A statement.
 #[derive(Debug, Clone)]
-pub enum Stmt {
+pub enum Stmt<'ctx> {
     /// A declaration. We assign the computation
     /// of the 2nd argument to the newly created variable
     /// defined in the 1st argument.
-    Declare(VarDef, Expr),
+    Declare(VarDef<'ctx>, Expr<'ctx>),
     /// An assignment.
-    Assign(Place, Expr),
+    Assign(Place<'ctx>, Expr<'ctx>),
     /// An expression, whose final value is discarded.
-    ExprS(Expr),
+    ExprS(Expr<'ctx>),
     /// A while statement.
     While {
         /// Condition.
-        cond: Expr,
+        cond: Expr<'ctx>,
         /// While body.
-        body: Block,
+        body: Block<'ctx>,
     },
 }
 
-impl Stmt {
+impl<'ctx> Stmt<'ctx> {
     /// Sees this statement as a declaration.
     ///
     /// Returns: `(declare, expr)`.
@@ -85,8 +85,8 @@ impl Stmt {
     }
 }
 
-impl Parsable<Pair<'_, Rule>> for Stmt {
-    fn parse(pair: Pair<Rule>, ctx: &mut Context) -> Self {
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
         assert!(matches!(pair.as_rule(), Rule::stmt));
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -119,86 +119,58 @@ impl Parsable<Pair<'_, Rule>> for Stmt {
 }
 
 /// Shortcut to print several expressions in our program.
-pub fn print(stmts: impl IntoIterator<Item = Expr>) -> Stmt {
+pub fn print<'ctx>(stmts: impl IntoIterator<Item = Expr<'ctx>>) -> Stmt<'ctx> {
     Stmt::ExprS(super::expr::call("print", stmts))
 }
 
 /// Shortcut to make a call.
-pub fn call_stmt(name: impl ToString, stmts: impl IntoIterator<Item = Expr>) -> Stmt {
+pub fn call_stmt<'ctx>(name: &'ctx str, stmts: impl IntoIterator<Item = Expr<'ctx>>) -> Stmt<'ctx> {
     Stmt::ExprS(super::expr::call(name, stmts))
 }
 
 /// Shortcut for a block statement.
-pub fn block_stmt(b: impl Into<Block>) -> Stmt {
+pub fn block_stmt<'ctx>(b: impl Into<Block<'ctx>>) -> Stmt<'ctx> {
     Stmt::ExprS(Expr::BlockE(boxed(b.into())))
 }
 
-impl PartialEq for Stmt {
-    fn eq(&self, _other: &Self) -> bool {
-        todo!()
-    }
-}
-
-impl Eq for Stmt {}
-
 #[cfg(test)]
 mod tests {
+    use bumpalo::Bump;
     use num_bigint::BigInt;
-    use pest::Parser;
     use Expr::*;
 
     use super::super::Ty;
     use super::*;
     use crate::grammar::Grammar;
 
+    #[parses("let x: int = 4" as stmt)]
     #[test]
-    fn declaration() {
-        let input = "let x: int = 4";
-        let mut parsed = Grammar::parse(Rule::stmt, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let stmt: Stmt = ctx.parse(pair);
-        eprintln!("{stmt:?}");
+    fn declaration(stmt: Stmt) {
         let (lhs, rhs) = stmt.as_declare().unwrap();
         assert_eq!(lhs.name, "x");
         assert_eq!(lhs.ty, Ty::IntT);
         assert_eq!(rhs.as_integer().unwrap(), &BigInt::from(4));
     }
 
+    #[parses("y = 5" as stmt)]
     #[test]
-    fn assignment() {
-        let input = "y = 5";
-        let mut parsed = Grammar::parse(Rule::stmt, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let stmt: Stmt = ctx.parse(pair);
-        eprintln!("{stmt:?}");
+    fn assignment(stmt: Stmt) {
         let (lhs, rhs) = stmt.as_assign().unwrap();
         assert_eq!(lhs, "y");
         assert_eq!(rhs.as_integer().unwrap(), &BigInt::from(5));
     }
 
+    #[parses("\"test\"" as stmt)]
     #[test]
-    fn expression() {
-        let input = "\"test\"";
-        let mut parsed = Grammar::parse(Rule::stmt, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let stmt: Stmt = ctx.parse(pair);
-        eprintln!("{stmt:?}");
+    fn expression(stmt: Stmt) {
         let expr = stmt.as_expr().unwrap();
         assert_eq!(expr.as_string().unwrap(), "test");
     }
 
+    #[parses("while x { x = x; print(x); }" as stmt)]
     #[test]
-    fn while_loop() {
-        let input = "while x { x = x; print(x); }";
-        let mut parsed = Grammar::parse(Rule::stmt, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let expr: Stmt = ctx.parse(pair);
-        eprintln!("{expr:?}");
-        let (cond, block) = expr.as_while_loop().unwrap();
+    fn while_loop(stmt: Stmt) {
+        let (cond, block) = stmt.as_while_loop().unwrap();
         assert!(cond.as_var().unwrap() == "x");
         assert!(matches!(
             &block.stmts[..],

@@ -1,8 +1,10 @@
 //! Toy Vache language compiler.
 
-use anyhow::Context;
+use anyhow::Context as AnyhowContext;
 use clap::{Parser, Subcommand};
-use vache_lib::{borrow_check, check, examples::parse_file, mir, run};
+use vache_lib::{
+    borrow_check, check, config::Config, examples::parse_file, mir, run, Arena, Context,
+};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -33,15 +35,36 @@ fn main() -> anyhow::Result<()> {
     let res = run(checked, "binary", &std::env::current_dir().unwrap()).expect("error");
     println!("{}", res);*/
     match Cli::parse().command {
-        Commands::Compile { filename } => {
-            let (program, _) = parse_file(&filename).with_context(|| "Compilation failed")?;
-            let mut checked = check(program);
+        Commands::Compile { ref filename } => {
+            let arena = Arena::new();
+            let input: &str =
+                arena.alloc(std::fs::read_to_string(filename).with_context(|| {
+                    format!(
+                        "Failed to open file `{filename}` in {}",
+                        std::env::current_dir().unwrap_or_default().display()
+                    )
+                })?);
+            let config = Config { input };
+            let mut context = Context::new(config, &arena);
+
+            let program = parse_file(&mut context).with_context(|| "Compilation failed")?;
+            let mut checked = check(&mut context, program);
             let mir = borrow_check(mir(&mut checked));
             println!("{mir:?}");
         }
-        Commands::Run { filename } => {
-            let (program, _) = parse_file(&filename).with_context(|| "Compilation failed")?;
-            let mut checked = check(program);
+        Commands::Run { ref filename } => {
+            let arena = Arena::new();
+            let input: &str =
+                arena.alloc(std::fs::read_to_string(filename).with_context(|| {
+                    format!(
+                        "Failed to open file `{filename}` in {}",
+                        std::env::current_dir().unwrap_or_default().display()
+                    )
+                })?);
+            let config = Config { input };
+            let mut context = Context::new(config, &arena);
+            let program = parse_file(&mut context).with_context(|| "Compilation failed")?;
+            let mut checked = check(&mut context, program);
             let mir = borrow_check(mir(&mut checked));
             println!("{mir:?}");
             let res = run(checked, "binary", &std::env::current_dir()?)

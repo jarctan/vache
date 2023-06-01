@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn fibo() {
     test(vec![Fun {
-        name: "fibo".to_string(),
+        name: "fibo",
         params: vec![vardef("n", IntT)],
         ret_ty: IntT,
         body: Block {

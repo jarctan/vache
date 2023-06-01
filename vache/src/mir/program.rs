@@ -3,20 +3,22 @@
 use std::collections::HashMap;
 
 use super::{Fun, Struct};
+use crate::Arena;
 
 /// A program: a collection of:
 /// * structures
 /// * functions
 #[derive(Debug)]
-pub struct Program<'a> {
+pub struct Program<'ctx> {
+    pub arena: &'ctx Arena,
     /// Collection of functions defined in the program, indexed by their names.
-    pub funs: HashMap<String, Fun<'a>>,
+    pub funs: HashMap<&'ctx str, Fun<'ctx>>,
     /// Collection of structures defined in the program, indexed by their names.
-    pub structs: HashMap<String, Struct>,
+    pub structs: HashMap<&'ctx str, Struct<'ctx>>,
 }
 
-impl<'a> AsRef<Program<'a>> for Program<'a> {
-    fn as_ref(&self) -> &Program<'a> {
+impl<'ctx> AsRef<Program<'ctx>> for Program<'ctx> {
+    fn as_ref(&self) -> &Program<'ctx> {
         self
     }
 }

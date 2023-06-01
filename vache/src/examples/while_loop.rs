@@ -4,11 +4,11 @@
 use super::*;
 
 /// Basic while-loop program.
-pub fn while_loop() -> impl Into<Program> {
+pub fn while_loop<'ctx>() -> impl Into<Program<'ctx>> {
     Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![
@@ -27,11 +27,11 @@ pub fn while_loop() -> impl Into<Program> {
 }
 
 /// Two while loops one after the other.
-pub fn while_loop2() -> impl Into<Program> {
+pub fn while_loop2() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![

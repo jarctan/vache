@@ -5,7 +5,7 @@ use super::*;
 fn ceil_mod_2() {
     test({
         let f1 = Fun {
-            name: "is_even".to_string(),
+            name: "is_even",
             params: vec![vardef("n", IntT)],
             ret_ty: BoolT,
             body: Block {
@@ -18,7 +18,7 @@ fn ceil_mod_2() {
         };
 
         let f2 = Fun {
-            name: "ceil_mod_2".to_string(),
+            name: "ceil_mod_2",
             params: vec![vardef("n", IntT)],
             ret_ty: IntT,
             body: expr(IfE(

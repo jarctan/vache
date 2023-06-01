@@ -9,15 +9,15 @@ use crate::grammar::*;
 ///
 /// A block is a list of ordered statements, followed by a final expression.
 #[derive(Debug, Clone, Default)]
-pub struct Block {
+pub struct Block<'ctx> {
     /// List of consecutive statements.
-    pub stmts: Vec<Stmt>,
+    pub stmts: Vec<Stmt<'ctx>>,
     /// Final return expression.
-    pub ret: Expr,
+    pub ret: Expr<'ctx>,
 }
 
 /// Creates a block only made of an expression.
-pub fn expr(expr: Expr) -> Block {
+pub fn expr(expr: Expr<'_>) -> Block<'_> {
     Block {
         stmts: vec![],
         ret: expr,
@@ -31,23 +31,15 @@ pub fn expr(expr: Expr) -> Block {
 /// stratum for that block as an argument, and returns a list of statements.
 ///
 /// The final expression is then chosen to be the unit, no-op expr.
-pub fn stmts(stmts: impl IntoIterator<Item = Stmt>) -> Block {
+pub fn stmts<'ctx>(stmts: impl IntoIterator<Item = Stmt<'ctx>>) -> Block<'ctx> {
     Block {
         stmts: stmts.into_iter().collect(),
         ret: Expr::UnitE,
     }
 }
 
-impl PartialEq for Block {
-    fn eq(&self, _other: &Self) -> bool {
-        todo!()
-    }
-}
-
-impl Eq for Block {}
-
-impl Parsable<Pair<'_, Rule>> for Block {
-    fn parse(pair: Pair<Rule>, ctx: &mut Context) -> Self {
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Block<'ctx> {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
         debug_assert!(matches!(pair.as_rule(), Rule::block | Rule::primitive));
         let mut stmts = vec![];
         let mut ret = None;
@@ -70,19 +62,11 @@ impl Parsable<Pair<'_, Rule>> for Block {
 
 #[cfg(test)]
 mod tests {
-    use pest::Parser;
-
     use super::*;
-    use crate::grammar::Grammar;
 
+    #[parses("{ let x: int = 5; let y: int = 7; x }" as block)]
     #[test]
-    fn block() {
-        let input = "{ let x: int = 5; let y: int = 7; x }";
-        let mut parsed = Grammar::parse(Rule::block, input).expect("failed to parse");
-        let pair = parsed.next().expect("Nothing parsed");
-        let mut ctx = Context::new(input);
-        let block: Block = ctx.parse(pair);
-        eprintln!("{block:?}");
+    fn block(block: Block) {
         assert!(matches!(
             &block.stmts[..],
             [Stmt::Declare(..), Stmt::Declare(..)]

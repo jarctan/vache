@@ -9,6 +9,7 @@ use Ty::*;
 
 use crate::mir::*;
 use crate::tast;
+use crate::Arena;
 
 /// Fresh variable counter.
 ///
@@ -17,28 +18,31 @@ use crate::tast;
 pub static VAR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Typed AST to MIR transformer.
-pub(crate) struct MIRer<'a> {
+pub(crate) struct MIRer<'ctx> {
     /// The WIP CFG for the current function.
-    cfg: CfgI<'a>,
+    cfg: CfgI<'ctx>,
     /// Current stratum.
     stm: Stratum,
+    /// Compiler arena.
+    arena: &'ctx Arena,
 }
 
-impl<'a> MIRer<'a> {
+impl<'ctx> MIRer<'ctx> {
     /// Creates a new MIR processor.
-    pub fn new() -> Self {
+    pub fn new(arena: &'ctx Arena) -> Self {
         Self {
             cfg: Cfg::default(),
             stm: Stratum::static_stm(),
+            arena,
         }
     }
 
     /// Generates a fresh variable, that has never been used in *any* CFG.
     #[must_use]
-    fn fresh_var(&mut self, ty: Ty, stm: Stratum) -> VarDef {
+    fn fresh_var(&mut self, ty: Ty<'ctx>, stm: Stratum) -> VarDef<'ctx> {
         let old_value = VAR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         VarDef {
-            name: Var::cfg(old_value),
+            name: Var::cfg(self.arena, old_value),
             ty,
             stm,
         }
@@ -54,7 +58,7 @@ impl<'a> MIRer<'a> {
     }
 
     /// Generates an instruction with the right stratum.
-    fn instr<'s>(&'s self, kind: InstrKind<'a>) -> Instr<'a> {
+    fn instr<'s>(&'s self, kind: InstrKind<'ctx>) -> Instr<'ctx> {
         Instr {
             kind,
             scope: self.stm,
@@ -65,12 +69,12 @@ impl<'a> MIRer<'a> {
     #[must_use]
     fn insert<'s>(
         &'s mut self,
-        instr: Instr<'a>,
+        instr: Instr<'ctx>,
         branches: impl IntoIterator<Item = (Branch, CfgLabel)>,
     ) -> CfgLabel {
         let from = self.cfg.add_node(instr);
         for (b, to) in branches {
-            self.cfg.add_edge(from.clone(), to, b, ());
+            self.cfg.add_edge(from, to, b, ());
         }
         from
     }
@@ -82,12 +86,12 @@ impl<'a> MIRer<'a> {
     fn insert_at<'s>(
         &'s mut self,
         label: CfgLabel,
-        instr: Instr<'a>,
+        instr: Instr<'ctx>,
         branches: impl IntoIterator<Item = (Branch, CfgLabel)>,
     ) {
         self.cfg[&label] = instr;
         for (b, to) in branches {
-            self.cfg.add_edge(label.clone(), to, b, ());
+            self.cfg.add_edge(label, to, b, ());
         }
     }
 
@@ -102,7 +106,7 @@ impl<'a> MIRer<'a> {
     }
 
     /// Computes the MIR output of a typed program using that processor.
-    pub fn gen_mir<'s>(&'s mut self, p: &'a mut tast::Program) -> Program<'a> {
+    pub fn gen_mir<'tast: 'ctx>(&mut self, p: &'ctx mut tast::Program<'tast>) -> Program<'ctx> {
         self.visit_program(p)
     }
 
@@ -113,7 +117,11 @@ impl<'a> MIRer<'a> {
     ///
     /// Further refinements to the addressing mode will be made by the next
     /// phases (liveness analysis for instance).
-    fn visit_vardef(src: VarDef, mode: &'a mut Mode, dest: Option<&VarDef>) -> VarMode<'a> {
+    fn visit_vardef(
+        src: VarDef<'ctx>,
+        mode: &'ctx mut Mode,
+        dest: Option<&VarDef<'ctx>>,
+    ) -> VarMode<'ctx> {
         // If dest outlives, if must own the variable!
         if let Some(dest) = dest && dest.stm < src.stm {
             *mode = Mode::Cloned;
@@ -128,8 +136,8 @@ impl<'a> MIRer<'a> {
     /// list of labels after that instruction.
     fn insert_assign_instr<'s>(
         &'s mut self,
-        place: impl Into<Place>,
-        rvalue: impl Into<RValue<'a>>,
+        place: impl Into<Place<'ctx>>,
+        rvalue: impl Into<RValue<'ctx>>,
         branches: impl IntoIterator<Item = (Branch, CfgLabel)>,
     ) -> CfgLabel {
         let instr = self.instr(InstrKind::Assign(place.into(), rvalue.into()));
@@ -146,13 +154,13 @@ impl<'a> MIRer<'a> {
     /// * `mode`: Preferred mode.
     /// * The label to jump in the CFG to after evaluating this expression.
     /// * The map of structures declarations.
-    fn visit_expr<'s>(
-        &'s mut self,
-        e: &'a mut tast::Expr,
-        dest_v: Option<VarDef>,
+    fn visit_expr<'tast>(
+        &mut self,
+        e: &'ctx mut tast::Expr<'tast>,
+        dest_v: Option<VarDef<'ctx>>,
         dest_l: CfgLabel,
         mode: Mode,
-        structs: &HashMap<String, Struct>,
+        structs: &HashMap<&'ctx str, Struct<'ctx>>,
     ) -> CfgLabel {
         match &mut e.kind {
             tast::ExprKind::UnitE => {
@@ -164,14 +172,14 @@ impl<'a> MIRer<'a> {
             }
             tast::ExprKind::IntegerE(i) => {
                 if let Some(dest_v) = dest_v {
-                    self.insert_assign_instr(dest_v.name, i.clone(), [(DefaultB, dest_l)])
+                    self.insert_assign_instr(dest_v.name, RValue::Integer(i), [(DefaultB, dest_l)])
                 } else {
                     dest_l
                 }
             }
             tast::ExprKind::StringE(s) => {
                 if let Some(dest_v) = dest_v {
-                    self.insert_assign_instr(dest_v.name, s.clone(), [(DefaultB, dest_l)])
+                    self.insert_assign_instr(dest_v.name, *s, [(DefaultB, dest_l)])
                 } else {
                     dest_l
                 }
@@ -182,7 +190,7 @@ impl<'a> MIRer<'a> {
                     tast::PlaceKind::VarP(v) => {
                         if let Some(dest_v) = dest_v && dest_v.name != *v {
                             let var_ref = Self::visit_vardef(VarDef {
-                                name: v.clone(),
+                                name: *v,
                                 ty: place.ty.clone(),
                                 stm: place.stm,
                             }, &mut place.mode, Some(&dest_v));
@@ -199,7 +207,7 @@ impl<'a> MIRer<'a> {
                             let dest_l = if let Some(dest_v) = dest_v {
                                 self.insert_assign_instr(
                                     dest_v.name,
-                                    RValue::Field(struct_var.name.clone(), field.clone()),
+                                    RValue::Field(struct_var.name, field),
                                     [(DefaultB, dest_l)],
                                 )
                             } else {
@@ -221,7 +229,7 @@ impl<'a> MIRer<'a> {
                         let dest_l = if let Some(dest_v) = dest_v {
                             self.insert_assign_instr(
                                 dest_v.name,
-                                RValue::Index(e_var.name.clone(), ix_var.name.clone()),
+                                RValue::Index(e_var.name, ix_var.name),
                                 [(DefaultB, dest_l)],
                             )
                         } else {
@@ -258,7 +266,7 @@ impl<'a> MIRer<'a> {
                 // The call itself in the CFG
                 let call_l = self.insert(
                     self.instr(InstrKind::Call {
-                        name: name.to_string(),
+                        name,
                         args: arg_vars.clone().into_iter().map(|arg| arg.name).collect(),
                         destination: dest_v.map(|dest| dest.name),
                     }),
@@ -281,13 +289,13 @@ impl<'a> MIRer<'a> {
             }
             tast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
                 // Branches.
-                let iftrue_l = self.visit_block(iftrue, dest_v.clone(), dest_l.clone(), structs);
+                let iftrue_l = self.visit_block(iftrue, dest_v.clone(), dest_l, structs);
                 let iffalse_l = self.visit_block(iffalse, dest_v, dest_l, structs);
 
                 // The switch
                 let cond_var = self.fresh_var(BoolT, self.stm);
                 let cond_l = self.insert(
-                    self.instr(InstrKind::Branch(cond_var.name.clone())),
+                    self.instr(InstrKind::Branch(cond_var.name)),
                     [(TrueB, iftrue_l), (FalseB, iffalse_l)],
                 );
 
@@ -301,9 +309,9 @@ impl<'a> MIRer<'a> {
             } => {
                 // Find some temporary variables to hold the result of the evaluation of each
                 // field
-                let field_vars: HashMap<String, VarDef> = fields
+                let field_vars: HashMap<&str, VarDef> = fields
                     .iter()
-                    .map(|(name, e)| (name.clone(), self.fresh_var(e.ty.clone(), self.stm)))
+                    .map(|(name, e)| (*name, self.fresh_var(e.ty.clone(), self.stm)))
                     .collect();
 
                 // Struct instantiation in the CFG.
@@ -312,7 +320,7 @@ impl<'a> MIRer<'a> {
                     self.insert_assign_instr(
                         dest_v.name,
                         RValue::Struct {
-                            name: s_name.clone(),
+                            name: s_name,
                             fields: field_vars
                                 .clone()
                                 .into_iter()
@@ -390,12 +398,12 @@ impl<'a> MIRer<'a> {
     /// * The destination variable that will store the result of this expression
     /// * The label to jump in the CFG to after evaluating this expression
     /// * The map of structures declarations.
-    fn visit_block<'s>(
-        &'s mut self,
-        b: &'a mut tast::Block,
-        dest_v: Option<VarDef>,
+    fn visit_block<'tast>(
+        &mut self,
+        b: &'ctx mut tast::Block<'tast>,
+        dest_v: Option<VarDef<'ctx>>,
         dest_l: CfgLabel,
-        structs: &HashMap<String, Struct>,
+        structs: &HashMap<&'ctx str, Struct<'ctx>>,
     ) -> CfgLabel {
         self.push_scope();
         let ret_l = self.visit_expr(&mut b.ret, dest_v, dest_l, Mode::Cloned, structs);
@@ -415,11 +423,11 @@ impl<'a> MIRer<'a> {
     /// * The statement to visit.
     /// * The label to jump at in the CFG after the execution of the statement.
     /// * A map of structures declarations.
-    fn visit_stmt<'s>(
-        &'s mut self,
-        s: &'a mut tast::Stmt,
+    fn visit_stmt<'tast>(
+        &mut self,
+        s: &'ctx mut tast::Stmt<'tast>,
         dest_l: CfgLabel,
-        structs: &HashMap<String, Struct>,
+        structs: &HashMap<&'ctx str, Struct<'ctx>>,
     ) -> CfgLabel {
         match s {
             tast::Stmt::Declare(vardef, expr) => {
@@ -434,7 +442,7 @@ impl<'a> MIRer<'a> {
                 tast::PlaceKind::VarP(name) => self.visit_expr(
                     expr,
                     Some(VarDef {
-                        name: name.clone(),
+                        name: *name,
                         ty: place.ty.clone(),
                         stm: place.stm,
                     }),
@@ -456,8 +464,8 @@ impl<'a> MIRer<'a> {
 
                     // Finally, assign to the indexed variable
                     let dest_l = self.insert_assign_instr(
-                        Place::IndexP(array_var.name.clone(), ix_var.name.clone()),
-                        dest_v.name.clone(),
+                        Place::IndexP(array_var.name, ix_var.name),
+                        dest_v.name,
                         [(DefaultB, dest_l)],
                     );
 
@@ -501,12 +509,12 @@ impl<'a> MIRer<'a> {
                 self.push_scope();
 
                 // The block itself.
-                let body_l = self.visit_block(body, None, loop_l.clone(), structs);
+                let body_l = self.visit_block(body, None, loop_l, structs);
 
                 // If statement
                 let cond_v = self.fresh_var(BoolT, self.stm);
                 let if_l = self.insert(
-                    self.instr(InstrKind::Branch(cond_v.name.clone())),
+                    self.instr(InstrKind::Branch(cond_v.name)),
                     [(TrueB, body_l), (FalseB, dest_l)],
                 );
 
@@ -518,11 +526,7 @@ impl<'a> MIRer<'a> {
                 let cond_l =
                     self.insert(self.instr(InstrKind::Declare(cond_v)), [(DefaultB, cond_l)]);
 
-                self.insert_at(
-                    loop_l.clone(),
-                    self.instr(InstrKind::Noop),
-                    [(DefaultB, cond_l)],
-                );
+                self.insert_at(loop_l, self.instr(InstrKind::Noop), [(DefaultB, cond_l)]);
 
                 self.pop_scope();
 
@@ -533,11 +537,11 @@ impl<'a> MIRer<'a> {
     }
 
     /// Visits a function.
-    fn visit_fun<'s>(
-        &'s mut self,
-        f: &'a mut tast::Fun,
-        structs: &HashMap<String, Struct>,
-    ) -> Fun<'a> {
+    fn visit_fun<'tast>(
+        &mut self,
+        f: &'ctx mut tast::Fun<'tast>,
+        structs: &HashMap<&'ctx str, Struct<'ctx>>,
+    ) -> Fun<'ctx> {
         let ret_l = self.fresh_label();
         // Reserve a fresh variable for the output, only if it's not the unit type
         let ret_v = if f.ret_ty != UnitT {
@@ -545,11 +549,11 @@ impl<'a> MIRer<'a> {
         } else {
             None
         };
-        let entry_l = self.visit_block(&mut f.body, ret_v.clone(), ret_l.clone(), structs);
+        let entry_l = self.visit_block(&mut f.body, ret_v.clone(), ret_l, structs);
         let body = std::mem::take(&mut self.cfg);
 
         Fun {
-            name: f.name.clone(),
+            name: f.name,
             params: f.params.clone(),
             ret_v,
             ret_l,
@@ -559,16 +563,21 @@ impl<'a> MIRer<'a> {
     }
 
     /// Visits a program, recursively producing CFGs for each function.
-    fn visit_program<'s>(&'s mut self, p: &'a mut tast::Program) -> Program<'a> {
-        let tast::Program { funs, structs } = p;
+    fn visit_program<'tast>(&mut self, p: &'ctx mut tast::Program<'tast>) -> Program<'ctx> {
+        let tast::Program {
+            funs,
+            structs,
+            arena,
+        } = p;
 
         // Note: order is important.
         // We must visit structures first.
         Program {
             funs: funs
                 .iter_mut()
-                .map(|(name, f)| (name.clone(), self.visit_fun(f, structs)))
+                .map(|(name, f)| (*name, self.visit_fun(f, structs)))
                 .collect(),
+            arena,
             structs: structs.clone(),
         }
     }

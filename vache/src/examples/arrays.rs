@@ -4,11 +4,11 @@
 use super::*;
 
 /// Create an array, and get an item from it.
-pub fn simple_array_indexing() -> impl Into<Program> {
+pub fn simple_array_indexing() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![
@@ -28,11 +28,11 @@ pub fn simple_array_indexing() -> impl Into<Program> {
     )
 }
 
-pub fn separate_index_for_array() -> impl Into<Program> {
+pub fn separate_index_for_array() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![
@@ -53,11 +53,11 @@ pub fn separate_index_for_array() -> impl Into<Program> {
     )
 }
 
-pub fn simple_array_assignment() -> impl Into<Program> {
+pub fn simple_array_assignment() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![
@@ -79,11 +79,11 @@ pub fn simple_array_assignment() -> impl Into<Program> {
     )
 }
 
-pub fn assignment_while_borrowed() -> impl Into<Program> {
+pub fn assignment_while_borrowed() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![
@@ -106,11 +106,11 @@ pub fn assignment_while_borrowed() -> impl Into<Program> {
     )
 }
 
-pub fn cloning_array() -> impl Into<Program> {
+pub fn cloning_array() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
         vec![Fun {
-            name: "main".to_string(),
+            name: "main",
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![
