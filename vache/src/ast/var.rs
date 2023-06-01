@@ -130,11 +130,9 @@ pub fn vardef<'ctx>(name: &'ctx str, ty: Ty<'ctx>) -> VarDef<'ctx> {
 
 #[cfg(test)]
 mod tests {
-    use pest::Parser;
     use Ty::*;
 
     use super::*;
-    use crate::grammar::Grammar;
 
     #[parses("test123" as ident)]
     #[test]

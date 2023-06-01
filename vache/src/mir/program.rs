@@ -10,6 +10,7 @@ use crate::Arena;
 /// * functions
 #[derive(Debug)]
 pub struct Program<'ctx> {
+    /// AST arena.
     pub arena: &'ctx Arena,
     /// Collection of functions defined in the program, indexed by their names.
     pub funs: HashMap<&'ctx str, Fun<'ctx>>,

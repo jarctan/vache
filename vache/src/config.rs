@@ -1,4 +1,4 @@
-///
+//! Defining the compiler config options.
 
 /// Compile configuration.
 pub struct Config<'ctx> {

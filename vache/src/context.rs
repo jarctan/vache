@@ -1,3 +1,5 @@
+//! Defining the compiler context.
+
 use crate::config::Config;
 use crate::utils::arena::Arena;
 

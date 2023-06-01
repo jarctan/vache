@@ -119,7 +119,7 @@ mod steps {
     ///
     /// Under the hood, in charge of allocating a new `MIRer` and launching it
     /// on your program.
-    pub fn mir<'ctx, 'mir>(p: &'mir mut tast::Program<'ctx>) -> mir::Program<'mir> {
+    pub fn mir<'mir>(p: &'mir mut tast::Program<'_>) -> mir::Program<'mir> {
         let mut mirer = MIRer::new(p.arena);
         mirer.gen_mir(p)
     }

@@ -2,7 +2,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
-use syn::{parse_macro_input, Block, Error, Ident, ItemFn, LitStr, Result, Type, FnArg, Pat, Token, Variant, Expr};
+use syn::{parse_macro_input, Block, Error, Ident, ItemFn, LitStr, Result, Type, FnArg, Pat, Token};
 
 #[macro_use]
 extern crate quote;

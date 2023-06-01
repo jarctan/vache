@@ -92,11 +92,7 @@ impl fmt::Display for Ty<'_> {
 
 #[cfg(test)]
 mod tests {
-    use bumpalo::Bump;
-    use pest::Parser;
-
     use super::*;
-    use crate::grammar::Grammar;
 
     #[parses("()" as ty)]
     #[test]

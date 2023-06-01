@@ -135,13 +135,11 @@ pub fn block_stmt<'ctx>(b: impl Into<Block<'ctx>>) -> Stmt<'ctx> {
 
 #[cfg(test)]
 mod tests {
-    use bumpalo::Bump;
     use num_bigint::BigInt;
     use Expr::*;
 
     use super::super::Ty;
     use super::*;
-    use crate::grammar::Grammar;
 
     #[parses("let x: int = 4" as stmt)]
     #[test]
