@@ -9,6 +9,7 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
+mod anf;
 pub mod ast;
 mod borrowing;
 mod compile;
@@ -19,6 +20,7 @@ mod grammar;
 mod interpret;
 pub mod mir;
 mod miring;
+mod normalize;
 mod tast;
 mod typing;
 mod utils;
@@ -82,6 +84,7 @@ mod steps {
     use borrowing::BorrowChecker;
     use compile::Compiler;
     use miring::MIRer;
+    use normalize::Normalizer;
     use typing::Typer;
 
     use super::*;
@@ -120,8 +123,10 @@ mod steps {
     /// Under the hood, in charge of allocating a new `MIRer` and launching it
     /// on your program.
     pub fn mir<'mir>(p: &'mir mut tast::Program<'_>) -> mir::Program<'mir> {
-        let mut mirer = MIRer::new(p.arena);
-        mirer.gen_mir(p)
+        let mut normalizer = Normalizer::new(p.arena);
+        let normalized = normalizer.normalize(p);
+        let mut mirer = MIRer::new();
+        mirer.gen_mir(normalized)
     }
 
     /// Compiles a given program.
@@ -210,7 +215,7 @@ mod steps {
 
         // Write Cargo file
         let mut file = File::create(target_dir.join("Cargo.toml"))?;
-        file.write_all(format!("[package]\nname = \"{binary_name}\"\nversion = \"1.0.0\"\nedition = \"2021\"\n\n[dependencies]\nnum-bigint = \"0.4.3\"\nnum-traits = \"0.2.15\"\n\n\n[workspace]").as_bytes())?;
+        file.write_all(format!("[package]\nname = \"{binary_name}\"\nversion = \"1.0.0\"\nedition = \"2021\"\n\n[dependencies]\n num-bigint = \"0.4.3\"\nnum-traits = \"0.2.15\"\n\n\n[workspace]").as_bytes())?;
         file.flush()?;
 
         // Cargo run on the file

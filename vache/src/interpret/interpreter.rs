@@ -14,7 +14,7 @@ use Value::*;
 
 use super::env::Env;
 use super::value::{Value, ValueRef};
-use crate::mir::{Branch, CfgI, CfgLabel, Fun, InstrKind, Mode, Place, RValue, Var};
+use crate::mir::{Branch, CfgI, CfgLabel, Fun, InstrKind, Mode, Place, Pointer, RValue, Var};
 use crate::tast::Stratum;
 
 /// Interpreter for our language.
@@ -122,15 +122,10 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                 self.set_var(arg.name, *value);
             }
 
-            // Introduce return variable
-            if let Some(ret_v) = &f.ret_v {
-                self.add_var(ret_v.name);
-            }
-
             self.visit_cfg(&f.body, f.entry_l);
 
             // Request the final value (if the function returns a value, of course)
-            self.pop_scope(f.ret_v.as_ref().map(|ret_v| self.get_var(ret_v)))
+            self.pop_scope(f.ret_v.as_ref().map(|ret_v| self.get_ptr(ret_v)))
         }
     }
 
@@ -189,10 +184,15 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
         self.env.last_mut().unwrap().add_var(name.into());
     }
 
-    /// Assigns a variable in the context.
+    /// Assigns a variable.
     fn set_var(&mut self, name: impl AsRef<Var<'ctx>>, value: impl Into<ValueRef>) {
         let name = name.as_ref();
         *self.get_var_mut(name) = value.into();
+    }
+
+    /// Assigns `*ptr`.
+    fn set_at_ptr(&mut self, ptr: impl Into<Pointer<'ctx>>, value: impl Into<ValueRef>) {
+        *self.get_ptr_mut(ptr) = value.into();
     }
 
     /// Adds a value to the dynamic store/slab.
@@ -215,9 +215,75 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
             .unwrap()
     }
 
-    /// Gets the value of a variable.
-    fn get_var_value(&self, v: impl AsRef<Var<'ctx>>) -> &Value<'ctx> {
-        self.get_value(self.get_var(v))
+    /// Gets the value reference at a given pointer.
+    fn get_ptr(&self, ptr: impl Into<Pointer<'ctx>>) -> ValueRef {
+        let ptr = ptr.into();
+        match ptr.place() {
+            VarP(var) => self.get_var(var),
+            FieldP(strukt, field) => {
+                if let StructV(_, fields) = self.get_ptr_value(strukt) && let Some(var_ref) = fields.get(field) {
+                    *var_ref
+                } else{
+                    panic!()
+                }
+            }
+            IndexP(array, index) => {
+                match (
+                    self.get_ptr_value(array),
+                    self.get_ptr_value(index),
+                ) {
+                    (ArrayV(array), IntV(index)) => {
+                        let index = index
+                            .to_usize()
+                            .expect("Runtime error: array index is too big");
+                        array[index]
+                    }
+                    _ => panic!("Runtime error: incorrect indexing"),
+                }
+            }
+            DerefP(..) => panic!(),
+        }
+    }
+
+    /// Mutably gets the value reference to a given location.
+    fn get_ptr_mut(&mut self, ptr: impl Into<Pointer<'ctx>>) -> &mut ValueRef {
+        let ptr = ptr.into();
+        match ptr.place() {
+            VarP(var) => self.get_var_mut(var),
+            FieldP(strukt, field) => {
+                if let StructV(_, fields) = self.get_ptr_value_mut(strukt) && let Some(var_ref) = fields.get_mut(field) {
+                    var_ref
+                } else{
+                    panic!()
+                }
+            }
+            IndexP(array, index) => {
+                if let IntV(index) = self.get_ptr_value(index) {
+                    
+                    let index = index
+                    .to_usize()
+                    .expect("Runtime error: array index is too big");
+                    if let ArrayV(array) = self.get_ptr_value_mut(array) {
+                        &mut array[index]
+                    } else {
+                        panic!("Runtime error: incorrect indexing")
+                    }
+                } else {
+                    panic!("Runtime error: incorrect indexing")
+                }
+            }
+            DerefP(..) => panic!(),
+        }
+    }
+
+    /// Gets the value at a given pointer location.
+    fn get_ptr_value(&self, ptr: impl Into<Pointer<'ctx>>) -> &Value<'ctx> {
+        self.get_value(self.get_ptr(ptr))
+    }
+
+    /// Mutably gets the value at a given pointer location.
+    fn get_ptr_value_mut(&mut self, ptr: impl Into<Pointer<'ctx>>) -> &mut Value<'ctx> {
+        self.get_value_mut(self.get_ptr(ptr))
     }
 
     /// Returns the final standard output of the execution of the program.
@@ -251,35 +317,20 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
             RValue::Unit => self.add_value(UnitV, stratum),
             RValue::Integer(i) => self.add_value(IntV((*i).clone()), stratum),
             RValue::String(s) => self.add_value(StrV(s.to_string()), stratum),
-            RValue::Var(v) => {
-                let v_ref = self.get_var(v);
-                self.opt_clone(v.mode, v_ref, stratum)
+            RValue::Place(place) => {
+                let v_ref = self.get_ptr(place.as_ptr());
+                self.opt_clone(&place.mode(), v_ref, stratum)
             }
-            RValue::MovedVar(v) => {
+            /*RValue::MovedVar(v) => {
                 let v_ref = self.get_var(v);
                 self.opt_clone(&Mode::Moved, v_ref, stratum)
-            }
-            RValue::Field(lhs, field) => match self.get_var_value(lhs) {
-                StructV(_, strukt) => strukt[field],
-                _ => panic!("Runtime error: field access should only be on structs"),
-            },
-            RValue::Index(array, index) => {
-                match (self.get_var_value(array), self.get_var_value(index)) {
-                    (ArrayV(array), IntV(index)) => {
-                        let index = index
-                            .to_usize()
-                            .expect("Runtime error: array index is too big");
-                        self.opt_clone(&Mode::MutBorrowed, array[index], stratum)
-                    }
-                    _ => panic!("Runtime error: incorrect indexing"),
-                }
-            }
+            }*/
             RValue::Struct { name, fields } => {
-                let fields = fields.iter().map(|(&k, v)| (k, self.get_var(v))).collect();
+                let fields = fields.iter().map(|(&k, v)| (k, self.get_ptr(v))).collect();
                 self.add_value(StructV(name, fields), stratum)
             }
             RValue::Array(array) => {
-                let array = array.iter().map(|v| self.get_var(v)).collect();
+                let array = array.iter().map(|v| self.get_ptr(v)).collect();
                 self.add_value(ArrayV(array), stratum)
             }
         }
@@ -291,50 +342,26 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
         let branch = match &cfg[&label].kind {
             InstrKind::Noop => DefaultB,
             InstrKind::Declare(v) => {
-                self.add_var(v.clone());
+                self.add_var(v.name);
                 DefaultB
             }
-            InstrKind::Assign(VarP(v), rvalue) => {
-                let value = self.visit_rvalue(rvalue, self.get_var(v).stratum);
-                self.set_var(v, value);
+            InstrKind::Assign(ptr, rvalue) => {
+                let value = self.visit_rvalue(rvalue, self.get_ptr(ptr).stratum);
+                self.set_at_ptr(*ptr, value);
                 DefaultB
-            }
-            InstrKind::Assign(IndexP(array, index), rvalue) => {
-                let array_ref = self.get_var(array);
-                let stm = array_ref.stratum;
-
-                let value = self.visit_rvalue(rvalue, stm);
-
-                let index = self.get_var_value(index);
-                let index = if let IntV(index) = index {
-                    index.to_usize().expect("Index is too big")
-                } else {
-                    panic!("Runtime error: index should be an integer")
-                };
-
-                if let ArrayV(array) = self.get_value_mut(array_ref) {
-                    array[index] = value;
-                } else {
-                    panic!("Runtime error: indexed element should be an array")
-                }
-                DefaultB
-            }
-
-            InstrKind::Assign(FieldP(_, _), _) => {
-                todo!()
             }
             InstrKind::Call {
                 name,
                 args,
                 destination,
             } => {
-                let args = args.iter().map(|v| self.get_var(v)).collect();
+                let args = args.iter().map(|v| self.get_ptr(v)).collect();
                 let stratum = destination
                     .as_ref()
-                    .map_or(self.current_stratum(), |dest| self.get_var(dest).stratum);
+                    .map_or(self.current_stratum(), |dest| self.get_ptr(dest).stratum);
                 let call_result = self.call(name, args, stratum);
                 if let Some(destination) = destination {
-                    self.set_var(
+                    self.set_at_ptr(
                         destination,
                         call_result.expect(
                             "if the destination is set, then the function should return a value",
@@ -344,12 +371,14 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                 DefaultB
             }
             InstrKind::Branch(cond) => {
-                if self.get_var_value(cond).truth() {
+                if self.get_ptr_value(cond).truth() {
                     TrueB
                 } else {
                     FalseB
                 }
             }
+            // Do nothing: it was a marker instruction for the liveness analysis.
+            InstrKind::Return(_) => DefaultB,
         };
         if let Some(next) = cfg.take_branch(label, &branch) {
             self.visit_cfg(cfg, next)

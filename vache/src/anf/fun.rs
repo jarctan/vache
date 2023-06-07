@@ -1,8 +1,8 @@
-//! Defining functions in the MIR.
+//! Defining typed functions.
 
-use super::{CfgI, CfgLabel, Pointer, VarDef};
+use super::{Block, Pointer, VarDef};
 
-/// A function in the parser AST.
+/// A function in the typed AST.
 #[derive(Debug)]
 pub struct Fun<'ctx> {
     /// Name of that function.
@@ -14,11 +14,7 @@ pub struct Fun<'ctx> {
     ///
     /// If `None`, the function returns nothing.
     pub ret_v: Option<Pointer<'ctx>>,
-    /// Entry label in the CFG.
-    pub entry_l: CfgLabel,
-    /// Return label in the CFG.
-    pub ret_l: CfgLabel,
     /// Body of the function: a list of statements and
     /// a final expression.
-    pub body: CfgI<'ctx>,
+    pub body: Block<'ctx>,
 }

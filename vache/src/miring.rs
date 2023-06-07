@@ -1,50 +1,24 @@
-//! Typing.
-
-use std::collections::HashMap;
-use std::default::default;
-use std::sync::atomic::AtomicU64;
+//! CFG production.
 
 use Branch::*;
-use Ty::*;
 
+use crate::anf;
 use crate::mir::*;
-use crate::tast;
-use crate::Arena;
 
-/// Fresh variable counter.
-///
-/// Global to all CFGs to avoid any confusion between variable names (since we
-/// can access a variable created in one CFG from another CFG).
-pub static VAR_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-/// Typed AST to MIR transformer.
+/// ANF to MIR transformer.
 pub(crate) struct MIRer<'ctx> {
     /// The WIP CFG for the current function.
     cfg: CfgI<'ctx>,
     /// Current stratum.
     stm: Stratum,
-    /// Compiler arena.
-    arena: &'ctx Arena,
 }
 
 impl<'ctx> MIRer<'ctx> {
     /// Creates a new MIR processor.
-    pub fn new(arena: &'ctx Arena) -> Self {
+    pub fn new() -> Self {
         Self {
             cfg: Cfg::default(),
             stm: Stratum::static_stm(),
-            arena,
-        }
-    }
-
-    /// Generates a fresh variable, that has never been used in *any* CFG.
-    #[must_use]
-    fn fresh_var(&mut self, ty: Ty<'ctx>, stm: Stratum) -> VarDef<'ctx> {
-        let old_value = VAR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        VarDef {
-            name: Var::cfg(self.arena, old_value),
-            ty,
-            stm,
         }
     }
 
@@ -106,7 +80,7 @@ impl<'ctx> MIRer<'ctx> {
     }
 
     /// Computes the MIR output of a typed program using that processor.
-    pub fn gen_mir<'tast: 'ctx>(&mut self, p: &'ctx mut tast::Program<'tast>) -> Program<'ctx> {
+    pub fn gen_mir(&mut self, p: anf::Program<'ctx>) -> Program<'ctx> {
         self.visit_program(p)
     }
 
@@ -117,303 +91,32 @@ impl<'ctx> MIRer<'ctx> {
     ///
     /// Further refinements to the addressing mode will be made by the next
     /// phases (liveness analysis for instance).
-    fn visit_vardef(
+    /*fn visit_vardef(
         src: VarDef<'ctx>,
         mode: &'ctx mut Mode,
         dest: Option<&VarDef<'ctx>>,
-    ) -> VarMode<'ctx> {
+    ) -> Reference<'ctx> {
         // If dest outlives, if must own the variable!
         if let Some(dest) = dest && dest.stm < src.stm {
             *mode = Mode::Cloned;
         }
-        VarMode {
-            var: src.name,
+        PlaceMode {
+            kind: src.name.into(),
             mode,
         }
-    }
-
-    /// Inserts a `place = rvalue` instruction in the CFG, that branches to a
-    /// list of labels after that instruction.
-    fn insert_assign_instr<'s>(
-        &'s mut self,
-        place: impl Into<Place<'ctx>>,
-        rvalue: impl Into<RValue<'ctx>>,
-        branches: impl IntoIterator<Item = (Branch, CfgLabel)>,
-    ) -> CfgLabel {
-        let instr = self.instr(InstrKind::Assign(place.into(), rvalue.into()));
-        self.insert(instr, branches)
-    }
-
-    /// Visits an expression. It It will add the nodes for that
-    /// block in the CFG, and return the CFG label for it.
-    ///
-    /// It takes as arguments:
-    /// * The expression itself (as a parser AST node).
-    /// * The destination variable that will store the result of this
-    ///   expression.
-    /// * `mode`: Preferred mode.
-    /// * The label to jump in the CFG to after evaluating this expression.
-    /// * The map of structures declarations.
-    fn visit_expr<'tast>(
-        &mut self,
-        e: &'ctx mut tast::Expr<'tast>,
-        dest_v: Option<VarDef<'ctx>>,
-        dest_l: CfgLabel,
-        mode: Mode,
-        structs: &HashMap<&'ctx str, Struct<'ctx>>,
-    ) -> CfgLabel {
-        match &mut e.kind {
-            tast::ExprKind::UnitE => {
-                if let Some(dest_v) = dest_v {
-                    self.insert_assign_instr(dest_v.name, RValue::Unit, [(DefaultB, dest_l)])
-                } else {
-                    dest_l
-                }
-            }
-            tast::ExprKind::IntegerE(i) => {
-                if let Some(dest_v) = dest_v {
-                    self.insert_assign_instr(dest_v.name, RValue::Integer(i), [(DefaultB, dest_l)])
-                } else {
-                    dest_l
-                }
-            }
-            tast::ExprKind::StringE(s) => {
-                if let Some(dest_v) = dest_v {
-                    self.insert_assign_instr(dest_v.name, *s, [(DefaultB, dest_l)])
-                } else {
-                    dest_l
-                }
-            }
-            tast::ExprKind::PlaceE(place) => {
-                place.mode = mode;
-                match &mut place.kind {
-                    tast::PlaceKind::VarP(v) => {
-                        if let Some(dest_v) = dest_v && dest_v.name != *v {
-                            let var_ref = Self::visit_vardef(VarDef {
-                                name: *v,
-                                ty: place.ty.clone(),
-                                stm: place.stm,
-                            }, &mut place.mode, Some(&dest_v));
-                            // Only do the assignment if the rhs and lhs are not the same! Otherwise optimize it away
-                            self.insert_assign_instr(dest_v.name, var_ref,[(DefaultB, dest_l)])
-                        } else {
-                            dest_l
-                        }
-                    }
-                    tast::PlaceKind::FieldP(box s, field) => {
-                        if let StructT(name) = &s.ty {
-                            let field_ty = structs[name].get_field(&field).clone();
-                            let struct_var = self.fresh_var(field_ty, self.stm);
-                            let dest_l = if let Some(dest_v) = dest_v {
-                                self.insert_assign_instr(
-                                    dest_v.name,
-                                    RValue::Field(struct_var.name, field),
-                                    [(DefaultB, dest_l)],
-                                )
-                            } else {
-                                dest_l
-                            };
-                            let dest_l =
-                                self.visit_expr(s, Some(struct_var.clone()), dest_l, mode, structs);
-                            self.insert(
-                                self.instr(InstrKind::Declare(struct_var)),
-                                [(DefaultB, dest_l)],
-                            )
-                        } else {
-                            panic!("Compiler error: field are only valid on structs");
-                        }
-                    }
-                    tast::PlaceKind::IndexP(box e, box ix) => {
-                        let e_var = self.fresh_var(e.ty.clone(), self.stm);
-                        let ix_var = self.fresh_var(ix.ty.clone(), self.stm);
-                        let dest_l = if let Some(dest_v) = dest_v {
-                            self.insert_assign_instr(
-                                dest_v.name,
-                                RValue::Index(e_var.name, ix_var.name),
-                                [(DefaultB, dest_l)],
-                            )
-                        } else {
-                            dest_l
-                        };
-
-                        // Assign the two temporary variables
-                        // Note: ix is compute AFTER e, so appears first here
-                        let dest_l = self.visit_expr(
-                            ix,
-                            Some(ix_var.clone()),
-                            dest_l,
-                            Mode::SBorrowed,
-                            structs,
-                        );
-                        let dest_l = self.visit_expr(e, Some(e_var.clone()), dest_l, mode, structs);
-
-                        // Declare temporary variables
-                        let dest_l = self
-                            .insert(self.instr(InstrKind::Declare(ix_var)), [(DefaultB, dest_l)]);
-                        self.insert(self.instr(InstrKind::Declare(e_var)), [(DefaultB, dest_l)])
-                    }
-                }
-            }
-            tast::ExprKind::CallE { name, args } => {
-                // Find some temporary variables to hold the result of the evaluation of each
-                // argument
-                let arg_vars: Vec<VarDef> = args
-                    .clone()
-                    .into_iter()
-                    .map(|param| self.fresh_var(param.ty, self.stm))
-                    .collect();
-
-                // The call itself in the CFG
-                let call_l = self.insert(
-                    self.instr(InstrKind::Call {
-                        name,
-                        args: arg_vars.clone().into_iter().map(|arg| arg.name).collect(),
-                        destination: dest_v.map(|dest| dest.name),
-                    }),
-                    [(DefaultB, dest_l)],
-                );
-
-                // The computation of the arguments in the CFG (in rev order!)
-                let compute_l = args
-                    .iter_mut()
-                    .rev()
-                    .zip(arg_vars.iter().rev().cloned())
-                    .fold(call_l, |dest_l, (arg_expr, arg_var)| {
-                        self.visit_expr(arg_expr, Some(arg_var), dest_l, default(), structs)
-                    });
-
-                // Declaration of the arguments
-                arg_vars.into_iter().rev().fold(compute_l, |dest_l, v| {
-                    self.insert(self.instr(InstrKind::Declare(v)), [(DefaultB, dest_l)])
-                })
-            }
-            tast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
-                // Branches.
-                let iftrue_l = self.visit_block(iftrue, dest_v.clone(), dest_l, structs);
-                let iffalse_l = self.visit_block(iffalse, dest_v, dest_l, structs);
-
-                // The switch
-                let cond_var = self.fresh_var(BoolT, self.stm);
-                let cond_l = self.insert(
-                    self.instr(InstrKind::Branch(cond_var.name)),
-                    [(TrueB, iftrue_l), (FalseB, iffalse_l)],
-                );
-
-                // Evaluate the condition
-                self.visit_expr(cond, Some(cond_var), cond_l, mode, structs)
-            }
-            tast::ExprKind::BlockE(box e) => self.visit_block(e, dest_v, dest_l, structs),
-            tast::ExprKind::StructE {
-                name: s_name,
-                fields,
-            } => {
-                // Find some temporary variables to hold the result of the evaluation of each
-                // field
-                let field_vars: HashMap<&str, VarDef> = fields
-                    .iter()
-                    .map(|(name, e)| (*name, self.fresh_var(e.ty.clone(), self.stm)))
-                    .collect();
-
-                // Struct instantiation in the CFG.
-                // Only do if the destination exist! Otherwise, no usefulness to it.
-                let struct_l = if let Some(dest_v) = dest_v {
-                    self.insert_assign_instr(
-                        dest_v.name,
-                        RValue::Struct {
-                            name: s_name,
-                            fields: field_vars
-                                .clone()
-                                .into_iter()
-                                .map(|(field, var)| (field, var.name))
-                                .collect(),
-                        },
-                        [(DefaultB, dest_l)],
-                    )
-                } else {
-                    dest_l
-                };
-
-                // Compute the value of the tmp variables (remember the CFG is declared in rev
-                // order!)
-                let compute_l = fields
-                    .iter_mut()
-                    .rev()
-                    .fold(struct_l, |dest_l, (field, expr)| {
-                        self.visit_expr(
-                            expr,
-                            Some(field_vars[field].clone()),
-                            dest_l,
-                            mode,
-                            structs,
-                        )
-                    });
-
-                // Declare the temporary variables
-                field_vars.into_values().fold(compute_l, |dest_l, var| {
-                    self.insert(self.instr(InstrKind::Declare(var)), [(DefaultB, dest_l)])
-                })
-            }
-            tast::ExprKind::ArrayE(array) => {
-                // Find some temporary variables to hold the result of the evaluation of each
-                // item in the array
-                let array_vars: Vec<VarDef> = array
-                    .iter()
-                    .map(|e| self.fresh_var(e.ty.clone(), self.stm))
-                    .collect();
-
-                // Array creation
-                // Only do if the destination exist! Otherwise, no usefulness to it
-                let struct_l = if let Some(dest_v) = dest_v {
-                    self.insert_assign_instr(
-                        dest_v.name,
-                        RValue::Array(array_vars.clone().into_iter().map(|var| var.name).collect()),
-                        [(DefaultB, dest_l)],
-                    )
-                } else {
-                    dest_l
-                };
-
-                // Compute the value of the tmp variables (remember the CFG is declared in
-                // reversed order!)
-                let compute_l = array_vars.iter().rev().zip(array.iter_mut().rev()).fold(
-                    struct_l,
-                    |dest_l, (var, item)| {
-                        self.visit_expr(item, Some(var.clone()), dest_l, mode, structs)
-                    },
-                );
-
-                // Declare the temporary variables
-                array_vars.into_iter().rev().fold(compute_l, |dest_l, var| {
-                    self.insert(self.instr(InstrKind::Declare(var)), [(DefaultB, dest_l)])
-                })
-            }
-        }
-    }
+    }*/
 
     /// Visits a block. It It will add the nodes for that
     /// block in the CFG, and return the (entry) CFG label for it.
     ///
     /// Takes as arguments:
     /// * The expression itself (as a parser AST node)
-    /// * The destination variable that will store the result of this expression
     /// * The label to jump in the CFG to after evaluating this expression
     /// * The map of structures declarations.
-    fn visit_block<'tast>(
-        &mut self,
-        b: &'ctx mut tast::Block<'tast>,
-        dest_v: Option<VarDef<'ctx>>,
-        dest_l: CfgLabel,
-        structs: &HashMap<&'ctx str, Struct<'ctx>>,
-    ) -> CfgLabel {
-        self.push_scope();
-        let ret_l = self.visit_expr(&mut b.ret, dest_v, dest_l, Mode::Cloned, structs);
-        let entry_l = b
-            .stmts
-            .iter_mut()
+    fn visit_stmts(&mut self, b: anf::Block<'ctx>, dest_l: CfgLabel) -> CfgLabel {
+        b.into_iter()
             .rev()
-            .fold(ret_l, |dest_l, s| self.visit_stmt(s, dest_l, structs));
-        self.pop_scope();
-        entry_l
+            .fold(dest_l, |dest_l, s| self.visit_stmt(s, dest_l))
     }
 
     /// Visits a statements, producing the CFG nodes and returning the label for
@@ -423,108 +126,36 @@ impl<'ctx> MIRer<'ctx> {
     /// * The statement to visit.
     /// * The label to jump at in the CFG after the execution of the statement.
     /// * A map of structures declarations.
-    fn visit_stmt<'tast>(
-        &mut self,
-        s: &'ctx mut tast::Stmt<'tast>,
-        dest_l: CfgLabel,
-        structs: &HashMap<&'ctx str, Struct<'ctx>>,
-    ) -> CfgLabel {
+    fn visit_stmt(&mut self, s: anf::Stmt<'ctx>, dest_l: CfgLabel) -> CfgLabel {
         match s {
-            tast::Stmt::Declare(vardef, expr) => {
-                let expr_l =
-                    self.visit_expr(expr, Some(vardef.clone()), dest_l, default(), structs);
-                self.insert(
-                    self.instr(InstrKind::Declare(vardef.clone())),
-                    [(DefaultB, expr_l)],
-                )
-            }
-            tast::Stmt::Assign(place, expr) => match &mut place.kind {
-                tast::PlaceKind::VarP(name) => self.visit_expr(
-                    expr,
-                    Some(VarDef {
-                        name: *name,
-                        ty: place.ty.clone(),
-                        stm: place.stm,
-                    }),
-                    dest_l,
-                    default(),
-                    structs,
-                ),
-                tast::PlaceKind::IndexP(box array, box ix) => {
-                    let array_var = self.fresh_var(array.ty.clone(), self.stm);
-                    let ix_var = self.fresh_var(ix.ty.clone(), self.stm);
-                    let array_ty = if let ArrayT(box array_ty) = &array.ty {
-                        array_ty.clone()
-                    } else {
-                        panic!("Compiler error")
-                    };
-
-                    // Create a temporary destination variable to hold the result of the rhs
-                    let dest_v = self.fresh_var(array_ty, self.stm);
-
-                    // Finally, assign to the indexed variable
-                    let dest_l = self.insert_assign_instr(
-                        Place::IndexP(array_var.name, ix_var.name),
-                        dest_v.name,
-                        [(DefaultB, dest_l)],
-                    );
-
-                    // Assign the two temporary variables
-                    // Note: ix is compute AFTER e, so appears first here
-                    let dest_l =
-                        self.visit_expr(ix, Some(ix_var.clone()), dest_l, Mode::SBorrowed, structs);
-                    let dest_l = self.visit_expr(
-                        array,
-                        Some(array_var.clone()),
-                        dest_l,
-                        Mode::MutBorrowed,
-                        structs,
-                    );
-
-                    // Assign the tmp variable for the result of the index
-                    let dest_l = self.visit_expr(
-                        expr,
-                        Some(dest_v.clone()),
-                        dest_l,
-                        Mode::MutBorrowed,
-                        structs,
-                    );
-
-                    // Declare temporary variables;
-                    let dest_l =
-                        self.insert(self.instr(InstrKind::Declare(ix_var)), [(DefaultB, dest_l)]);
-                    let dest_l = self.insert(
-                        self.instr(InstrKind::Declare(array_var)),
-                        [(DefaultB, dest_l)],
-                    );
-                    self.insert(self.instr(InstrKind::Declare(dest_v)), [(DefaultB, dest_l)])
-                }
-                tast::PlaceKind::FieldP(box _strukt, _field) => {
-                    todo!()
-                }
-            },
-            tast::Stmt::While { cond, body } => {
+            anf::Stmt::Declare(vardef) => self.insert(
+                self.instr(InstrKind::Declare(vardef.clone())),
+                [(DefaultB, dest_l)],
+            ),
+            anf::Stmt::Assign(ptr, rvalue) => self.insert(
+                self.instr(InstrKind::Assign(ptr, rvalue)),
+                [(DefaultB, dest_l)],
+            ),
+            anf::Stmt::While {
+                cond,
+                body,
+                cond_block,
+            } => {
                 let loop_l = self.fresh_label();
 
                 self.push_scope();
 
                 // The block itself.
-                let body_l = self.visit_block(body, None, loop_l, structs);
+                let body_l = self.visit_stmts(body, loop_l);
 
                 // If statement
-                let cond_v = self.fresh_var(BoolT, self.stm);
                 let if_l = self.insert(
-                    self.instr(InstrKind::Branch(cond_v.name)),
+                    self.instr(InstrKind::Branch(cond)),
                     [(TrueB, body_l), (FalseB, dest_l)],
                 );
 
                 // Compute the condition.
-                let cond_l: CfgLabel =
-                    self.visit_expr(cond, Some(cond_v.clone()), if_l, Mode::Moved, structs);
-
-                // Declare the condition and loop
-                let cond_l =
-                    self.insert(self.instr(InstrKind::Declare(cond_v)), [(DefaultB, cond_l)]);
+                let cond_l = self.visit_stmts(cond_block, if_l);
 
                 self.insert_at(loop_l, self.instr(InstrKind::Noop), [(DefaultB, cond_l)]);
 
@@ -532,39 +163,65 @@ impl<'ctx> MIRer<'ctx> {
 
                 loop_l
             }
-            tast::Stmt::ExprS(e) => self.visit_expr(e, None, dest_l, Mode::Moved, structs),
+            anf::Stmt::Call {
+                name,
+                args,
+                destination,
+            } => self.insert(
+                self.instr(InstrKind::Call {
+                    name,
+                    args,
+                    destination,
+                }),
+                [(DefaultB, dest_l)],
+            ),
+            anf::Stmt::If(cond, iftrue, iffalse) => {
+                self.push_scope();
+                let iftrue = self.visit_stmts(iftrue, dest_l);
+                self.pop_scope();
+                self.push_scope();
+                let iffalse = self.visit_stmts(iffalse, dest_l);
+                self.pop_scope();
+                self.insert(
+                    self.instr(InstrKind::Branch(cond)),
+                    [(TrueB, iftrue), (FalseB, iffalse)],
+                )
+            }
+            anf::Stmt::Block(b) => {
+                self.push_scope();
+                let res = self.visit_stmts(b, dest_l);
+                self.pop_scope();
+                res
+            }
+            anf::Stmt::Return(ret) => {
+                self.insert(self.instr(InstrKind::Return(ret)), [(DefaultB, dest_l)])
+            }
         }
     }
 
     /// Visits a function.
-    fn visit_fun<'tast>(
-        &mut self,
-        f: &'ctx mut tast::Fun<'tast>,
-        structs: &HashMap<&'ctx str, Struct<'ctx>>,
-    ) -> Fun<'ctx> {
+    fn visit_fun(&mut self, f: anf::Fun<'ctx>) -> Fun<'ctx> {
         let ret_l = self.fresh_label();
-        // Reserve a fresh variable for the output, only if it's not the unit type
-        let ret_v = if f.ret_ty != UnitT {
-            Some(self.fresh_var(f.ret_ty.clone(), self.stm))
-        } else {
-            None
-        };
-        let entry_l = self.visit_block(&mut f.body, ret_v.clone(), ret_l, structs);
+
+        self.push_scope();
+        let entry_l = self.visit_stmts(f.body, ret_l);
+        self.pop_scope();
+
         let body = std::mem::take(&mut self.cfg);
 
         Fun {
             name: f.name,
-            params: f.params.clone(),
-            ret_v,
+            params: f.params,
             ret_l,
+            ret_v: f.ret_v,
             entry_l,
             body,
         }
     }
 
     /// Visits a program, recursively producing CFGs for each function.
-    fn visit_program<'tast>(&mut self, p: &'ctx mut tast::Program<'tast>) -> Program<'ctx> {
-        let tast::Program {
+    fn visit_program(&mut self, p: anf::Program<'ctx>) -> Program<'ctx> {
+        let anf::Program {
             funs,
             structs,
             arena,
@@ -574,8 +231,8 @@ impl<'ctx> MIRer<'ctx> {
         // We must visit structures first.
         Program {
             funs: funs
-                .iter_mut()
-                .map(|(name, f)| (*name, self.visit_fun(f, structs)))
+                .into_iter()
+                .map(|(name, f)| (name, self.visit_fun(f)))
                 .collect(),
             arena,
             structs: structs.clone(),

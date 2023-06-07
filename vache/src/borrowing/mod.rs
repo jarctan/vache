@@ -8,6 +8,8 @@ mod checker;
 mod flow;
 mod ledger;
 mod liveness;
+mod tree;
 
 pub use checker::BorrowChecker;
 use liveness::liveness;
+use tree::LocTree;

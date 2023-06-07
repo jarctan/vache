@@ -35,11 +35,11 @@ impl<'ctx> Compiler<'ctx> {
             #![allow(unused_mut)]
             #![allow(dead_code)]
             #[warn(unused_imports)]
+            #[warn(unused_parens)]
 
             use std::borrow::{Borrow, BorrowMut};
             use std::fmt;
             use std::ops::{Add, Deref, DerefMut, Div, Mul, Rem, Sub};
-            use num_traits::cast::FromPrimitive;
             use num_traits::ToPrimitive;
 
             pub enum Cow<'a, B>
@@ -220,7 +220,7 @@ impl<'ctx> Compiler<'ctx> {
                     match self {
                         Cow::Borrowed(b) => b[index].clone(),
                         Cow::MutBorrowed(array) => array.remove(index),
-                        Cow::Owned(mut array) => array.remove(index),
+                        Cow::Owned(mut array) => array.swap_remove(index),
                     }
                 }
             }
@@ -298,7 +298,7 @@ impl<'ctx> Compiler<'ctx> {
                     Mode::SBorrowed => quote!((&#array[#index])),
                     Mode::MutBorrowed => quote!(__borrow_mut(&mut (#array)[#index])),
                     Mode::Cloned => quote!(#array[#index].clone()),
-                    Mode::Moved => quote!(Cow::remove(#array, #index)),
+                    Mode::Moved => quote!(#array.remove(#index)),
                     Mode::Assigning => quote!(#array[#index]),
                 }
             }
@@ -338,18 +338,25 @@ impl<'ctx> Compiler<'ctx> {
                 let i = i
                     .to_u128()
                     .expect("Integer {i} is too big to be represented in source code");
-                quote!(Cow::Owned(<::num_bigint::BigInt as FromPrimitive>::from_u128(#i).unwrap()))
+                quote!(Cow::Owned(::num_bigint::BigInt::try_from(#i).unwrap()))
             }
             StringE(s) => {
                 quote!(Cow::Owned(::std::string::String::from(#s)))
             }
             PlaceE(p) => self.visit_place(p),
-            StructE { .. } => todo!(),
+            StructE { name, fields } => {
+                let name = format_ident!("{name}");
+                let fields = fields.into_iter().map(|(name, expr)| {
+                    let name = format_ident!("{name}");
+                    let expr = self.visit_expr(expr);
+                    quote!(#name: #expr)
+                });
+                quote!(Cow::Owned(#name {
+                    #(#fields),*
+                }))
+            }
             ArrayE(array) => {
-                let items: Vec<TokenStream> = array
-                    .into_iter()
-                    .map(|item| self.visit_expr(item))
-                    .collect();
+                let items = array.into_iter().map(|item| self.visit_expr(item));
                 quote!(Cow::Owned(vec![#(#items),*]))
             }
             CallE { name, args } => {

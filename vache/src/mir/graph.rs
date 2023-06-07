@@ -677,7 +677,7 @@ mod tests {
         let mut checked = check(&mut ctx, crate::examples::while_loop());
         let mir = borrow_check(mir(&mut checked));
         let cfg = &mir.funs["main"].body;
-        let edges = cfg.node_map[&NodeIx(4)]
+        let edges = cfg.node_map[&NodeIx(6)]
             .ins
             .keys()
             .map(|ix| &cfg.edge_map[ix])
@@ -686,13 +686,13 @@ mod tests {
             edges,
             [
                 &Edge {
-                    from: NodeIx(20),
-                    to: NodeIx(4),
+                    from: NodeIx(21),
+                    to: NodeIx(6),
                     weight: ()
                 },
                 &Edge {
-                    from: NodeIx(5),
-                    to: NodeIx(4),
+                    from: NodeIx(7),
+                    to: NodeIx(6),
                     weight: ()
                 }
             ]
@@ -715,10 +715,10 @@ mod tests {
 
         // Dominators of the label _after_ the if statement are only the labels _before_
         // the if statement.
-        let above_if: Vec<NodeIx> = (5..11).map(NodeIx).collect();
+        let above_if: Vec<NodeIx> = (16..=23).map(NodeIx).collect();
         assert_eq!(
-            dominators[&main_fn.ret_l],
-            iter::once(main_fn.ret_l)
+            dominators[&NodeIx(1)],
+            std::iter::once(NodeIx(1))
                 .chain(above_if.iter().copied())
                 .collect()
         );
@@ -741,6 +741,7 @@ mod tests {
         // The immediate of the label _after_ the if statement can only be the one
         // just before the if statement. Confer the CFG of that function for
         // details.
-        assert_eq!(dominators[&main_fn.ret_l], NodeIx(5));
+        let bef_if_label = NodeIx(16);
+        assert_eq!(dominators[&NodeIx(1)], bef_if_label);
     }
 }

@@ -1,9 +1,8 @@
 //! Defining the notion of borrows.
 
 use std::fmt;
-use std::hash::Hash;
 
-use crate::mir::{CfgLabel, Var};
+use crate::mir::{CfgLabel, Place};
 use crate::utils::set::Set;
 
 /// A borrow: a variable that has been borrowed.
@@ -13,13 +12,13 @@ use crate::utils::set::Set;
 pub struct Borrow<'ctx> {
     /// Label in which the borrow was made.
     pub label: CfgLabel,
-    /// Borrowed variable. NOT the borrower.
-    pub var: Var<'ctx>,
+    /// Borrowed place. NOT the borrower.
+    pub place: Place<'ctx>,
 }
 
 impl fmt::Debug for Borrow<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}{:?}", self.var, self.label)
+        write!(f, "{:?}{:?}", self.place, self.label)
     }
 }
 

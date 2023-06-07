@@ -23,7 +23,7 @@ impl BorrowChecker {
 
     /// Borrow-checks a function.
     fn visit_fun<'a>(&mut self, mut f: Fun<'a>) -> Fun<'a> {
-        f.body = liveness(f.body, f.entry_l);
+        f.body = liveness(f.body, f.entry_l, f.ret_l);
         f
     }
 

@@ -1,6 +1,7 @@
 //! Parsing types, and defining their representation in the AST.
 
 use std::fmt;
+use std::sync::atomic::AtomicU64;
 
 use pest::iterators::Pair;
 
@@ -8,23 +9,29 @@ use super::{Context, Parsable, Ty};
 use crate::utils::boxed;
 use crate::{grammar::*, Arena};
 
+/// Fresh variable counter.
+///
+/// Global to avoid any confusion between variable names.
+pub static VAR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 /// A variable in the code.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Var<'ctx>(&'ctx str);
 
 impl<'ctx> Var<'ctx> {
-    /// A control-flow graph variable.
+    /// A fresh variable.
     ///
     /// These are variables used internally by the CFG, that starts with `__cfg`
     /// followed by a unique numeral ID.
-    pub(crate) fn cfg(arena: &'ctx Arena, number: u64) -> Var<'ctx> {
-        let value = arena.alloc(boxed(format!("__cfg{number:?}")));
+    pub(crate) fn fresh(arena: &'ctx Arena) -> Var<'ctx> {
+        let number = VAR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let value = arena.alloc(boxed(format!("時{number:?}")));
         Var(value)
     }
 
     /// See the variable as a string.
-    pub fn as_str(&self) -> &str {
-        self.as_ref()
+    pub fn as_str(&self) -> &'ctx str {
+        self.0
     }
 }
 
@@ -49,6 +56,12 @@ impl AsRef<str> for Var<'_> {
 impl<'ctx> From<&'ctx str> for Var<'ctx> {
     fn from(v: &'ctx str) -> Self {
         Self(v)
+    }
+}
+
+impl<'a, 'ctx> From<&'a Var<'ctx>> for Var<'ctx> {
+    fn from(var: &'a Var<'ctx>) -> Self {
+        *var
     }
 }
 
@@ -124,7 +137,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for VarDef<'ctx> {
 
 /// Shortcut to create a new variable definition.
 pub fn vardef<'ctx>(name: &'ctx str, ty: Ty<'ctx>) -> VarDef<'ctx> {
-    let name = name.into();
+    let name = Var(name);
     VarDef { name, ty }
 }
 

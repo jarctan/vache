@@ -1,101 +1,180 @@
 //! Declaring here the annotations to the CFG we compute during the analysis.
 
 use std::collections::HashMap;
+use std::default::default;
 use std::fmt;
+use std::iter::Extend;
 use std::iter::Sum;
-use std::ops::{Add, BitOr, Deref, DerefMut, Sub};
-
-use Place::*;
+use std::ops::{Add, BitOr, Sub};
 
 use super::borrow::{Borrow, Borrows};
-use crate::mir::{CfgLabel, Place, Var, VarMode};
+use super::LocTree;
+use crate::mir::Reference;
+use crate::mir::{CfgLabel, Loc, Place};
+use crate::utils::boxed;
 
 /// A loan ledger.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Default)]
 pub struct Ledger<'ctx> {
     /// Map between variables defined in this environment and their borrows.
-    borrows: HashMap<Var<'ctx>, Borrows<'ctx>>,
+    borrows: LocTree<'ctx, Borrows<'ctx>>,
+    /// Map between locations defined in this environment and their loans (i.e.,
+    /// all the borrows they have conceded to).
+    ///
+    /// Invariant: `self.loans` and `self.borrows` are consistent (`Borrow`s are
+    /// in both).
+    loans: HashMap<Loc<'ctx>, Borrows<'ctx>>,
+    /// Invalidated borrows.
+    invalidations: Borrows<'ctx>,
 }
 
 impl<'ctx> Ledger<'ctx> {
-    /// Creates a new, empty ledger.
-    pub fn new() -> Self {
-        Self {
-            borrows: HashMap::new(),
-        }
-    }
-
-    /// Defines a new variable in the context, stating its borrows (variables it
-    /// depends on).
-    pub fn add_var(&mut self, var: impl Into<Var<'ctx>>, borrows: impl Into<Borrows<'ctx>>) {
-        self.borrows.insert(var.into(), borrows.into());
-    }
-
     /// Returns the complete (deep, nested) list of all borrows resulting from
-    /// the borrow of `var` at CFG label `label`.
-    pub fn borrow(&self, var: &VarMode<'ctx>, label: CfgLabel) -> Borrows<'ctx> {
-        if var.mode.is_borrowing() {
-            let var = var.var;
-            self.get(&var).cloned().unwrap_or_default() + Borrow { var, label }
+    /// the borrow of `reference` at CFG label `label`.
+    pub fn borrow(&self, reference: &Reference<'ctx>, label: CfgLabel) -> Borrows<'ctx> {
+        if reference.mode().is_borrowing() {
+            self.borrows(reference.place()).collect::<Borrows>()
+                + Borrow {
+                    place: reference.place(),
+                    label,
+                }
         } else {
             Borrows::new()
         }
     }
 
-    /// Returns the list of all borrows resulting from
-    /// the move of `var` at CFG label `label`.
-    pub fn move_var(&self, var: Var<'ctx>) -> Borrows<'ctx> {
-        self.get(&var).cloned().unwrap_or_default()
+    /// Removes a place from the tracked locations in the ledger.
+    ///
+    /// Is a no-op if the place is not a location, but only part of it.
+    pub fn flush_place(&mut self, place: impl Into<Place<'ctx>>) {
+        let place = place.into();
+        if let Ok(loc) = place.try_into() {
+            self.flush_loc(loc);
+        }
     }
 
-    /// Records new `borrows` related to the borrower that living at `place`.
-    pub fn add_borrows(&mut self, place: &Place<'ctx>, borrows: Borrows<'ctx>) {
-        match place {
-            VarP(v) => {
-                self.borrows.insert(*v, borrows);
-            }
-            IndexP(array, _) => {
-                // If you assign something to an element of an array, we need to ADD the borrows
-                // to the old ones, since we have no way to know which (if any) borrows are
-                // invalidated by that assignment.
-                let entry = self.borrows.entry(*array);
-                entry.or_default().extend(borrows);
-            }
-            FieldP(strukt, _) => {
-                let entry = self.borrows.entry(*strukt);
-                entry.or_default().extend(borrows); // TODO: change, too coarse
-                                                    // grained. Separate borrows
-                                                    // between fields.
+    /// Removes a location from the tracked locations in the ledger.
+    pub fn flush_loc(&mut self, loc: Loc<'ctx>) {
+        let removed_loans = self.loans.remove(&loc);
+        let loans: Vec<Borrow> = removed_loans
+            .as_ref()
+            .map(|loans| loans.iter().copied().collect())
+            .unwrap_or_default();
+        self.invalidations.extend(loans);
+
+        let borrows: Borrows = self
+            .borrows
+            .remove(loc)
+            .map_or(default(), |node| node.into());
+
+        for borrow in borrows {
+            // If the borrow is invalidated, remove it from the loans.
+            if !self.invalidations.contains(&borrow) {
+                let loc = borrow.place.root();
+                self.loans
+                    .get_mut(&loc)
+                    .expect(
+                        "Ledger error: freeing a non-invalidated borrow whose loaner is not alive anymore!",
+                    )
+                    .remove(&borrow);
             }
         }
     }
 
-    /// Returns all borrows of a variable.
-    pub fn borrows<'a>(&'a self, var: Var<'ctx>) -> impl Iterator<Item = &'a Borrow<'ctx>> + 'a {
-        self.borrows
-            .values()
-            .flat_map(move |s| s.iter().filter(move |&borrow| borrow.var == var))
+    /*/// Flush as many locations as possible from the tracked locations.
+    pub fn flush(&mut self) {
+        let locs: Vec<Loc> = self
+            .loans
+            .iter()
+            .filter(|(_, borrows)| borrows.is_empty())
+            .map(|(&loc, _)| loc)
+            .collect();
+        for loc in locs {
+            self.flush_loc(loc);
+        }
+    }
+
+    /// Returns the list of all borrows resulting from
+    /// the move of `var` at CFG label `label`.
+    pub fn move_var_borrows(&self, var: impl Into<Var<'ctx>>) -> Borrows<'ctx> {
+        self.borrows.get_all(Loc::from(var.into())).collect()
+    }*/
+
+    /// Sets the new `borrows` of `place`.
+    pub fn set_borrows(
+        &mut self,
+        place: impl Into<Place<'ctx>>,
+        borrows: impl Into<Borrows<'ctx>>,
+    ) {
+        let place = place.into();
+        let borrows = borrows.into();
+
+        // Register on the loaner side
+        for &borrow in &borrows {
+            self.loans
+                .entry(borrow.place.root())
+                .or_insert_with(default)
+                .insert(borrow);
+        }
+
+        // Register on the borrower side
+        match Loc::try_from(place) {
+            Ok(loc) => {
+                if borrows.is_empty() {
+                    self.borrows.remove(loc);
+                } else {
+                    *self.borrows.get_mut_or_insert(loc) = borrows;
+                }
+            }
+            Err(()) => {
+                let root = place.root();
+                if !borrows.is_empty() {
+                    // If you assign something to an element of an array, we need to ADD the borrows
+                    // to the old ones, since we have no way to know which (if any) borrows are
+                    // invalidated by that assignment.
+                    let entry = self.borrows.get_mut_or_insert(root);
+                    entry.extend(borrows);
+                }
+            }
+        }
+    }
+
+    /// Returns all loans of a place.
+    pub fn loans<'a>(
+        &'a self,
+        place: Place<'ctx>,
+    ) -> Box<dyn Iterator<Item = &'a Borrow<'ctx>> + 'a> {
+        self.loans
+            .get(&place.root())
+            .map_or(boxed(std::iter::empty()), |loans| boxed(loans.iter()))
+    }
+
+    /// Returns all loans of a place.
+    pub fn borrows<'a>(
+        &'a self,
+        place: Place<'ctx>,
+    ) -> Box<dyn Iterator<Item = Borrow<'ctx>> + 'a> {
+        self.borrows.get_all(place.root())
+    }
+
+    /// Returns the list of invalidations.
+    pub fn invalidations<'a>(&'a self) -> impl Iterator<Item = Borrow<'ctx>> + 'a {
+        self.invalidations.iter().copied()
     }
 }
 
-impl<'ctx> fmt::Debug for Ledger<'ctx> {
+impl fmt::Debug for Ledger<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.borrows.fmt(f)
     }
 }
 
-impl<'ctx, B: Into<Borrows<'ctx>>> Add<(Var<'ctx>, B)> for Ledger<'ctx> {
+impl<'ctx, B: Into<Borrows<'ctx>>> Add<(Place<'ctx>, B)> for Ledger<'ctx> {
     type Output = Ledger<'ctx>;
 
-    fn add(mut self, (lhs, borrows): (Var<'ctx>, B)) -> Self {
-        self.add_var(lhs, borrows);
+    fn add(mut self, (place, borrows): (Place<'ctx>, B)) -> Self {
+        self.set_borrows(place, borrows);
         self
-    }
-}
-
-impl Default for Ledger<'_> {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -111,8 +190,7 @@ impl<'ctx> BitOr for Ledger<'ctx> {
     type Output = Ledger<'ctx>;
 
     fn bitor(mut self, rhs: Self) -> Self {
-        self.borrows.extend(rhs.borrows);
-        self
+        todo!()
     }
 }
 
@@ -120,28 +198,25 @@ impl<'ctx, 'a> Sub<&'a Ledger<'ctx>> for Ledger<'ctx> {
     type Output = Ledger<'ctx>;
 
     fn sub(mut self, rhs: &Self) -> Self {
-        for key in rhs.borrows.keys() {
-            self.borrows.remove(key);
-        }
-        self
+        todo!()
     }
 }
 
-impl<'a, 'ctx> Sub<&'a Var<'ctx>> for Ledger<'ctx> {
+impl<'ctx> Sub<Place<'ctx>> for Ledger<'ctx> {
     type Output = Ledger<'ctx>;
 
-    fn sub(mut self, var: &Var<'ctx>) -> Self {
-        self.borrows.remove(var);
+    fn sub(mut self, place: Place<'ctx>) -> Self {
+        self.flush_place(place);
         self
     }
 }
 
-impl<'ctx: 'a, 'a, I: IntoIterator<Item = &'a Var<'ctx>>> Sub<I> for Ledger<'ctx> {
+impl<'ctx: 'a, 'a, I: IntoIterator<Item = Loc<'ctx>>> Sub<I> for Ledger<'ctx> {
     type Output = Ledger<'ctx>;
 
     fn sub(mut self, iter: I) -> Self {
-        for var in iter {
-            self.borrows.remove(var);
+        for loc in iter {
+            self.flush_loc(loc);
         }
         self
     }
@@ -149,20 +224,21 @@ impl<'ctx: 'a, 'a, I: IntoIterator<Item = &'a Var<'ctx>>> Sub<I> for Ledger<'ctx
 
 impl<'ctx> Sum for Ledger<'ctx> {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.reduce(|acc, el| acc | el).unwrap_or_default()
-    }
-}
+        let mut loans: HashMap<Loc, Borrows> = default();
+        let mut borrows: LocTree<'ctx, Borrows<'ctx>> = default();
+        let mut invalidations: Borrows = default();
 
-impl<'ctx> Deref for Ledger<'ctx> {
-    type Target = HashMap<Var<'ctx>, Borrows<'ctx>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.borrows
-    }
-}
-
-impl DerefMut for Ledger<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.borrows
+        for ledger in iter {
+            borrows.append(ledger.borrows);
+            for (k, v) in ledger.loans {
+                loans.entry(k).or_insert_with(default).extend(v);
+            }
+            invalidations.extend(ledger.invalidations);
+        }
+        Self {
+            loans,
+            borrows,
+            invalidations,
+        }
     }
 }

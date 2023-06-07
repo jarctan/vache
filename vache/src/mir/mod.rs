@@ -12,9 +12,7 @@
 pub mod fun;
 pub mod graph;
 pub mod instr;
-mod place;
 pub mod program;
-pub mod rvalue;
 
 use std::fmt;
 
@@ -23,10 +21,10 @@ pub use graph::{Cfg, CfgI, CfgLabel};
 #[cfg(test)]
 pub use instr::instr;
 pub use instr::{Branch, Instr, InstrKind};
-pub use place::Place;
 pub use program::Program;
-pub use rvalue::{RValue, VarMode};
 
+pub use crate::anf::{
+    Loc, Mode, Place, Pointer, RValue, Reference, Stratum, Struct, Ty, Var, VarDef,
+};
 #[cfg(test)]
 pub use crate::tast::vardef;
-pub use crate::tast::{Mode, Stratum, Struct, Ty, Var, VarDef};

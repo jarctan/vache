@@ -6,6 +6,7 @@ use pest::iterators::Pair;
 
 use super::{Context, Parsable};
 use crate::grammar::*;
+use crate::utils::boxed;
 
 /// Types in our language.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,7 +30,7 @@ pub enum Ty<'ctx> {
 use Ty::*;
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Ty<'ctx> {
-    fn parse(pair: Pair<'ctx, Rule>, _ctx: &mut Context) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
         assert_eq!(pair.as_rule(), Rule::ty);
         let mut pairs = pair.into_inner();
         let pair = pairs.next().unwrap();
@@ -38,6 +39,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Ty<'ctx> {
             Rule::bool_ty => BoolT,
             Rule::int_ty => IntT,
             Rule::str_ty => StrT,
+            Rule::array_ty => ArrayT(boxed(ctx.parse(pair.into_inner().next().unwrap()))),
             rule => panic!("parser internal error: expected type, found {rule:?}"),
         }
     }

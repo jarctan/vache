@@ -14,7 +14,7 @@ while_loop = { "while" ~ expr ~ block }
 
 assign = { ident ~ "=" ~ expr }
 
-declare = { "let" ~ vardef ~ "=" ~ expr }
+declare = { "var" ~ vardef ~ "=" ~ expr }
 
 vardef = {ident ~ ":" ~ ty}
 
@@ -36,11 +36,13 @@ struct_instance = { ident ~ "{" ~ (ident ~ ":" ~ expr ~ ",")* ~ "}" }
 
 unit = { "()" }
 
-integer = ${ '1'..'9' ~ ('0'..'9' | "_")* }
+integer = ${ '0'..'9' ~ ('0'..'9' | "_")* }
 
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
-ty = { ("[" ~ ty ~ "]") | int_ty | str_ty | bool_ty | unit | ident }
+ty = { array_ty | int_ty | str_ty | bool_ty | unit | ident }
+
+array_ty = { "[" ~ ty ~ "]" }
 
 bool_ty = { "bool" }
 
