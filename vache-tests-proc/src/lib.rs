@@ -2,7 +2,10 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
-use syn::{parse_macro_input, Block, Error, Ident, ItemFn, LitStr, Result, Type, FnArg, Pat, Token, Attribute};
+use syn::{
+    parse_macro_input, Attribute, Block, Error, FnArg, Ident, ItemFn, LitStr, Pat, Result, Token,
+    Type,
+};
 
 #[macro_use]
 extern crate quote;
@@ -65,7 +68,7 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                     #expected_output,
                     "Output mismatch for binary"
                 );
-                
+
                 let dest_file = cur_dir.join(binary_name);
                 ::std::fs::remove_file(&dest_file).context("failed to remove binary at the end of the test")?;
                 Ok(())
@@ -123,8 +126,7 @@ impl Parse for ParseFn {
                 FnArg::Typed(pat) => {
                     let ty = pat.ty;
                     match *pat.pat {
-                        Pat::Ident(arg_name) => 
-                        Ok(Self {
+                        Pat::Ident(arg_name) => Ok(Self {
                             name: f.sig.ident,
                             attrs: f.attrs,
                             body: *f.block,
@@ -133,10 +135,13 @@ impl Parse for ParseFn {
                         }),
                         _ => panic!("first argument must be an identifier"),
                     }
-                },
+                }
             }
         } else {
-            Err(Error::new(f.sig.inputs.span(), "expected exactly one argument"))
+            Err(Error::new(
+                f.sig.inputs.span(),
+                "expected exactly one argument",
+            ))
         }
     }
 }
@@ -147,7 +152,13 @@ pub fn parses(attr: TokenStream, item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as ParseFn);
 
     let ParseAttr { input_str, rule } = attr;
-    let ParseFn { name, attrs, body, arg_name, arg_ty } = item;
+    let ParseFn {
+        name,
+        attrs,
+        body,
+        arg_name,
+        arg_ty,
+    } = item;
 
     quote! {
         #(#attrs)*
