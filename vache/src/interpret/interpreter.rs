@@ -241,7 +241,6 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                     _ => panic!("Runtime error: incorrect indexing"),
                 }
             }
-            DerefP(..) => panic!(),
         }
     }
 
@@ -272,7 +271,6 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                     panic!("Runtime error: incorrect indexing")
                 }
             }
-            DerefP(..) => panic!(),
         }
     }
 

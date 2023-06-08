@@ -119,7 +119,7 @@ impl<'ctx> Normalizer<'ctx> {
                         Reference::new(ptr, &mut place.mode)
                     }
                     tast::PlaceKind::FieldP(box strukt, field) => {
-                        let strukt_ptr = self.visit_expr(stmts, strukt, mode, structs);
+                        let strukt_ptr = self.visit_expr(stmts, strukt, Mode::Moved, structs);
                         let final_ptr = Pointer::new(
                             self.arena,
                             self.arena.alloc(Place::FieldP(strukt_ptr.as_ptr(), field)),

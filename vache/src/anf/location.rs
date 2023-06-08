@@ -30,7 +30,6 @@ impl<'ctx> TryFrom<Place<'ctx>> for Loc<'ctx> {
             VarP(var) => Ok(VarL(var)),
             FieldP(strukt, field) => Ok(FieldL(strukt.loc(), field)),
             IndexP(_, _) => Err(()),
-            DerefP(ptr) => Ok(*ptr.loc()),
         }
     }
 }

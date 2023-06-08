@@ -14,8 +14,6 @@ pub enum Place<'ctx> {
     FieldP(Pointer<'ctx>, &'ctx str),
     /// An indexed slot into a location.
     IndexP(Pointer<'ctx>, Pointer<'ctx>),
-    /// Dereference.
-    DerefP(Pointer<'ctx>),
 }
 
 use Place::*;
@@ -29,7 +27,6 @@ impl<'ctx> Place<'ctx> {
             VarP(var) => Loc::VarL(*var),
             FieldP(strukt, field) => Loc::FieldL(strukt.loc(), field),
             IndexP(array, _) => *array.loc(),
-            DerefP(reference) => *reference.loc(),
         }
     }
 
@@ -47,7 +44,7 @@ impl<'ctx> Place<'ctx> {
     pub fn uses_as_lhs(&self) -> Set<Loc<'ctx>> {
         match self {
             VarP(_) => [].into_iter().collect(),
-            FieldP(..) | IndexP(..) | DerefP(..) => self.uses_as_rhs(),
+            FieldP(..) | IndexP(..) => self.uses_as_rhs(),
         }
     }
 
@@ -58,7 +55,6 @@ impl<'ctx> Place<'ctx> {
             VarP(v) => [Loc::VarL(*v)].into_iter().collect(),
             FieldP(strukt, field) => [Loc::FieldL(strukt.loc(), field)].into_iter().collect(),
             IndexP(array, index) => [array.loc(), index.loc()].into_iter().copied().collect(),
-            DerefP(pointer) => [pointer.loc()].into_iter().copied().collect(),
         }
     }
 }
@@ -85,9 +81,8 @@ impl fmt::Debug for Place<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             VarP(var) => write!(f, "{var:?}"),
-            FieldP(pointer, field) => write!(f, "{pointer:?}.{field:?}"),
-            IndexP(array, index) => write!(f, "{array:?}[{index:?}]"),
-            DerefP(pointer) => write!(f, "*{pointer:?}"),
+            FieldP(pointer, field) => write!(f, "({pointer:?}).{field}"),
+            IndexP(array, index) => write!(f, "({array:?})[{index:?}]"),
         }
     }
 }

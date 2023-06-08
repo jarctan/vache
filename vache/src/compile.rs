@@ -39,6 +39,7 @@ impl<'ctx> Compiler<'ctx> {
 
             use std::borrow::{Borrow, BorrowMut};
             use std::fmt;
+            use std::mem::MaybeUninit;
             use std::ops::{Add, Deref, DerefMut, Div, Mul, Rem, Sub};
             use num_traits::ToPrimitive;
 
@@ -224,6 +225,38 @@ impl<'ctx> Compiler<'ctx> {
                     }
                 }
             }
+
+            pub struct Field<T>(MaybeUninit<T>);
+
+            impl<T> Field<T> {
+                pub fn new(value: T) -> Self {
+                    Self(MaybeUninit::new(value))
+                }
+
+                pub fn take(&mut self) -> T {
+                    unsafe { std::mem::replace(&mut self.0, MaybeUninit::uninit()).assume_init() }
+                }
+
+                pub fn as_ref(&self) -> &T {
+                    unsafe { self.0.assume_init_ref() }
+                }
+
+                pub fn as_mut(&mut self) -> &mut T {
+                    unsafe { self.0.assume_init_mut() }
+                }
+            }
+
+            impl<T: Clone> Clone for Field<T> {
+                fn clone(&self) -> Self {
+                    Self::new(self.as_ref().clone())
+                }
+            }
+
+            impl<T: ::std::fmt::Debug> ::std::fmt::Debug for Field<T> {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    write!(f, "{:?}", self.as_ref())
+                }
+            }
         )
     }
 
@@ -302,18 +335,25 @@ impl<'ctx> Compiler<'ctx> {
                 let index = self.visit_expr(index);
                 let index = quote!((#index).to_usize().unwrap());
                 match place.mode {
-                    Mode::Borrowed => quote!(__borrow(&#array[#index])),
-                    Mode::SBorrowed => quote!((&#array[#index])),
+                    Mode::Borrowed => quote!(__borrow(&(#array)[#index])),
+                    Mode::SBorrowed => quote!((&(#array)[#index])),
                     Mode::MutBorrowed => quote!(__borrow_mut(&mut (#array)[#index])),
-                    Mode::Cloned => quote!(#array[#index].clone()),
-                    Mode::Moved => quote!(#array.remove(#index)),
-                    Mode::Assigning => quote!(#array[#index]),
+                    Mode::Cloned => quote!((#array)[#index].clone()),
+                    Mode::Moved => quote!((#array).remove(#index)),
+                    Mode::Assigning => quote!((#array)[#index]),
                 }
             }
             FieldP(box strukt, field) => {
                 let strukt = self.visit_expr(strukt);
                 let field = format_ident!("{}", field);
-                quote!(#strukt.#field)
+                match place.mode {
+                    Mode::Borrowed => quote!(__borrow((#strukt).#field.as_ref())),
+                    Mode::SBorrowed => unimplemented!(),
+                    Mode::MutBorrowed => quote!(__borrow_mut((#strukt).#field.as_mut())),
+                    Mode::Cloned => quote!((#strukt).#field.clone().take()),
+                    Mode::Moved => quote!((#strukt).#field.take()),
+                    Mode::Assigning => unimplemented!(),
+                }
             }
         }
     }
@@ -327,7 +367,7 @@ impl<'ctx> Compiler<'ctx> {
             .map(|(k, ty)| {
                 let k = format_ident!("{k}");
                 let ty = Self::translate_type(&ty, true);
-                quote!(#k: #ty,)
+                quote!(#k: Field<#ty>,)
             })
             .collect();
         quote!(
@@ -357,7 +397,7 @@ impl<'ctx> Compiler<'ctx> {
                 let fields = fields.into_iter().map(|(name, expr)| {
                     let name = format_ident!("{name}");
                     let expr = self.visit_expr(expr);
-                    quote!(#name: #expr)
+                    quote!(#name: Field::new(#expr))
                 });
                 quote!(Cow::Owned(#name {
                     #(#fields),*
