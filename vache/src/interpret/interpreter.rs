@@ -258,10 +258,9 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
             }
             IndexP(array, index) => {
                 if let IntV(index) = self.get_ptr_value(index) {
-                    
                     let index = index
-                    .to_usize()
-                    .expect("Runtime error: array index is too big");
+                        .to_usize()
+                        .expect("Runtime error: array index is too big");
                     if let ArrayV(array) = self.get_ptr_value_mut(array) {
                         &mut array[index]
                     } else {
