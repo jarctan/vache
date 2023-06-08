@@ -81,25 +81,6 @@ impl<'ctx> Ledger<'ctx> {
         }
     }
 
-    /*/// Flush as many locations as possible from the tracked locations.
-    pub fn flush(&mut self) {
-        let locs: Vec<Loc> = self
-            .loans
-            .iter()
-            .filter(|(_, borrows)| borrows.is_empty())
-            .map(|(&loc, _)| loc)
-            .collect();
-        for loc in locs {
-            self.flush_loc(loc);
-        }
-    }
-
-    /// Returns the list of all borrows resulting from
-    /// the move of `var` at CFG label `label`.
-    pub fn move_var_borrows(&self, var: impl Into<Var<'ctx>>) -> Borrows<'ctx> {
-        self.borrows.get_all(Loc::from(var.into())).collect()
-    }*/
-
     /// Sets the new `borrows` of `place`.
     pub fn set_borrows(
         &mut self,
@@ -187,7 +168,7 @@ impl<'ctx> Add for Ledger<'ctx> {
 }
 
 impl<'ctx> BitOr for Ledger<'ctx> {
-    type Output = Ledger<'ctx>;
+    type Output = Self;
 
     fn bitor(mut self, rhs: Self) -> Self {
         todo!()
@@ -195,7 +176,7 @@ impl<'ctx> BitOr for Ledger<'ctx> {
 }
 
 impl<'ctx, 'a> Sub<&'a Ledger<'ctx>> for Ledger<'ctx> {
-    type Output = Ledger<'ctx>;
+    type Output = Self;
 
     fn sub(mut self, rhs: &Self) -> Self {
         todo!()
