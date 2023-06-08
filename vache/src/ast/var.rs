@@ -97,7 +97,7 @@ impl<'ctx> PartialEq<&str> for Var<'ctx> {
 }
 
 /// A variable definition.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct VarDef<'ctx> {
     /// Variable name.
     pub(crate) name: Var<'ctx>,

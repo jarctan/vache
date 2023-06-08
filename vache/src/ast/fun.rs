@@ -33,7 +33,7 @@ impl<'ctx> Fun<'ctx> {
         FunSig {
             name: self.name,
             params: self.params.clone(),
-            ret_ty: self.ret_ty.clone(),
+            ret_ty: self.ret_ty,
         }
     }
 }

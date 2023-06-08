@@ -13,7 +13,7 @@ pub fn simple_array_indexing() -> impl Into<Program<'static>> {
             ret_ty: UnitT,
             body: stmts(vec![
                 Declare(
-                    vardef("list", ArrayT(boxed(StrT))),
+                    vardef("list", ArrayT(&StrT)),
                     array([
                         string("tomato"),
                         string("lettuce"),
@@ -37,7 +37,7 @@ pub fn separate_index_for_array() -> impl Into<Program<'static>> {
             ret_ty: UnitT,
             body: stmts(vec![
                 Declare(
-                    vardef("list", ArrayT(boxed(StrT))),
+                    vardef("list", ArrayT(&StrT)),
                     array([
                         string("tomato"),
                         string("lettuce"),
@@ -62,7 +62,7 @@ pub fn simple_array_assignment() -> impl Into<Program<'static>> {
             ret_ty: UnitT,
             body: stmts(vec![
                 Declare(
-                    vardef("list", ArrayT(boxed(StrT))),
+                    vardef("list", ArrayT(&StrT)),
                     array([
                         string("tomato"),
                         string("lettuce"),
@@ -88,7 +88,7 @@ pub fn assignment_while_borrowed() -> impl Into<Program<'static>> {
             ret_ty: UnitT,
             body: stmts(vec![
                 Declare(
-                    vardef("list", ArrayT(boxed(StrT))),
+                    vardef("list", ArrayT(&StrT)),
                     array([
                         string("tomato"),
                         string("lettuce"),
@@ -115,7 +115,7 @@ pub fn cloning_array() -> impl Into<Program<'static>> {
             ret_ty: UnitT,
             body: stmts(vec![
                 Declare(
-                    vardef("list", ArrayT(boxed(StrT))),
+                    vardef("list", ArrayT(&StrT)),
                     array([
                         string("tomato"),
                         string("lettuce"),
@@ -123,7 +123,7 @@ pub fn cloning_array() -> impl Into<Program<'static>> {
                         string("avocado"),
                     ]),
                 ),
-                Declare(vardef("list2", ArrayT(boxed(StrT))), var("list")),
+                Declare(vardef("list2", ArrayT(&StrT)), var("list")),
                 Assign(idx_place(var("list2"), int(1)), string("cabbage")),
                 Assign(idx_place(var("list"), int(2)), string("cucumber")),
                 Declare(vardef("item1", StrT), index(var("list"), int(2))),

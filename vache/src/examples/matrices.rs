@@ -14,7 +14,7 @@ pub fn simple_matrix_modify_consume() -> impl Into<Program<'static>> {
             ret_ty: UnitT,
             body: stmts(vec![
                 Declare(
-                    vardef("list", ArrayT(boxed(ArrayT(boxed(IntT))))),
+                    vardef("list", ArrayT(&ArrayT(&IntT))),
                     array((0..2).map(|i| array((0..2).map(|j| int(i * 2 + j))))),
                 ),
                 Assign(idx_place(index(var("list"), int(0)), int(1)), int(42)),
@@ -34,7 +34,7 @@ pub fn simple_matrix_modify() -> impl Into<Program<'static>> {
             ret_ty: UnitT,
             body: stmts(vec![
                 Declare(
-                    vardef("list", ArrayT(boxed(ArrayT(boxed(IntT))))),
+                    vardef("list", ArrayT(&ArrayT(&IntT))),
                     array((0..2).map(|i| array((0..2).map(|j| int(i * 2 + j))))),
                 ),
                 Assign(idx_place(index(var("list"), int(0)), int(1)), int(42)),

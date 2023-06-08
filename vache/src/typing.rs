@@ -170,7 +170,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     fn check_ty(&self, ty: &Ty) {
         match ty {
             UnitT | BoolT | IntT | StrT => (),
-            ArrayT(box ty) => self.check_ty(ty),
+            ArrayT(ty) => self.check_ty(ty),
             StructT(name) => assert!(
                 self.valid_type_names.contains(name),
                 "Unknown struct {name}"
@@ -185,13 +185,13 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 let (vardef, stm) = self
                     .get_var(var)
                     .unwrap_or_else(|| panic!("Assigning to an undeclared variable {var}"));
-                Place::var(var, vardef.ty.clone(), stm, mode)
+                Place::var(var, vardef.ty, stm, mode)
             }
             ast::Place::IndexP(box e, box ix) => {
                 let e = self.visit_expr(e);
                 let ix = self.visit_expr(ix);
-                if let ArrayT(box item_ty) = &e.ty && let IntT = ix.ty {
-                    let ty = item_ty.clone(); // Needed now because we move e after
+                if let ArrayT(item_ty) = e.ty && let IntT = ix.ty {
+                    let ty = *item_ty; // Needed now because we move e after
                     let e_stm = e.stm; // Needed now because we move e after
                     Place {
                         kind: IndexP(boxed(e), boxed(ix)),
@@ -227,8 +227,8 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
                         .get_var(v)
                         .unwrap_or_else(|| panic!("{v} does not exist in this context"));
                     Expr::new(
-                        PlaceE(Place::var(vardef.name, vardef.ty.clone(), stm, default())),
-                        vardef.ty.clone(),
+                        PlaceE(Place::var(vardef.name, vardef.ty, stm, default())),
+                        vardef.ty,
                         stm,
                     )
                 }
@@ -236,13 +236,13 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
                     let s = self.visit_expr(s);
                     if let StructT(name) = &s.ty {
                         let strukt = self.get_struct(name).unwrap();
-                        let ty = strukt.get_field(field).clone();
+                        let ty = *strukt.get_field(field);
                         let s_stm = s.stm; // Needed now because we move s after
                         Expr::new(
                             PlaceE(Place {
                                 kind: FieldP(boxed(s), field),
                                 mode: default(),
-                                ty: ty.clone(),
+                                ty,
                                 stm: s_stm,
                             }),
                             ty,
@@ -256,13 +256,13 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
                 ast::Place::IndexP(box e, box ix) => {
                     let e = self.visit_expr(e);
                     let ix = self.visit_expr(ix);
-                    if let ArrayT(box item_ty) = &e.ty && let IntT = ix.ty {
-                    let ty = item_ty.clone(); // Needed now because we move e after
+                    if let ArrayT(item_ty) = e.ty && let IntT = ix.ty {
+                    let ty = *item_ty;
                     let e_stm = e.stm; // Needed now because we move e after
                     Expr::new(PlaceE(Place {
                         kind: IndexP(boxed(e), boxed(ix)),
                         mode: default(),
-                        ty: ty.clone(),
+                        ty,
                         stm: e_stm
                     }), ty, e_stm)
                 } else {
@@ -302,11 +302,7 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
                     );
                 }
 
-                Expr::new(
-                    CallE { name, args },
-                    fun.ret_ty.clone(),
-                    self.current_stratum(),
-                )
+                Expr::new(CallE { name, args }, fun.ret_ty, self.current_stratum())
             }
             ast::Expr::IfE(box cond, box iftrue, box iffalse) => {
                 let cond = self.visit_expr(cond);
@@ -323,7 +319,7 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
 
                 let iftrue_stm = iftrue.ret.stm;
                 let iffalse_stm = iffalse.ret.stm;
-                let if_ty = iftrue.ret.ty.clone();
+                let if_ty = iftrue.ret.ty;
                 Expr::new(
                     IfE(boxed(cond), boxed(iftrue), boxed(iffalse)),
                     if_ty,
@@ -333,7 +329,7 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
             ast::Expr::BlockE(box e) => {
                 let b = self.visit_block(e);
                 let ret_stm = b.ret.stm;
-                let ret_ty = b.ret.ty.clone();
+                let ret_ty = b.ret.ty;
                 Expr::new(BlockE(boxed(b)), ret_ty, ret_stm)
             }
             ast::Expr::StructE {
@@ -399,7 +395,7 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
                     .fold(Stratum::static_stm(), |s1, Expr { stm: s2, .. }| {
                         core::cmp::max(s1, *s2)
                     });
-                let ty = ArrayT(boxed(array[0].ty.clone()));
+                let ty = ArrayT(self.ctx.alloc(array[0].ty));
                 assert!(
                     array.iter().all(|item| item.ty == array[0].ty),
                     "all items in the list should have the same type"
@@ -420,9 +416,9 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
     fn visit_fun(&mut self, f: ast::Fun<'ctx>) -> Fun<'ctx> {
         let stm = self.current_stratum();
         // Introduce arguments in the typing context
-        for arg in &f.params {
+        for &arg in &f.params {
             self.check_ty(&arg.ty);
-            self.add_var(arg.clone());
+            self.add_var(arg);
         }
 
         let body = self.visit_block(f.body);
@@ -450,7 +446,7 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
         match s {
             ast::Stmt::Declare(vardef, expr) => {
                 let stm = self.current_stratum();
-                self.add_var(vardef.clone());
+                self.add_var(vardef);
                 let expr = self.visit_expr(expr);
                 let expr_ty = &expr.ty;
 

@@ -60,7 +60,7 @@ fn main() -> anyhow::Result<()> {
             let mut context = Context::new(config, &arena);
             let program = parse_file(&mut context).context("Compilation failed")?;
             let mut checked = check(&mut context, program);
-            let mir = borrow_check(mir(&mut checked));
+            borrow_check(mir(&mut checked));
             let res = run(checked, "binary", &std::env::current_dir()?).context("runtime error")?;
             println!("{}", res);
         }

@@ -144,7 +144,7 @@ impl<'ctx> Normalizer<'ctx> {
                     .map(|arg| self.visit_expr(stmts, arg, default(), structs))
                     .collect();
 
-                let vardef = self.fresh_vardef(e.ty.clone());
+                let vardef = self.fresh_vardef(e.ty);
                 let destination = Pointer::new(self.arena, self.arena.alloc(vardef.name.into()));
                 stmts.push(Stmt::Declare(vardef));
 
@@ -161,7 +161,7 @@ impl<'ctx> Normalizer<'ctx> {
                 let cond = self.visit_expr(stmts, cond, mode, structs);
 
                 // Destination
-                let dest_def = self.fresh_vardef(iftrue.ret.ty.clone());
+                let dest_def = self.fresh_vardef(iftrue.ret.ty);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name.into()));
                 stmts.push(Stmt::Declare(dest_def));
 
@@ -208,7 +208,7 @@ impl<'ctx> Normalizer<'ctx> {
             }
             tast::ExprKind::ArrayE(array) => {
                 // Destination
-                let dest_def = self.fresh_vardef(array[0].ty.clone());
+                let dest_def = self.fresh_vardef(array[0].ty);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name.into()));
                 stmts.push(Stmt::Declare(dest_def));
 
@@ -261,7 +261,7 @@ impl<'ctx> Normalizer<'ctx> {
     ) {
         match s {
             tast::Stmt::Declare(vardef, expr) => {
-                stmts.push(Stmt::Declare(vardef.clone()));
+                stmts.push(Stmt::Declare(*vardef));
                 let tmp = self.visit_expr(stmts, expr, default(), structs);
                 stmts.push(Stmt::Assign(
                     Pointer::new(self.arena, self.arena.alloc(Place::VarP(vardef.name))),

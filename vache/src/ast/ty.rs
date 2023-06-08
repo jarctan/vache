@@ -6,10 +6,9 @@ use pest::iterators::Pair;
 
 use super::{Context, Parsable};
 use crate::grammar::*;
-use crate::utils::boxed;
 
 /// Types in our language.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ty<'ctx> {
     /// Unit type.
     UnitT,
@@ -24,7 +23,7 @@ pub enum Ty<'ctx> {
     /// Structures are identified by their names.
     StructT(&'ctx str),
     /// Arrays.
-    ArrayT(Box<Ty<'ctx>>),
+    ArrayT(&'ctx Ty<'ctx>),
 }
 
 use Ty::*;
@@ -39,7 +38,10 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Ty<'ctx> {
             Rule::bool_ty => BoolT,
             Rule::int_ty => IntT,
             Rule::str_ty => StrT,
-            Rule::array_ty => ArrayT(boxed(ctx.parse(pair.into_inner().next().unwrap()))),
+            Rule::array_ty => {
+                let parsed = ctx.parse(pair.into_inner().next().unwrap());
+                ArrayT(ctx.alloc(parsed))
+            }
             Rule::ident => StructT(pair.as_str()),
             rule => panic!("parser internal error: expected type, found {rule:?}"),
         }
@@ -88,7 +90,7 @@ impl fmt::Display for Ty<'_> {
             IntT => write!(f, "int"),
             StrT => write!(f, "str"),
             StructT(s) => write!(f, "{s}{{}}"),
-            ArrayT(box ty) => write!(f, "{ty}[]"),
+            ArrayT(ty) => write!(f, "{ty}[]"),
         }
     }
 }

@@ -128,10 +128,9 @@ impl<'ctx> MIRer<'ctx> {
     /// * A map of structures declarations.
     fn visit_stmt(&mut self, s: anf::Stmt<'ctx>, dest_l: CfgLabel) -> CfgLabel {
         match s {
-            anf::Stmt::Declare(vardef) => self.insert(
-                self.instr(InstrKind::Declare(vardef.clone())),
-                [(DefaultB, dest_l)],
-            ),
+            anf::Stmt::Declare(vardef) => {
+                self.insert(self.instr(InstrKind::Declare(vardef)), [(DefaultB, dest_l)])
+            }
             anf::Stmt::Assign(ptr, rvalue) => self.insert(
                 self.instr(InstrKind::Assign(ptr, rvalue)),
                 [(DefaultB, dest_l)],

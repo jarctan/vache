@@ -6,7 +6,7 @@ use super::{Stratum, Ty, Var};
 use crate::ast;
 
 /// A variable definition, with stratum and type information.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct VarDef<'ctx> {
     /// Variable name.
     pub(crate) name: Var<'ctx>,

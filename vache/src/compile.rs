@@ -266,7 +266,7 @@ impl<'ctx> Compiler<'ctx> {
                     quote!(Cow<#name>)
                 }
             }
-            ArrayT(box ty) => {
+            ArrayT(ty) => {
                 let ty = Self::translate_type(ty, show_lifetime);
                 if show_lifetime {
                     quote!(Cow<'a, Vec<#ty>>)

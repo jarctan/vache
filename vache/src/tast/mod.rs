@@ -16,7 +16,7 @@ pub mod var;
 
 pub use block::Block;
 pub use expr::{Expr, ExprKind};
-pub use fun::{Fun, FunSig};
+pub use fun::Fun;
 pub use mode::Mode;
 pub use place::{Place, PlaceKind};
 pub use program::Program;

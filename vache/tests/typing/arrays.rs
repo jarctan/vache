@@ -11,7 +11,7 @@ fn simple_array() {
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![Declare(
-                vardef("list", ArrayT(boxed(IntT))),
+                vardef("list", ArrayT(&IntT)),
                 array([int(0), int(1), int(2), int(3)]),
             )]),
         }],
@@ -28,7 +28,7 @@ fn heterogeneous_list() {
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![Declare(
-                vardef("l", ArrayT(boxed(IntT))),
+                vardef("l", ArrayT(&IntT)),
                 array([int(0), int(1), int(2), string("not the right type!")]),
             )]),
         }],
@@ -45,7 +45,7 @@ fn heterogeneous_list2() {
             params: vec![],
             ret_ty: UnitT,
             body: stmts(vec![Declare(
-                vardef("l", ArrayT(boxed(IntT))),
+                vardef("l", ArrayT(&IntT)),
                 array([
                     int(0),
                     string("not the right type!"),
@@ -67,7 +67,7 @@ fn empty_list() {
             name: "main",
             params: vec![],
             ret_ty: UnitT,
-            body: stmts(vec![Declare(vardef("l", ArrayT(boxed(IntT))), array([]))]),
+            body: stmts(vec![Declare(vardef("l", ArrayT(&IntT)), array([]))]),
         }],
     ));
 }
@@ -82,7 +82,7 @@ fn simple_array_indexing() {
             ret_ty: UnitT,
             body: stmts(vec![
                 Declare(
-                    vardef("list", ArrayT(boxed(IntT))),
+                    vardef("list", ArrayT(&IntT)),
                     array([int(0), int(1), int(2), int(3)]),
                 ),
                 Declare(vardef("item", IntT), index(var("list"), int(1))),
