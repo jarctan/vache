@@ -2,10 +2,10 @@
 
 use super::borrow::Borrows;
 use super::flow::Flow;
+use super::tree::LocTree;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
 use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Place, RValue, Reference};
-use crate::utils::set::Set;
 
 /// Variable liveness analysis.
 ///
@@ -15,9 +15,9 @@ use crate::utils::set::Set;
 ///
 /// Returns a map of live variables at the entry and exit of each node in the
 /// CFG.
-pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<Set<Loc<'ctx>>>> {
+pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<LocTree<'ctx, ()>>> {
     // Bootstrap with empty environments.
-    let mut var_flow: Cfg<Flow<Set<Loc>>> = cfg.map_ref(|_, _| Flow::default(), |_| ());
+    let mut var_flow: Cfg<Flow<LocTree<()>>> = cfg.map_ref(|_, _| Flow::default(), |_| ());
 
     let mut updated = true;
 
@@ -28,8 +28,8 @@ pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<Set<L
         for (label, instr) in cfg.postorder(entry_l) {
             let successors = cfg.neighbors(label);
 
-            let outs: Set<Loc> = successors.map(|x| var_flow[&x].ins.clone()).sum();
-            let ins: Set<Loc> = match &instr.kind {
+            let outs: LocTree<()> = successors.map(|x| var_flow[&x].ins.clone()).sum();
+            let ins: LocTree<()> = match &instr.kind {
                 InstrKind::Noop => outs.clone(),
                 InstrKind::Declare(var) => outs.clone() - Loc::from(var.name),
                 InstrKind::Assign(lhs, RValue::Unit)
@@ -42,27 +42,23 @@ pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<Set<L
                         + lhs.place().uses_as_lhs()
                         + rhs.place.uses_as_rhs()
                 }
-                /*InstrKind::Assign(lhs, RValue::MovedVar(rhs)) => {
-                    outs.clone() - lhs.def() + lhs.uses_as_lhs() + Loc::from(rhs)
-                }*/
                 InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
                     outs.clone() - lhs.place().def()
                         + lhs.place().uses_as_lhs()
-                        + Set::from_iter(fields.values().map(Loc::from))
+                        + fields.values().map(Loc::from)
                 }
                 InstrKind::Assign(lhs, RValue::Array(array)) => {
                     outs.clone() - lhs.place().def()
                         + lhs.place().uses_as_lhs()
-                        + Set::from_iter(array.iter().map(Loc::from))
+                        + array.iter().map(Loc::from)
                 }
                 InstrKind::Call {
                     name: _,
                     args,
                     destination,
                 } => {
-                    let res = outs.clone() - destination.as_ref().map(|x| *x.loc())
-                        + Set::from_iter(args.iter().map(|x| *x.loc()));
-                    res
+                    outs.clone() - destination.as_ref().map(|x| *x.loc())
+                        + args.iter().map(|x| *x.loc())
                 }
                 InstrKind::Branch(v) => outs.clone() + Loc::from(v),
                 InstrKind::Return(v) => outs.clone() + Loc::from(v),
@@ -91,9 +87,9 @@ pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<Set<L
 fn loan_liveness<'ctx>(
     cfg: &CfgI<'ctx>,
     entry_l: CfgLabel,
-    var_flow: &Cfg<Flow<Set<Loc<'ctx>>>>,
+    var_flow: &Cfg<Flow<LocTree<'ctx, ()>>>,
 ) -> Cfg<Flow<Ledger<'ctx>>> {
-    let out_of_scope: Cfg<Set<Loc>> =
+    let out_of_scope: Cfg<LocTree<()>> =
         var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
 
     // Same, for loans.
@@ -113,15 +109,6 @@ fn loan_liveness<'ctx>(
                 InstrKind::Assign(lhs, RValue::Unit)
                 | InstrKind::Assign(lhs, RValue::String(_))
                 | InstrKind::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs.place(),
-                /*InstrKind::Assign(lhs, RValue::MovedVar(rhs)) => {
-                    let mut ledger = ins.clone();
-                    if var_flow[&label].outs.contains(&lhs.root()) {
-                        ledger.set_borrows(lhs, ins.move_var_borrows(*rhs));
-                    } else {
-                        ledger.flush_place(lhs);
-                    }
-                    ledger
-                }*/
                 InstrKind::Assign(lhs, RValue::Place(rhs)) => {
                     let mut ledger = ins.clone();
                     if var_flow[&label].outs.contains(lhs.loc()) {
@@ -183,7 +170,7 @@ fn loan_liveness<'ctx>(
                 | InstrKind::Call {
                     destination: None, ..
                 } => ins.clone(),
-            } - out_of_scope[&label].iter().copied();
+            } - out_of_scope[&label].get_all_locs();
 
             let flow = Flow { ins, outs };
             if loan_flow[&label] != flow {
@@ -205,7 +192,7 @@ fn loan_liveness<'ctx>(
 ///
 /// Mutates in place `varmode` to switch its mode to `Moved` if it's the last
 /// use of the variable.
-fn optimize_last_use<'ctx>(place: &mut Reference<'ctx>, outs: &Set<Loc<'ctx>>) {
+fn optimize_last_use<'ctx>(place: &mut Reference<'ctx>, outs: &LocTree<'ctx, ()>) {
     match place.mode() {
         Mode::Cloned => {
             if !outs.contains(place.loc()) {
@@ -345,17 +332,26 @@ mod tests {
         let analysis = var_liveness(&cfg, l[0]);
 
         // Entry and exit are trivial
-        assert_eq!(analysis[&l[0]].ins.len(), 0);
-        assert_eq!(analysis[&l[4]].ins.len(), 0);
-        assert_eq!(analysis[&l[4]].outs.len(), 0);
+        assert!(analysis[&l[0]].ins.get_all_locs().next().is_none());
+        assert!(analysis[&l[4]].ins.get_all_locs().next().is_none());
+        assert!(analysis[&l[4]].outs.get_all_locs().next().is_none());
 
         // During l2, we still need y
-        assert_eq!(analysis[&l[2]].outs, Set::from_iter([y.into()]));
-        assert_eq!(analysis[&l[2]].ins, Set::from_iter([y.into()]));
+        assert_eq!(
+            analysis[&l[2]].outs.get_all_locs().collect::<Vec<_>>(),
+            [y.into()]
+        );
+        assert_eq!(
+            analysis[&l[2]].ins.get_all_locs().collect::<Vec<_>>(),
+            [y.into()]
+        );
 
         // During l3, we still need y but not afterwards anymore
-        assert_eq!(analysis[&l[3]].ins, Set::from_iter([y.into()]));
-        assert_eq!(analysis[&l[3]].outs.len(), 0);
+        assert_eq!(
+            analysis[&l[3]].ins.get_all_locs().collect::<Vec<_>>(),
+            [y.into()]
+        );
+        assert!(analysis[&l[3]].outs.get_all_locs().next().is_none());
     }
 
     /// Checks with a simple example that we clone values when there is a

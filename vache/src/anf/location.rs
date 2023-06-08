@@ -34,6 +34,12 @@ impl<'ctx> TryFrom<Place<'ctx>> for Loc<'ctx> {
     }
 }
 
+impl<'a, 'ctx> From<&'a Self> for Loc<'ctx> {
+    fn from(loc: &Self) -> Self {
+        *loc
+    }
+}
+
 impl<'ctx> From<Var<'ctx>> for Loc<'ctx> {
     fn from(var: Var<'ctx>) -> Self {
         VarL(var)
