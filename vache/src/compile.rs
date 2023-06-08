@@ -260,11 +260,19 @@ impl<'ctx> Compiler<'ctx> {
             }
             StructT(name) => {
                 let name = format_ident!("{}", name);
-                quote!(#name)
+                if show_lifetime {
+                    quote!(Cow<'a, #name>)
+                } else {
+                    quote!(Cow<#name>)
+                }
             }
             ArrayT(box ty) => {
                 let ty = Self::translate_type(ty, show_lifetime);
-                quote!(Cow<Vec<#ty>>)
+                if show_lifetime {
+                    quote!(Cow<'a, Vec<#ty>>)
+                } else {
+                    quote!(Cow<Vec<#ty>>)
+                }
             }
         }
     }

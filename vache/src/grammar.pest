@@ -4,7 +4,7 @@ fun = { "fn" ~ ident ~ params ~ ("->" ~ ty)? ~ block }
 
 params = {"(" ~ (vardef ~ ("," ~ vardef)*)? ~ ")"}
 
-struct_def = { "struct" ~ ident ~ "{" ~ (ident ~ ":" ~ ty ~ "," )* ~ "}" }
+struct_def = { "struct" ~ ident ~ "{" ~ (vardef ~ "," )* ~ "}" }
 
 block = { "{" ~ (stmt ~ ";")* ~ (expr)? ~ "}" }
 
@@ -12,21 +12,21 @@ stmt = { while_loop | declare | assign | expr }
 
 while_loop = { "while" ~ expr ~ block }
 
-assign = { ident ~ "=" ~ expr }
+assign = { expr ~ "=" ~ expr }
 
 declare = { "var" ~ vardef ~ "=" ~ expr }
 
 vardef = {ident ~ ":" ~ ty}
 
-expr = { struct_instance | if_then | block | binop | with_postfix }
+expr = { if_then | block | binop | with_postfix }
 
 binop = { with_postfix ~ (infix ~ with_postfix)+ }
 
 with_postfix = { primitive ~ (field_postfix | index_postfix | call_postfix)* }
 
-primitive = { array | unit | integer | string | ident | "(" ~ expr ~ ")" }
+primitive = { struct_instance | array | unit | integer | string | ident | "(" ~ expr ~ ")" }
 
-field_postfix = { "." ~ primitive }
+field_postfix = { "." ~ ident }
 
 index_postfix = { "[" ~ primitive ~ "]" }
 
@@ -50,7 +50,7 @@ str_ty = { "str" }
 
 int_ty = { "int" }
 
-keyword = { "if" | "else" | "while" | "int" | "str" | "bool" | "fn" }
+keyword = { "var" | "struct" | "if" | "else" | "while" | "int" | "str" | "bool" | "fn" }
 
 infix = _{ add | sub | mul | div | mod | pow }
 

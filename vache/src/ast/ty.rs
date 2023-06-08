@@ -40,6 +40,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Ty<'ctx> {
             Rule::int_ty => IntT,
             Rule::str_ty => StrT,
             Rule::array_ty => ArrayT(boxed(ctx.parse(pair.into_inner().next().unwrap()))),
+            Rule::ident => StructT(pair.as_str()),
             rule => panic!("parser internal error: expected type, found {rule:?}"),
         }
     }

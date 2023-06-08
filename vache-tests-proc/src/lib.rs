@@ -50,39 +50,42 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
 
             #[test]
             #[serial_test::serial(compiled)]
-            fn compiled() {
+            fn compiled() -> ::anyhow::Result<()> {
+                use ::anyhow::Context as AnyhowContext;
                 let p: ::vache_lib::ast::Program = #program;
                 let arena = ::vache_lib::Arena::new();
                 let config = ::vache_lib::config::Config { input: "" };
                 let mut context = ::vache_lib::Context::new(config, &arena);
                 let mut checked = ::vache_lib::check(&mut context, p);
                 let mir = ::vache_lib::borrow_check(::vache_lib::mir(&mut checked));
-                let cur_dir = ::std::env::current_dir().unwrap();
+                let cur_dir = ::std::env::current_dir().context("Could not get current directory")?;
                 let binary_name = "test";
                 assert_eq!(
-                    ::vache_lib::run(checked, binary_name, &::std::env::current_dir().unwrap()).unwrap(),
+                    ::vache_lib::run(checked, binary_name, &cur_dir).context("Could not run program")?,
                     #expected_output,
                     "Output mismatch for binary"
                 );
                 
-                let dest_file = ::std::env::current_dir().unwrap().join(binary_name);
-                ::std::fs::remove_file(&dest_file).expect("failed to remove binary at the end of the test");
+                let dest_file = cur_dir.join(binary_name);
+                ::std::fs::remove_file(&dest_file).context("failed to remove binary at the end of the test")?;
+                Ok(())
             }
 
             #[test]
-            fn interpreted() {
+            fn interpreted() -> ::anyhow::Result<()>  {
                 let p: ::vache_lib::ast::Program = #program;
                 let arena = ::vache_lib::Arena::new();
                 let config = ::vache_lib::config::Config { input: "" };
                 let mut context = ::vache_lib::Context::new(config, &arena);
                 let mut checked = ::vache_lib::check(&mut context, p);
                 let mir = ::vache_lib::borrow_check(::vache_lib::mir(&mut checked));
-                println!("MIR: {:#?}", mir);
+                eprintln!("MIR: {:#?}", mir);
                 assert_eq!(
                     ::vache_lib::interpret(mir),
                     #expected_output,
                     "Output mismatch for interpreter"
                 );
+                Ok(())
             }
         }
     }

@@ -29,11 +29,6 @@ enum Commands {
 }
 
 fn main() -> anyhow::Result<()> {
-    /*let mut checked = check(vache_lib::examples::assignment_while_borrowed());
-    let mir = borrow_check(mir(&mut checked));
-    println!("{mir:?}");
-    let res = run(checked, "binary", &std::env::current_dir().unwrap()).expect("error");
-    println!("{}", res);*/
     match Cli::parse().command {
         Commands::Compile { ref filename } => {
             let arena = Arena::new();
@@ -66,7 +61,6 @@ fn main() -> anyhow::Result<()> {
             let program = parse_file(&mut context).context("Compilation failed")?;
             let mut checked = check(&mut context, program);
             let mir = borrow_check(mir(&mut checked));
-            println!("{mir:?}");
             let res = run(checked, "binary", &std::env::current_dir()?).context("runtime error")?;
             println!("{}", res);
         }

@@ -105,7 +105,6 @@ fn loan_liveness<'ctx>(
         updated = false;
 
         for (label, instr) in cfg.postorder(entry_l).rev() {
-            println!("Studying {:?}", label);
             let predecessors = cfg.preneighbors(label);
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
             let outs: Ledger = match &instr.kind {
@@ -194,8 +193,6 @@ fn loan_liveness<'ctx>(
         }
     }
 
-    println!("{:?}", loan_flow);
-
     loan_flow
 }
 
@@ -233,8 +230,6 @@ fn optimize_last_use<'ctx>(place: &mut Reference<'ctx>, outs: &Set<Loc<'ctx>>) {
 ///
 /// Performs liveliness analysis, determining which borrows are invalidated.
 pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) -> CfgI<'ctx> {
-    println!("{:?}", cfg);
-
     // Compute the two analyses
     let var_flow = var_liveness(&cfg, entry_l);
 
@@ -295,13 +290,11 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
     }
 
     for Borrow { label, place } in loan_flow[&exit_l].outs.invalidations() {
-        println!("Invalidating borrow {:?} at {:?}", label, place);
         cfg[&label].force_clone(&place);
     }
 
     // Transform all invalidated borrows into clones
     for Borrow { label, place } in invalidated {
-        println!("Invalidating!! borrow {:?} at {:?}", label, place);
         cfg[&label].force_clone(&place);
     }
 

@@ -3,9 +3,9 @@
 use num_bigint::BigInt;
 use pest::iterators::Pair;
 use pest::pratt_parser::*;
+use Place::*;
 
-use super::{Block, Var};
-use super::{Context, Parsable};
+use super::{Block, Context, Parsable, Place, Var};
 use crate::grammar::*;
 use crate::utils::boxed;
 
@@ -29,9 +29,7 @@ pub enum Expr<'ctx> {
     /// A string.
     StringE(&'ctx str),
     /// A variable.
-    VarE(Var<'ctx>),
-    /// A field in a structure.
-    FieldE(Box<Expr<'ctx>>, &'ctx str),
+    PlaceE(Place<'ctx>),
     /// An instance of a structure.
     StructE {
         /// Name (identifier).
@@ -41,8 +39,6 @@ pub enum Expr<'ctx> {
         /// Ordered because we need to specify here the evaluation order.
         fields: Vec<(&'ctx str, Expr<'ctx>)>,
     },
-    /// An index in an array/a map.
-    IndexE(Box<Expr<'ctx>>, Box<Expr<'ctx>>),
     /// Array creation.
     ArrayE(Vec<Expr<'ctx>>),
     /// A function call.
@@ -68,7 +64,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not a field.
     pub fn as_field(&self) -> Option<(&Expr<'ctx>, &'ctx str)> {
-        if let FieldE(box strukt, field) = self {
+        if let PlaceE(FieldP(box strukt, field)) = self {
             Some((strukt, field))
         } else {
             None
@@ -82,7 +78,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not a index.
     pub fn as_index(&self) -> Option<(&Expr<'ctx>, &Expr<'ctx>)> {
-        if let IndexE(box array, box index) = self {
+        if let PlaceE(IndexP(box array, box index)) = self {
             Some((array, index))
         } else {
             None
@@ -132,7 +128,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not a variable.
     pub fn as_var(&self) -> Option<Var<'ctx>> {
-        if let VarE(var) = self {
+        if let PlaceE(VarP(var)) = self {
             Some(*var)
         } else {
             None
@@ -168,7 +164,7 @@ impl<'ctx> Expr<'ctx> {
 
 /// Shortcut to create an `Expr` which is just a variable, based on its name.
 pub fn var(v: &str) -> Expr<'_> {
-    VarE(v.into())
+    PlaceE(VarP(v.into()))
 }
 
 /// Shortcut to create a constant integer `Expr` based on some integer value.
@@ -191,7 +187,7 @@ pub fn call<'ctx>(name: &'ctx str, stmts: impl IntoIterator<Item = Expr<'ctx>>) 
 
 /// Shortcut to create a `s.field` expression.
 pub fn field<'ctx>(e: Expr<'ctx>, member: &'ctx str) -> Expr<'ctx> {
-    FieldE(boxed(e), member)
+    PlaceE(FieldP(boxed(e), member))
 }
 
 /// Shortcut to create an if expression.
@@ -205,7 +201,7 @@ pub fn if_e<'ctx>(
 
 /// Shortcut to create a `x[y]` expression.
 pub fn index<'ctx>(e1: Expr<'ctx>, ix: Expr<'ctx>) -> Expr<'ctx> {
-    IndexE(boxed(e1), boxed(ix))
+    PlaceE(IndexP(boxed(e1), boxed(ix)))
 }
 
 /// Shortcut to create a `MyStruct { (field: value)* }` expression.
@@ -236,7 +232,7 @@ pub fn binop<'ctx>(lhs: Expr<'ctx>, op: &'ctx str, rhs: Expr<'ctx>) -> Expr<'ctx
 
 impl<'ctx> From<Var<'ctx>> for Expr<'ctx> {
     fn from(v: Var<'ctx>) -> Self {
-        VarE(v)
+        PlaceE(VarP(v))
     }
 }
 
@@ -249,7 +245,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                     Rule::unit => UnitE,
                     Rule::integer => IntegerE(ctx.parse(pair)),
                     Rule::string => StringE(ctx.parse(pair)),
-                    Rule::ident => VarE(ctx.parse(pair)),
+                    Rule::ident => PlaceE(VarP(ctx.parse(pair))),
                     Rule::array => ArrayE(pair.into_inner().map(|pair| ctx.parse(pair)).collect()),
                     Rule::with_postfix => ctx.parse(pair),
                     Rule::if_then => {
@@ -267,6 +263,19 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                             args: vec![lhs, rhs],
                         })
                         .parse(pair.into_inner()),
+                    Rule::struct_instance => {
+                        let mut pairs = pair.into_inner();
+                        let name = pairs.next().unwrap().as_str();
+                        let fields = pairs
+                            .array_chunks::<2>()
+                            .map(|[field, value]| {
+                                let field: Var = ctx.parse(field);
+                                let value: Expr = ctx.parse(value);
+                                (field.as_str(), value)
+                            })
+                            .collect();
+                        StructE { name, fields }
+                    }
                     rule => panic!("parser internal error: expected expression, found {rule:?}"),
                 }
             }
@@ -276,18 +285,15 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                 pairs.fold(expr, |acc, pair| match pair.as_rule() {
                     Rule::field_postfix => {
                         let inner = pair.into_inner().next().unwrap();
-                        if let VarE(field) = ctx.parse(inner) {
-                            FieldE(boxed(acc), field.into())
-                        } else {
-                            panic!("Expected a variable on left-hand side of field access.")
-                        }
+                        let field: Var = ctx.parse(inner);
+                        PlaceE(FieldP(boxed(acc), field.into()))
                     }
-                    Rule::index_postfix => IndexE(
+                    Rule::index_postfix => PlaceE(IndexP(
                         boxed(acc),
                         boxed(ctx.parse(pair.into_inner().next().unwrap())),
-                    ),
+                    )),
                     Rule::call_postfix => {
-                        if let VarE(name) = acc {
+                        if let PlaceE(VarP(name)) = acc {
                             CallE {
                                 name: name.into(),
                                 args: pair.into_inner().map(|pair| ctx.parse(pair)).collect(),
@@ -300,7 +306,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                 })
             }
             _ => panic!(
-                "expected primitive or an expr, found {:?} for {}",
+                "Parser internal error: expected primitive or an expr, found {:?} for {}",
                 pair.as_rule(),
                 pair.as_str()
             ),

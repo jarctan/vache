@@ -221,16 +221,55 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
             ast::Expr::UnitE => Expr::new(UnitE, UnitT, self.current_stratum()),
             ast::Expr::IntegerE(i) => Expr::new(IntegerE(i), IntT, self.current_stratum()),
             ast::Expr::StringE(s) => Expr::new(StringE(s), StrT, self.current_stratum()),
-            ast::Expr::VarE(v) => {
-                let (vardef, stm) = self
-                    .get_var(v)
-                    .unwrap_or_else(|| panic!("{v} does not exist in this context"));
-                Expr::new(
-                    PlaceE(Place::var(vardef.name, vardef.ty.clone(), stm, default())),
-                    vardef.ty.clone(),
-                    stm,
-                )
-            }
+            ast::Expr::PlaceE(place) => match place {
+                ast::Place::VarP(v) => {
+                    let (vardef, stm) = self
+                        .get_var(v)
+                        .unwrap_or_else(|| panic!("{v} does not exist in this context"));
+                    Expr::new(
+                        PlaceE(Place::var(vardef.name, vardef.ty.clone(), stm, default())),
+                        vardef.ty.clone(),
+                        stm,
+                    )
+                }
+                ast::Place::FieldP(box s, field) => {
+                    let s = self.visit_expr(s);
+                    if let StructT(name) = &s.ty {
+                        let strukt = self.get_struct(name).unwrap();
+                        let ty = strukt.get_field(field).clone();
+                        let s_stm = s.stm; // Needed now because we move s after
+                        Expr::new(
+                            PlaceE(Place {
+                                kind: FieldP(boxed(s), field),
+                                mode: default(),
+                                ty: ty.clone(),
+                                stm: s_stm,
+                            }),
+                            ty,
+                            s_stm,
+                        )
+                    } else {
+                        panic!("Cannot get a field of something which is not a struct");
+                    }
+                }
+
+                ast::Place::IndexP(box e, box ix) => {
+                    let e = self.visit_expr(e);
+                    let ix = self.visit_expr(ix);
+                    if let ArrayT(box item_ty) = &e.ty && let IntT = ix.ty {
+                    let ty = item_ty.clone(); // Needed now because we move e after
+                    let e_stm = e.stm; // Needed now because we move e after
+                    Expr::new(PlaceE(Place {
+                        kind: IndexP(boxed(e), boxed(ix)),
+                        mode: default(),
+                        ty: ty.clone(),
+                        stm: e_stm
+                    }), ty, e_stm)
+                } else {
+                    panic!("Only integer indexing is supported, and for arrays only");
+                }
+                }
+            },
             // Make a special case for `print` until we get generic functions so that we
             // can express `print` more elegantly with the other builtin functions.
             ast::Expr::CallE { name, args } if name == "print" => {
@@ -296,42 +335,6 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
                 let ret_stm = b.ret.stm;
                 let ret_ty = b.ret.ty.clone();
                 Expr::new(BlockE(boxed(b)), ret_ty, ret_stm)
-            }
-            ast::Expr::FieldE(box s, field) => {
-                let s = self.visit_expr(s);
-                if let StructT(name) = &s.ty {
-                    let strukt = self.get_struct(name).unwrap();
-                    let ty = strukt.get_field(field).clone();
-                    let s_stm = s.stm; // Needed now because we move s after
-                    Expr::new(
-                        PlaceE(Place {
-                            kind: FieldP(boxed(s), field),
-                            mode: default(),
-                            ty: ty.clone(),
-                            stm: s_stm,
-                        }),
-                        ty,
-                        s_stm,
-                    )
-                } else {
-                    panic!("Cannot get a field of something which is not a struct");
-                }
-            }
-            ast::Expr::IndexE(box e, box ix) => {
-                let e = self.visit_expr(e);
-                let ix = self.visit_expr(ix);
-                if let ArrayT(box item_ty) = &e.ty && let IntT = ix.ty {
-                    let ty = item_ty.clone(); // Needed now because we move e after
-                    let e_stm = e.stm; // Needed now because we move e after
-                    Expr::new(PlaceE(Place {
-                        kind: IndexP(boxed(e), boxed(ix)),
-                        mode: default(),
-                        ty: ty.clone(),
-                        stm: e_stm
-                    }), ty, e_stm)
-                } else {
-                    panic!("Only integer indexing is supported, and for arrays only");
-                }
             }
             ast::Expr::StructE {
                 name: s_name,

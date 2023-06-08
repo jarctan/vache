@@ -734,7 +734,7 @@ mod tests {
         let mut ctx = Context::new(config, &arena);
         let mut checked = check(&mut ctx, crate::examples::simple_if());
         let mir = borrow_check(mir(&mut checked));
-        println!("MIR: {mir:?}");
+        eprintln!("MIR: {mir:?}");
         let main_fn = &mir.funs["main"];
         let dominators = main_fn.body.immediate_dominators(main_fn.entry_l);
 

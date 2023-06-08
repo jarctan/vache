@@ -12,30 +12,33 @@ use crate::utils::boxed;
 pub enum Place<'ctx> {
     /// A mere variable.
     VarP(Var<'ctx>),
-    /// An indexed slot into an expression.
+    /// An index in an array/a map.
     IndexP(Box<Expr<'ctx>>, Box<Expr<'ctx>>),
-    /// An field in an expression.
-    FieldP(Box<Expr<'ctx>>, Box<Expr<'ctx>>),
+    /// An field in a structure.
+    FieldP(Box<Expr<'ctx>>, &'ctx str),
 }
 
 use Place::*;
 
 /// Shortcut to create an indexed variable.
 pub fn idx_place<'ctx>(array: impl Into<Expr<'ctx>>, index: impl Into<Expr<'ctx>>) -> Place<'ctx> {
-    Place::IndexP(boxed(array.into()), boxed(index.into()))
+    IndexP(boxed(array.into()), boxed(index.into()))
 }
 
 impl<'ctx> From<&'ctx str> for Place<'ctx> {
     fn from(v: &'ctx str) -> Self {
-        Place::VarP(Var::from(v))
+        VarP(Var::from(v))
     }
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Place<'ctx> {
     fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
-        match pair.as_rule() {
-            Rule::ident => VarP(ctx.parse(pair)),
-            rule => panic!("parser internal error: expected place, found {rule:?}"),
+        assert_eq!(pair.as_rule(), Rule::expr);
+
+        let expr: Expr = ctx.parse(pair);
+        match expr {
+            Expr::PlaceE(place) => place,
+            _ => panic!("Parser internal error: expected place, found {:?}", expr),
         }
     }
 }
@@ -43,7 +46,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Place<'ctx> {
 impl<'ctx> PartialEq<str> for Place<'ctx> {
     fn eq(&self, other: &str) -> bool {
         match self {
-            Place::VarP(v) => v == other,
+            VarP(v) => v == other,
             _ => false,
         }
     }
@@ -52,7 +55,7 @@ impl<'ctx> PartialEq<str> for Place<'ctx> {
 impl<'ctx> PartialEq<&str> for Place<'ctx> {
     fn eq(&self, other: &&str) -> bool {
         match self {
-            Place::VarP(v) => v == other,
+            VarP(v) => v == other,
             _ => false,
         }
     }

@@ -15,7 +15,6 @@ pub mod ty;
 pub mod var;
 
 pub use anyhow::Context as AnyhowContext;
-use anyhow::Error;
 pub use anyhow::Result;
 pub use block::Block;
 pub use expr::{if_e, Expr};

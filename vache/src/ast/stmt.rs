@@ -108,7 +108,6 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
             }
             Rule::while_loop => {
                 let mut pairs = pair.into_inner();
-                println!("{:?}", pairs);
                 let cond = ctx.parse(pairs.next().unwrap());
                 let body = ctx.parse(pairs.next().unwrap());
                 Stmt::While { cond, body }

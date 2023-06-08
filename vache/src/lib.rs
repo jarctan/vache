@@ -6,6 +6,7 @@
 #![feature(array_windows)]
 #![feature(iter_collect_into)]
 #![feature(default_free_fn)]
+#![feature(iter_array_chunks)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
@@ -38,6 +39,9 @@ extern crate lazy_static;
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
+
+#[macro_use]
+extern crate anyhow;
 
 use std::path::Path;
 
@@ -77,7 +81,7 @@ mod steps {
     //! Only available throughout the
 
     use std::fs::{self, File};
-    use std::io::{self, ErrorKind, Write};
+    use std::io::Write;
     use std::path::Path;
     use std::process::Command;
 
@@ -152,7 +156,7 @@ mod steps {
         p: impl Into<tast::Program<'ctx>>,
         name: impl AsRef<str>,
         dest_dir: &Path,
-    ) -> io::Result<String> {
+    ) -> Result<String> {
         let name = name.as_ref();
         cargo(compile(p), name, dest_dir)?;
 
@@ -164,12 +168,12 @@ mod steps {
         if run_cmd.status.success() {
             Ok(String::from_utf8(run_cmd.stdout).unwrap())
         } else {
-            Err(io::Error::new(ErrorKind::Other, "Your program failed"))
+            bail!("Your program failed");
         }
     }
 
     /// Final stage: compiles the Rust source code down to machine code.
-    pub fn cargo(source_code: String, name: &str, dest_dir: &Path) -> io::Result<()> {
+    pub fn cargo(source_code: String, name: &str, dest_dir: &Path) -> Result<()> {
         let target_dir = Path::new("vache_target");
         let binary_name = "binary";
         let dest_file = dest_dir.join(name);
@@ -177,14 +181,11 @@ mod steps {
             // Check if our metadata file exists within path `target_dir`
             let file_path = target_dir.join(".vache_info.json");
             if !file_path.is_file() {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!(
-                        "`{}` already exists but do not contain `{}`. Will not overwrite it.",
-                        target_dir.to_str().unwrap(),
-                        file_path.file_name().unwrap().to_str().unwrap()
-                    ),
-                ));
+                bail!(
+                    "`{}` already exists but do not contain `{}`. Will not overwrite it.",
+                    target_dir.to_str().unwrap(),
+                    file_path.file_name().unwrap().to_str().unwrap()
+                );
             }
         }
 
@@ -226,9 +227,11 @@ mod steps {
             .output()?;
 
         if !cargo_cmd.status.success() {
-            eprintln!("{}", String::from_utf8(cargo_cmd.stdout).unwrap());
-            eprintln!("{}", String::from_utf8(cargo_cmd.stderr).unwrap());
-            return Err(io::Error::new(ErrorKind::Other, "Cargo compilation failed"));
+            bail!(
+                "Cargo compilation failed\n{}\n{}",
+                String::from_utf8(cargo_cmd.stdout).unwrap(),
+                String::from_utf8(cargo_cmd.stderr).unwrap()
+            );
         }
 
         // Copy and paste another file to a new directory
