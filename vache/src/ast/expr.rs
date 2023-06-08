@@ -388,7 +388,7 @@ mod tests {
         assert!(ix.as_string().unwrap() == "b");
     }
 
-    #[parses("blah.a[\"b\"]" as expr)]
+    #[parses("my_call(a,b,c)" as expr)]
     #[test]
     fn call_expression(expr: Expr) {
         let (call, args) = expr.as_call().unwrap();
@@ -436,22 +436,24 @@ mod tests {
         assert!(else_block.ret.as_var().unwrap() == "z");
     }
 
-    #[parses("if x { let k: int = 12; y } else { let w: int = 16; z }" as expr)]
+    #[parses("if x { var k: int = 12; y } else { var w: int = 16; z }" as expr)]
     #[test]
     fn more_complex_if_then_else(expr: Expr) {
-        let (cond, if_block, else_block) = expr.as_if_then().unwrap();
-        assert!(cond.as_var().unwrap() == "x");
+        let (cond, if_block, else_block) = expr
+            .as_if_then()
+            .context("expr should be an if then else")?;
+        assert!(cond.as_var().context("not a var")? == "x");
         assert!(matches!(&if_block.stmts[..], [Stmt::Declare(..)]));
-        assert!(if_block.ret.as_var().unwrap() == "y");
+        assert!(if_block.ret.as_var().context("not a var")? == "y");
         assert!(matches!(&else_block.stmts[..], [Stmt::Declare(..)]));
-        assert!(else_block.ret.as_var().unwrap() == "z");
+        assert!(else_block.ret.as_var().context("not a var")? == "z");
     }
 
-    #[parses("if x { let k: int = 12; y } else { let w: int = 16; z }" as expr)]
+    #[parses("a + b * c" as expr)]
     #[test]
     fn binary_operations(expr: Expr) {
-        let (name1, args) = expr.as_call().unwrap();
-        let (name2, _) = args[1].as_call().unwrap();
+        let (name1, args) = expr.as_call().context("a + b * c should be a call")?;
+        let (name2, _) = args[1].as_call().context("b * c should be a call")?;
         assert_eq!(name1, "+");
         assert_eq!(name2, "*");
     }

@@ -47,7 +47,7 @@ fn main() -> anyhow::Result<()> {
             let config = Config { input };
             let mut context = Context::new(config, &arena);
 
-            let program = parse_file(&mut context).with_context(|| "Compilation failed")?;
+            let program = parse_file(&mut context).context("Compilation failed")?;
             let mut checked = check(&mut context, program);
             let mir = borrow_check(mir(&mut checked));
             println!("{mir:?}");
@@ -63,12 +63,11 @@ fn main() -> anyhow::Result<()> {
                 })?);
             let config = Config { input };
             let mut context = Context::new(config, &arena);
-            let program = parse_file(&mut context).with_context(|| "Compilation failed")?;
+            let program = parse_file(&mut context).context("Compilation failed")?;
             let mut checked = check(&mut context, program);
             let mir = borrow_check(mir(&mut checked));
             println!("{mir:?}");
-            let res = run(checked, "binary", &std::env::current_dir()?)
-                .with_context(|| "runtime error")?;
+            let res = run(checked, "binary", &std::env::current_dir()?).context("runtime error")?;
             println!("{}", res);
         }
     }

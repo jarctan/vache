@@ -49,9 +49,9 @@ impl<'ctx> Context<'ctx> {
 /// Parses a file, and returns the parsed program, and the input.
 pub fn parse_file<'ctx>(ctx: &mut Context<'ctx>) -> Result<Program<'ctx>> {
     let mut pairs =
-        Grammar::parse(Rule::program, ctx.config.input).with_context(|| "Parsing errors found.")?;
+        Grammar::parse(Rule::program, ctx.config.input).context("Parsing errors found.")?;
 
-    let program: Program = ctx.parse(pairs.next().ok_or(Error::msg("Parser grammar error"))?);
+    let program: Program = ctx.parse(pairs.next().context("Parser grammar error")?);
 
     Ok(program)
 }

@@ -102,7 +102,7 @@ mod tests {
         assert_eq!(ty, UnitT);
     }
 
-    #[parses("()" as ty)]
+    #[parses("str" as ty)]
     #[test]
     fn str_ty(ty: Ty) {
         assert_eq!(ty, StrT);

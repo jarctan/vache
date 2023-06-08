@@ -2,7 +2,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
-use syn::{parse_macro_input, Block, Error, Ident, ItemFn, LitStr, Result, Type, FnArg, Pat, Token};
+use syn::{parse_macro_input, Block, Error, Ident, ItemFn, LitStr, Result, Type, FnArg, Pat, Token, Attribute};
 
 #[macro_use]
 extern crate quote;
@@ -106,6 +106,7 @@ impl Parse for ParseAttr {
 struct ParseFn {
     name: Ident,
     body: Block,
+    attrs: Vec<Attribute>,
     arg_name: Ident,
     arg_ty: Type,
 }
@@ -122,6 +123,7 @@ impl Parse for ParseFn {
                         Pat::Ident(arg_name) => 
                         Ok(Self {
                             name: f.sig.ident,
+                            attrs: f.attrs,
                             body: *f.block,
                             arg_name: arg_name.ident,
                             arg_ty: *ty,
@@ -142,22 +144,25 @@ pub fn parses(attr: TokenStream, item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as ParseFn);
 
     let ParseAttr { input_str, rule } = attr;
-    let ParseFn { name, body, arg_name, arg_ty } = item;
+    let ParseFn { name, attrs, body, arg_name, arg_ty } = item;
 
     quote! {
-        fn #name() {
+        #(#attrs)*
+        fn #name() -> ::anyhow::Result<()> {
+            use ::anyhow::Context as AnyhowContext;
             use ::pest::Parser;
             let arena = crate::Arena::new();
             let input = #input_str;
 
-            let mut parsed = crate::grammar::Grammar::parse(crate::grammar::Rule::#rule, input).expect("failed to parse");
-            let pair = parsed.next().expect("Nothing parsed");
+            let mut parsed = crate::grammar::Grammar::parse(crate::grammar::Rule::#rule, input).context("Parsing errors found.")?;
+            let pair = parsed.next().context("Parser grammar error")?;
 
             let config = crate::config::Config { input };
             let mut ctx = crate::Context::new(config, &arena);
             let #arg_name: #arg_ty = ctx.parse(pair);
-            eprintln!("{:?}", #arg_name);
+            eprintln!("Parsed expression: {:?}", #arg_name);
             #body
+            Ok(())
         }
     }
     .into()

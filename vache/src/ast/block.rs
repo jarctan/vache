@@ -64,7 +64,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Block<'ctx> {
 mod tests {
     use super::*;
 
-    #[parses("{ let x: int = 5; let y: int = 7; x }" as block)]
+    #[parses("{ var x: int = 5; var y: int = 7; x }" as block)]
     #[test]
     fn block(block: Block) {
         assert!(matches!(

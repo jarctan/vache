@@ -1,6 +1,6 @@
 program = { SOI ~ (fun | struct_def)* ~ &EOI }
 
-fun = { "fn" ~ ident ~ params ~ "->" ~ ty ~ block }
+fun = { "fn" ~ ident ~ params ~ ("->" ~ ty)? ~ block }
 
 params = {"(" ~ (vardef ~ ("," ~ vardef)*)? ~ ")"}
 

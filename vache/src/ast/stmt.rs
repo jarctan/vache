@@ -141,10 +141,10 @@ mod tests {
     use super::super::Ty;
     use super::*;
 
-    #[parses("let x: int = 4" as stmt)]
+    #[parses("var x: int = 4" as stmt)]
     #[test]
     fn declaration(stmt: Stmt) {
-        let (lhs, rhs) = stmt.as_declare().unwrap();
+        let (lhs, rhs) = stmt.as_declare().context("is not a declare")?;
         assert_eq!(lhs.name, "x");
         assert_eq!(lhs.ty, Ty::IntT);
         assert_eq!(rhs.as_integer().unwrap(), &BigInt::from(4));
@@ -153,7 +153,7 @@ mod tests {
     #[parses("y = 5" as stmt)]
     #[test]
     fn assignment(stmt: Stmt) {
-        let (lhs, rhs) = stmt.as_assign().unwrap();
+        let (lhs, rhs) = stmt.as_assign().context("is not a declare")?;
         assert_eq!(lhs, "y");
         assert_eq!(rhs.as_integer().unwrap(), &BigInt::from(5));
     }
@@ -161,7 +161,7 @@ mod tests {
     #[parses("\"test\"" as stmt)]
     #[test]
     fn expression(stmt: Stmt) {
-        let expr = stmt.as_expr().unwrap();
+        let expr = stmt.as_expr().context("is not a declare")?;
         assert_eq!(expr.as_string().unwrap(), "test");
     }
 

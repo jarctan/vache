@@ -74,7 +74,7 @@ pub fn binop_int_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Fun<'ctx> {
     fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
         debug_assert!(matches!(pair.as_rule(), Rule::fun));
-        let mut pairs = pair.into_inner();
+        let mut pairs = pair.into_inner().peekable();
 
         let name = pairs.next().unwrap().as_str();
 
@@ -85,7 +85,12 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Fun<'ctx> {
             .map(|param| ctx.parse(param))
             .collect();
 
-        let ret_ty = ctx.parse(pairs.next().unwrap());
+        let ret_ty = if pairs.peek().unwrap().as_rule() == Rule::ty {
+            ctx.parse(pairs.next().unwrap())
+        } else {
+            UnitT
+        };
+
         let body = ctx.parse(pairs.next().unwrap());
 
         Fun {
@@ -103,7 +108,7 @@ mod tests {
     use super::*;
 
     #[parses(
-        "fn main(x: int, y: str) -> () { let x: int = 5; y = 7; x }"
+        "fn main(x: int, y: str) { var x: int = 5; y = 7; x }"
         as fun
     )]
     #[test]
@@ -114,6 +119,24 @@ mod tests {
             [VarDef { ty: IntT, .. }, VarDef { ty: StrT, .. }]
         ));
         assert!(matches!(&fun.ret_ty, UnitT));
+        assert!(matches!(
+            &fun.body.stmts[..],
+            [Stmt::Declare(..), Stmt::Assign(..)]
+        ));
+    }
+
+    #[parses(
+        "fn my_fn(x: int, y: str) -> int { var x: int = 5; y = 7; x }"
+        as fun
+    )]
+    #[test]
+    fn my_fn(fun: Fun) {
+        assert_eq!(fun.name, "my_fn");
+        assert!(matches!(
+            &fun.params[..],
+            [VarDef { ty: IntT, .. }, VarDef { ty: StrT, .. }]
+        ));
+        assert!(matches!(&fun.ret_ty, IntT));
         assert!(matches!(
             &fun.body.stmts[..],
             [Stmt::Declare(..), Stmt::Assign(..)]
