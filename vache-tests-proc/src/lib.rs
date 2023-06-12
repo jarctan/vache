@@ -4,8 +4,8 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    parse_macro_input, Attribute, Block, Error, FnArg, Ident, ItemFn, LitStr, Pat, Result, Token,
-    Type, Expr,
+    parse_macro_input, Attribute, Block, Error, Expr, FnArg, Ident, ItemFn, LitStr, Pat, Result,
+    Token, Type,
 };
 
 #[macro_use]
@@ -70,7 +70,7 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                             #expected_output,
                             "Output mismatch for binary"
                         );
-        
+
                         let dest_file = cur_dir.join(binary_name);
                         ::std::fs::remove_file(&dest_file).context("failed to remove binary at the end of the test")?;
                         Ok(())
