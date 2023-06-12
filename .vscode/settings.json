@@ -27,6 +27,7 @@
         "preneighbors",
         "prettyplease",
         "repr",
+        "rustfmt",
         "rval",
         "rvalue",
         "selfvisitor",
