@@ -8,9 +8,11 @@ struct_def = { "struct" ~ ident ~ "{" ~ (vardef ~ "," )* ~ "}" }
 
 block = { "{" ~ stmt* ~ (expr)? ~ "}" }
 
-stmt = { while_loop | declare | assign | (expr ~ ";") }
+stmt = { while_loop | for_loop | declare | assign | (expr ~ ";") }
 
 while_loop = { "while" ~ expr ~ block }
+
+for_loop = { "for" ~ ident ~ "in" ~ expr ~ block }
 
 assign = { expr ~ "=" ~ expr ~ ";" }
 
@@ -59,7 +61,7 @@ str_ty = { "str" }
 
 int_ty = { "int" }
 
-keyword = { "var" | "struct" | "if" | "else" | "while" | "int" | "str" | "bool" | "fn" }
+keyword = { "var" | "struct" | "if" | "else" | "while" | "for" | "int" | "str" | "bool" | "fn" }
 
 infix = _{ add | sub | mul | div | rem | pow | le | lt | ge | gt }
 

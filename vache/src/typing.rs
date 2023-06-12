@@ -725,12 +725,19 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
                 ast::StmtKind::WhileS { cond, body } => {
                     let cond = self.visit_expr(cond);
-                    assert_eq!(
-                        cond.ty, BoolT,
-                        "condition {cond:?} should compute to a boolean value"
-                    );
-                    let body = self.visit_block(body);
+                    if cond.ty != BoolT {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message("expected type bool, found type int")
+                                .with_labels(vec![body.span.as_label().with_message("here")])
+                                .with_notes(vec![
+                                    "condition of while loop must be of type bool".to_string()
+                                ]),
+                        );
+                    }
 
+                    let body = self.visit_block(body);
                     if body.ret.ty != UnitT {
                         self.ctx.emit(
                             Diagnostic::error()
@@ -738,7 +745,54 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 .with_labels(vec![body.span.as_label().with_message("here")]),
                         );
                     }
+
                     WhileS { cond, body }
+                }
+                ast::StmtKind::ForS { item, iter, body } => {
+                    let stm = self.current_stratum();
+
+                    let iter = self.visit_expr(iter);
+
+                    let item_ty = match iter.ty.as_iter() {
+                        Some(item_ty) => item_ty,
+                        None => {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(TYPE_MISMATCH_ERROR)
+                                    .with_message(format!(
+                                        "Expected iterator, found type {}",
+                                        iter.ty
+                                    ))
+                                    .with_labels(vec![iter.span.as_label()])
+                                    .with_notes(vec![
+                                        "For loop requires an iterator here".to_string()
+                                    ]),
+                            );
+                            HoleT
+                        }
+                    };
+                    let item = item.with_type(item_ty);
+                    //
+                    // Introduce a new intermediate scope, in which `item` is defined`
+                    self.push_scope();
+
+                    self.add_var(item);
+                    let item = VarDef::with_stratum(item, stm);
+
+                    let body = self.visit_block(body);
+
+                    // Pop the intermediate scope
+                    self.pop_scope();
+
+                    if body.ret.ty != UnitT {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message("body of expression should not return anything")
+                                .with_labels(vec![body.span.as_label().with_message("here")]),
+                        );
+                    }
+                    ForS { item, iter, body }
                 }
                 ast::StmtKind::ExprS(e) => ExprS(self.visit_expr(e)),
             }

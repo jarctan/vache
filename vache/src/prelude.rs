@@ -6,19 +6,106 @@ use proc_macro2::TokenStream;
 pub fn prelude() -> TokenStream {
     quote!(
         #![feature(try_blocks)]
+        #![feature(step_trait)]
+
         #![allow(clippy::needless_late_init)]
         #![allow(unused_mut)]
         #![allow(unused_imports)]
         #![allow(dead_code)]
-        #[warn(unused_imports)]
-        #[warn(unused_parens)]
+        #![allow(unused_variables)]
+        #![allow(unused_parens)]
 
         use std::borrow::{Borrow, BorrowMut};
         use std::fmt;
         use std::mem::MaybeUninit;
         use std::ops::{Add, Deref, DerefMut, Div, Mul, Rem, Sub};
-        use num_traits::ToPrimitive;
+        use ::num_traits::ToPrimitive as __ToPrimitive;
         use ::anyhow::Context as __AnyhowContext;
+
+        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+        pub struct __Integer(::num_bigint::BigInt);
+
+        impl ::num_traits::ToPrimitive for __Integer {
+            fn to_i64(&self) -> Option<i64> {
+                self.0.to_i64()
+            }
+
+            fn to_u64(&self) -> Option<u64> {
+                self.0.to_u64()
+            }
+        }
+
+        impl ::std::iter::Step for __Integer {
+            fn steps_between(start: &Self, end: &Self) -> Option<usize> {
+                start.0.checked_sub(&end.0)?.try_into().ok()
+            }
+            fn forward_checked(start: Self, count: usize) -> Option<Self> {
+                Some(Self(start.0.checked_add(&count.into())?))
+            }
+            fn backward_checked(start: Self, count: usize) -> Option<Self> {
+                Some(Self(start.0.checked_sub(&count.into())?))
+            }
+        }
+
+        impl ::std::ops::Sub for __Integer {
+            type Output = Self;
+
+            fn sub(self, other: Self) -> Self {
+                Self(self.0 - other.0)
+            }
+        }
+
+        impl ::std::ops::Add for __Integer {
+            type Output = Self;
+
+            fn add(self, other: Self) -> Self {
+                Self(self.0 + other.0)
+            }
+        }
+
+        impl ::std::ops::Mul for __Integer {
+            type Output = Self;
+
+            fn mul(self, other: Self) -> Self {
+                Self(self.0 * other.0)
+            }
+        }
+
+        impl ::std::ops::Div for __Integer {
+            type Output = Self;
+
+            fn div(self, other: Self) -> Self {
+                Self(self.0 / other.0)
+            }
+        }
+
+        impl ::std::ops::Rem for __Integer {
+            type Output = Self;
+
+            fn rem(self, other: Self) -> Self {
+                Self(self.0 % other.0)
+            }
+        }
+
+        impl fmt::Display for __Integer {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                <::num_bigint::BigInt as fmt::Display>::fmt(&self.0, f)
+            }
+        }
+
+        impl fmt::Debug for __Integer {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                <::num_bigint::BigInt as fmt::Debug>::fmt(&self.0, f)
+            }
+        }
+
+        impl TryFrom<u128> for __Integer {
+            type Error = <u128 as ::std::convert::TryFrom<u128>>::Error;
+
+            fn try_from(t: u128) -> Result<Self, Self::Error> {
+                Ok(Self(t.try_into()?))
+            }
+        }
 
         #[derive(Clone)]
         pub struct __Range<T>(::std::ops::Range<T>);
@@ -32,6 +119,39 @@ pub fn prelude() -> TokenStream {
         impl<T: fmt::Display> fmt::Display for __Range<T> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(f, "{}..{}", self.0.start, self.0.end)
+            }
+        }
+
+        impl<T: Clone + ::std::iter::Step> IntoIterator for Cow<'_, __Range<T>> {
+            type Item = T;
+            type IntoIter = ::std::ops::Range<T>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.into_owned().0
+            }
+        }
+
+        impl<'a, 'b, Rhs: Clone, T: ::std::cmp::PartialEq<Rhs> + Clone> ::std::cmp::PartialEq<Cow<'a, Rhs>> for Cow<'b, T> {
+            fn eq(&self, other: &Cow<'a, Rhs>) -> bool {
+                <T as ::std::cmp::PartialEq<Rhs>>::eq(&**self, &**other)
+            }
+        }
+
+        impl<'a, 'b, Rhs: Clone, T: ::std::cmp::PartialOrd<Rhs> + Clone> ::std::cmp::PartialOrd<Cow<'a, Rhs>> for Cow<'b, T> {
+            fn partial_cmp(&self, other: &Cow<'a, Rhs>) -> Option<::std::cmp::Ordering> {
+                <T as ::std::cmp::PartialOrd<Rhs>>::partial_cmp(&**self, &**other)
+            }
+        }
+
+        impl<T: ::std::iter::Step + std::cmp::PartialOrd> ::std::iter::Step for Cow<'_, T> {
+            fn steps_between(start: &Self, end: &Self) -> Option<usize> {
+                <T as ::std::iter::Step>::steps_between(&**start, &**end)
+            }
+            fn forward_checked(start: Self, count: usize) -> Option<Self> {
+                Some(Cow::Owned(<T as ::std::iter::Step>::forward_checked(start.into_owned(), count)?))
+            }
+            fn backward_checked(start: Self, count: usize) -> Option<Self> {
+                Some(Cow::Owned(<T as ::std::iter::Step>::backward_checked(start.into_owned(), count)?))
             }
         }
 

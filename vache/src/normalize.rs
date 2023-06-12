@@ -283,7 +283,10 @@ impl<'ctx> Normalizer<'ctx> {
             }
             tast::Stmt::WhileS { cond, body } => {
                 let mut cond_block = vec![];
+                self.push_scope();
                 let cond = self.visit_expr(&mut cond_block, cond, Mode::Borrowed, structs);
+                self.pop_scope();
+
                 let (_, body) = self.visit_block(body, structs);
 
                 stmts.push(Stmt::While {
@@ -291,6 +294,24 @@ impl<'ctx> Normalizer<'ctx> {
                     cond,
                     body,
                 });
+            }
+            tast::Stmt::ForS { item, iter, body } => {
+                /*
+                HUGE TODO TODO TODO TODO TODO TODO
+                we are skipping loan analysis here!!!
+
+                let cond_block: Vec<Stmt> = default();
+
+                self.push_scope();
+                block.push(Stmt::Declare(*item));
+                let iter = self.visit_expr(&mut block, iter, default(), structs);
+                let (_, body) = self.visit_block(body, structs);
+                block.push(Stmt::While {
+                    cond_block,
+                    cond,
+                    body,
+                });
+                self.pop_scope();*/
             }
             tast::Stmt::ExprS(e) => {
                 self.visit_expr(stmts, e, Mode::Moved, structs);

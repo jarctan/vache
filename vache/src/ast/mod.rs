@@ -75,7 +75,7 @@ pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
                     let mut notes = vec![];
                     if !positives.is_empty() {
                         notes.push(format!(
-                            "Expected {}",
+                            "Expected either {}",
                             positives
                                 .iter()
                                 .map(pretty_print_rule)
@@ -86,7 +86,7 @@ pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
                     }
                     if !negatives.is_empty() {
                         notes.push(format!(
-                            "Did not except {}",
+                            "Are not allowed: {}",
                             negatives
                                 .iter()
                                 .map(pretty_print_rule)

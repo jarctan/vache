@@ -6,7 +6,7 @@ use std::sync::atomic::AtomicU64;
 
 use pest::iterators::Pair;
 
-use super::{Context, Parsable, Span, TyUse};
+use super::{Context, Parsable, Span, Ty, TyUse};
 use crate::grammar::*;
 use crate::utils::boxed;
 use crate::Arena;
@@ -101,8 +101,23 @@ impl<'ctx> VarUse<'ctx> {
     }
 
     /// Returns the variable name (w/o span information).
-    pub(crate) fn name(&self) -> Varname<'ctx> {
+    pub fn name(&self) -> Varname<'ctx> {
         self.name
+    }
+
+    /// Adds type information to the variable use to transform it into a
+    /// variable declaration.
+    ///
+    /// Useful during the typing phase, when we want to type untyped versions.
+    /// Note/TODO: will disappear when we support type inference (we will use
+    /// `VarDef` directly).
+    pub fn with_type(self, ty: Ty<'ctx>) -> VarDef<'ctx> {
+        VarDef {
+            var: self,
+            ty: ty.with_span(self.span), /* We'll say that the span of the `type` in the code is
+                                          * the same as the variable declaration */
+            span: self.span,
+        }
     }
 }
 

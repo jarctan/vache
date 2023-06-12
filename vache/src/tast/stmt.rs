@@ -20,6 +20,15 @@ pub enum Stmt<'ctx> {
         /// While body.
         body: Block<'ctx>,
     },
+    /// A for loop.
+    ForS {
+        /// Item used within the loop.
+        item: VarDef<'ctx>,
+        /// Element being iterated over.
+        iter: Expr<'ctx>,
+        /// For loop body.
+        body: Block<'ctx>,
+    },
     /// Hole statement.
     #[default]
     HoleS,

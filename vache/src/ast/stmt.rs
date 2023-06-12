@@ -5,7 +5,7 @@ use std::default::default;
 use pest::iterators::Pair;
 use ExprKind::*;
 
-use super::{Block, Expr, ExprKind, Place, Span, VarDef};
+use super::{Block, Expr, ExprKind, Place, Span, VarDef, VarUse};
 use super::{Context, Parsable};
 use crate::grammar::*;
 use crate::utils::boxed;
@@ -39,11 +39,22 @@ pub enum StmtKind<'ctx> {
     AssignS(Place<'ctx>, Expr<'ctx>),
     /// An expression, whose final value is discarded.
     ExprS(Expr<'ctx>),
-    /// A while statement.
+    /// A while loop.
     WhileS {
         /// Condition.
         cond: Expr<'ctx>,
         /// While body.
+        body: Block<'ctx>,
+    },
+    /// A for loop.
+    ForS {
+        /// Item used within the loop.
+        ///
+        /// TODO: change to `VarDef` when type inference is implemented.
+        item: VarUse<'ctx>,
+        /// Element being iterated over.
+        iter: Expr<'ctx>,
+        /// For loop body.
         body: Block<'ctx>,
     },
 }
@@ -106,6 +117,20 @@ impl<'ctx> Stmt<'ctx> {
             None
         }
     }
+
+    /// Sees this statement as a `for` loop.
+    ///
+    /// Returns: `(item, iter, body)`.
+    ///
+    /// # Errors
+    /// Returns `None` if the statement is not a `for` loop.
+    pub fn as_for_lop(&self) -> Option<(&VarUse, &Expr, &Block)> {
+        if let ForS { item, iter, body } = &self.kind {
+            Some((item, iter, body))
+        } else {
+            None
+        }
+    }
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
@@ -135,6 +160,13 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
                 let cond = ctx.parse(pairs.next().unwrap());
                 let body = ctx.parse(pairs.next().unwrap());
                 WhileS { cond, body }
+            }
+            Rule::for_loop => {
+                let mut pairs = pair.into_inner();
+                let item = ctx.parse(pairs.next().unwrap());
+                let iter = ctx.parse(pairs.next().unwrap());
+                let body = ctx.parse(pairs.next().unwrap());
+                ForS { item, iter, body }
             }
             rule => panic!("parser internal error: expected statement, found {rule:?}"),
         };

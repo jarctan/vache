@@ -50,9 +50,9 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             BoolT => quote!(bool),
             IntT => {
                 if show_lifetime {
-                    quote!(Cow<'a, ::num_bigint::BigInt>)
+                    quote!(Cow<'a, __Integer>)
                 } else {
-                    quote!(Cow<::num_bigint::BigInt>)
+                    quote!(Cow<__Integer>)
                 }
             }
             StrT => {
@@ -175,7 +175,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let i = i
                     .to_u128()
                     .expect("Integer {i} is too big to be represented in source code");
-                quote!(Cow::Owned(::num_bigint::BigInt::try_from(#i).unwrap()))
+                quote!(Cow::Owned( __Integer::try_from(#i).unwrap()))
             }
             StringE(s) => {
                 quote!(Cow::Owned(__String::from(#s)))
@@ -283,6 +283,15 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let body = self.visit_block(body);
                 quote! {
                     while #cond #body
+                }
+            }
+
+            Stmt::ForS { item, iter, body } => {
+                let item = format_ident!("{}", item.name().as_str());
+                let iter = self.visit_expr(iter);
+                let body = self.visit_block(body);
+                quote! {
+                    for #item in #iter #body
                 }
             }
             Stmt::HoleS => unreachable!(),
