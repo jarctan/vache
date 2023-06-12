@@ -543,7 +543,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     .iter()
                     .map(|(_, field)| field)
                     .fold(Stratum::static_stm(), |s1, Expr { stm: s2, .. }| {
-                        core::cmp::max(s1, *s2)
+                        std::cmp::max(s1, *s2)
                     });
                 Expr::new(
                     StructE {
@@ -592,6 +592,38 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     );
                 }
                 Expr::new(ArrayE(array), ty, common_stm, span)
+            }
+            ast::ExprKind::RangeE(box start, box end) => {
+                let start = self.visit_expr(start);
+                let end = self.visit_expr(end);
+
+                // Check that the type of both ends is `int`
+                if !start.ty.is_int() {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(TYPE_MISMATCH_ERROR)
+                            .with_message(format!("expected type int, found type {}", start.ty))
+                            .with_labels(vec![start.span.as_label()])
+                            .with_notes(vec!["ranges only work for integers".to_string()]),
+                    );
+                }
+                if !end.ty.is_int() {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(TYPE_MISMATCH_ERROR)
+                            .with_message(format!("expected type int, found type {}", end.ty))
+                            .with_labels(vec![end.span.as_label()])
+                            .with_notes(vec!["ranges only work for integers".to_string()]),
+                    );
+                }
+
+                let (start_stm, end_stm) = (start.stm, end.stm); // Necessary bc we move start before getting `start.stm`
+                Expr::new(
+                    RangeE(boxed(start), boxed(end)),
+                    IterT(self.ctx.alloc(IntT)),
+                    std::cmp::max(start_stm, end_stm),
+                    span,
+                )
             }
         }
     }

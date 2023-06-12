@@ -27,6 +27,8 @@ pub enum Value<'ctx> {
     StructV(&'ctx str, HashMap<&'ctx str, ValueRef>),
     /// Array.
     ArrayV(Vec<ValueRef>),
+    /// A range between `start` and `end`.
+    RangeV(ValueRef, ValueRef),
 }
 
 use Value::*;
@@ -39,6 +41,7 @@ impl fmt::Debug for Value<'_> {
             IntV(i) => fmt::Display::fmt(i, f),
             StrV(s) => write!(f, "\"{s}\""),
             BoolV(b) => fmt::Display::fmt(b, f),
+            RangeV(start, end) => write!(f, "{start:?}..{end:?}"),
             StructV(name, fields) => {
                 let mut display = f.debug_struct(name);
                 for (s, v) in fields {
@@ -60,6 +63,7 @@ impl fmt::Display for Value<'_> {
             StrV(s) => fmt::Display::fmt(s, f),
             BoolV(b) => fmt::Display::fmt(b, f),
             StructV(name, _) => fmt::Display::fmt(name, f),
+            RangeV(..) => write!(f, ".."),
             ArrayV(_) => write!(f, "[]"),
         }
     }

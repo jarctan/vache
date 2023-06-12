@@ -72,6 +72,10 @@ pub enum ExprKind<'ctx> {
     StringE(&'ctx str),
     /// A variable.
     PlaceE(Place<'ctx>),
+    /// A range.
+    ///
+    /// Format: `RangeE(start, end)`.
+    RangeE(Box<Expr<'ctx>>, Box<Expr<'ctx>>),
     /// An instance of a structure.
     StructE {
         /// Name (identifier).
@@ -364,6 +368,10 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                     panic!("Expected a function name")
                                 }
                             }
+                            Rule::range_postfix => RangeE(
+                                boxed(acc),
+                                boxed(ctx.parse(pair.into_inner().next().unwrap())),
+                            ),
                             rule => panic!("expected postfix, found {rule:?}"),
                         };
                         Expr { kind, span }

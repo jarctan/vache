@@ -20,10 +20,26 @@ pub fn prelude() -> TokenStream {
         use num_traits::ToPrimitive;
         use ::anyhow::Context as __AnyhowContext;
 
+        #[derive(Clone)]
+        pub struct __Range<T>(::std::ops::Range<T>);
+
+        impl<T> __Range<T> {
+            pub const fn new(start: T, end: T) -> Self {
+                Self(start..end)
+            }
+        }
+
+        impl<T: fmt::Display> fmt::Display for __Range<T> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{}..{}", self.0.start, self.0.end)
+            }
+        }
+
         use ::anyhow::Result as __Result;
         pub type __String = String;
+
         #[derive(Clone)]
-        pub struct __Vec<T>(std::vec::Vec<T>);
+        pub struct __Vec<T>(::std::vec::Vec<T>);
 
         impl<T> __Vec<T> {
             pub fn remove(&mut self, index: usize) -> __Result<T> {

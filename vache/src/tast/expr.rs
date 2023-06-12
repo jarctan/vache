@@ -60,6 +60,10 @@ pub enum ExprKind<'ctx> {
     StringE(&'ctx str),
     /// A place.
     PlaceE(Place<'ctx>),
+    /// A range.
+    ///
+    /// Format: `RangeE(start, end)`.
+    RangeE(Box<Expr<'ctx>>, Box<Expr<'ctx>>),
     /// An instance of a structure.
     StructE {
         /// Name (identifier).

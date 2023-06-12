@@ -45,12 +45,21 @@ pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<LocTr
                 InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
                     outs.clone() - lhs.place().def()
                         + lhs.place().uses_as_lhs()
-                        + fields.values().map(Loc::from)
+                        + fields
+                            .values()
+                            .map(|field| field.place.uses_as_rhs())
+                            .flatten()
                 }
                 InstrKind::Assign(lhs, RValue::Array(array)) => {
                     outs.clone() - lhs.place().def()
                         + lhs.place().uses_as_lhs()
-                        + array.iter().map(Loc::from)
+                        + array.iter().map(|item| item.place.uses_as_rhs()).flatten()
+                }
+                InstrKind::Assign(lhs, RValue::Range(start, end)) => {
+                    outs.clone() - lhs.place().def()
+                        + lhs.place().uses_as_lhs()
+                        + start.place.uses_as_rhs()
+                        + end.place.uses_as_rhs()
                 }
                 InstrKind::Call {
                     name: _,
@@ -150,6 +159,18 @@ fn loan_liveness<'ctx>(
                     }
                     ledger
                 }
+                InstrKind::Assign(lhs, RValue::Range(start, end)) => {
+                    let mut ledger = ins.clone();
+                    if var_flow[&label].outs.contains(lhs.loc()) {
+                        ledger.set_borrows(
+                            lhs.place(),
+                            ins.borrow(start, label) + ins.borrow(end, label),
+                        );
+                    } else {
+                        ledger.flush_place(lhs.place());
+                    }
+                    ledger
+                }
                 InstrKind::Call {
                     name: _,
                     args,
@@ -239,6 +260,13 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
             }
             InstrKind::Assign(_, RValue::Array(items)) => {
                 for item in items {
+                    if !outs.contains(item.loc()) {
+                        item.make_moved();
+                    }
+                }
+            }
+            InstrKind::Assign(_, RValue::Range(start, end)) => {
+                for item in [start, end] {
                     if !outs.contains(item.loc()) {
                         item.make_moved();
                     }

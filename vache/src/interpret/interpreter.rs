@@ -326,6 +326,11 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                 let array = array.iter().map(|v| self.get_ptr(v)).collect();
                 self.add_value(ArrayV(array), stratum)
             }
+            RValue::Range(start, end) => {
+                let start = self.get_ptr(start);
+                let end = self.get_ptr(end);
+                self.add_value(RangeV(start, end), stratum)
+            }
         }
     }
 

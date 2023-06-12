@@ -130,6 +130,13 @@ impl<'cfg> InstrKind<'cfg> {
                     }
                 }
             }
+            InstrKind::Assign(_, RValue::Range(start, end)) => {
+                for arg in [start, end] {
+                    if &arg.place() == to_find {
+                        *arg.mode_mut() = Mode::Cloned;
+                    }
+                }
+            }
             InstrKind::Assign(_, RValue::Struct { fields, .. }) => {
                 for field in fields.values_mut() {
                     if &field.place() == to_find {

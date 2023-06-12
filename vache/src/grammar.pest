@@ -22,7 +22,7 @@ expr = { if_then | block | binop | with_postfix }
 
 binop = { with_postfix ~ (infix ~ with_postfix)+ }
 
-with_postfix = { primitive ~ (field_postfix | index_postfix | call_postfix)* }
+with_postfix = { primitive ~ (field_postfix | index_postfix | call_postfix | range_postfix)* }
 
 primitive = { struct_instance | array | unit | integer | string | ident | "(" ~ expr ~ ")" }
 
@@ -31,6 +31,8 @@ field_postfix = { "." ~ ident }
 index_postfix = { "[" ~ primitive ~ "]" }
 
 call_postfix = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
+
+range_postfix =  { ".." ~ expr }
 
 struct_instance = { ident ~ "{" ~ (ident ~ ":" ~ expr ~ ",")* ~ "}" }
 

@@ -78,7 +78,14 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     quote!(Cow<__Vec<#ty>>)
                 }
             }
-            IterT(_) => todo!(),
+            IterT(ty) => {
+                let ty = Self::translate_type(ty, show_lifetime);
+                if show_lifetime {
+                    quote!(Cow<'a, __Range<#ty>>)
+                } else {
+                    quote!(Cow<__Range<#ty>>)
+                }
+            }
             HoleT => unreachable!(),
         }
     }
@@ -237,6 +244,11 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             BlockE(box block) => self.visit_block(block),
             HoleE => {
                 panic!("Cannot compile code with holes; your code probably even did not typecheck")
+            }
+            RangeE(box start, box end) => {
+                let start = self.visit_expr(start);
+                let end = self.visit_expr(end);
+                quote!(Cow::Owned(__Range::new(#start,#end)))
             }
         }
     }

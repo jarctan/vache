@@ -27,6 +27,10 @@ pub enum RValue<'ctx> {
     },
     /// Array creation.
     Array(Vec<Reference<'ctx>>),
+    /// Range.
+    ///
+    /// Format: `Range(start, end).`
+    Range(Reference<'ctx>, Reference<'ctx>),
 }
 
 impl<'ctx> fmt::Debug for RValue<'ctx> {
@@ -45,6 +49,7 @@ impl<'ctx> fmt::Debug for RValue<'ctx> {
                 res.finish()
             }
             Array(array) => f.debug_list().entries(array).finish(),
+            Range(start, end) => write!(f, "{start:?}..{end:?}"),
         }
     }
 }

@@ -70,25 +70,38 @@ impl<'ctx> Normalizer<'ctx> {
     ) -> Reference<'ctx> {
         match &mut e.kind {
             tast::ExprKind::UnitE => {
-                let vardef = self.fresh_vardef(UnitT);
+                let vardef = self.fresh_vardef(e.ty);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(Stmt::Declare(vardef));
                 stmts.push(Stmt::Assign(ptr, RValue::Unit));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::IntegerE(i) => {
-                let vardef = self.fresh_vardef(IntT);
+                let vardef = self.fresh_vardef(e.ty);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(Stmt::Declare(vardef));
                 stmts.push(Stmt::Assign(ptr, RValue::Integer(i)));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::StringE(s) => {
-                let vardef = self.fresh_vardef(StrT);
+                let vardef = self.fresh_vardef(e.ty);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(Stmt::Declare(vardef));
                 stmts.push(Stmt::Assign(ptr, RValue::String(s)));
                 Reference::new_moved(ptr)
+            }
+            tast::ExprKind::RangeE(start, end) => {
+                let vardef = self.fresh_vardef(e.ty);
+                let start_ptr = self.visit_expr(stmts, start, Mode::SBorrowed, structs);
+                let end_ptr = self.visit_expr(stmts, end, Mode::MutBorrowed, structs);
+                let final_ptr = Pointer::new(
+                    self.arena,
+                    self.arena
+                        .alloc(Place::IndexP(start_ptr.as_ptr(), end_ptr.as_ptr())),
+                );
+                stmts.push(Stmt::Declare(vardef));
+                stmts.push(Stmt::Assign(final_ptr, RValue::Range(start_ptr, end_ptr)));
+                Reference::new_moved(final_ptr)
             }
             tast::ExprKind::PlaceE(place) => {
                 place.mode = mode;
