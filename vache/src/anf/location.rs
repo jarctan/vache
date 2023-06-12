@@ -9,13 +9,13 @@ use std::fmt;
 
 use Place::*;
 
-use super::{Place, Pointer, Reference, Var};
+use super::{Place, Pointer, Reference, VarUse, Varname};
 
 /// Location: `var.fields*`. Example: `var.field1.field2.field3`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Loc<'ctx> {
     /// Variable.
-    VarL(Var<'ctx>),
+    VarL(Varname<'ctx>),
     /// A field in a struct.
     FieldL(&'ctx Loc<'ctx>, &'ctx str),
 }
@@ -40,15 +40,27 @@ impl<'a, 'ctx> From<&'a Self> for Loc<'ctx> {
     }
 }
 
-impl<'ctx> From<Var<'ctx>> for Loc<'ctx> {
-    fn from(var: Var<'ctx>) -> Self {
+impl<'ctx> From<Varname<'ctx>> for Loc<'ctx> {
+    fn from(var: Varname<'ctx>) -> Self {
         VarL(var)
     }
 }
 
-impl<'a, 'ctx> From<&'a Var<'ctx>> for Loc<'ctx> {
-    fn from(var: &Var<'ctx>) -> Self {
+impl<'a, 'ctx> From<&'a Varname<'ctx>> for Loc<'ctx> {
+    fn from(var: &Varname<'ctx>) -> Self {
         VarL(*var)
+    }
+}
+
+impl<'ctx> From<VarUse<'ctx>> for Loc<'ctx> {
+    fn from(var: VarUse<'ctx>) -> Self {
+        VarL(var.into())
+    }
+}
+
+impl<'a, 'ctx> From<&'a VarUse<'ctx>> for Loc<'ctx> {
+    fn from(var: &VarUse<'ctx>) -> Self {
+        VarL((*var).into())
     }
 }
 

@@ -9,7 +9,6 @@ pub mod fun;
 pub mod mode;
 pub mod place;
 pub mod program;
-pub mod selfvisitor;
 pub mod stmt;
 pub mod stratum;
 pub mod var;
@@ -20,11 +19,10 @@ pub use fun::Fun;
 pub use mode::Mode;
 pub use place::{Place, PlaceKind};
 pub use program::Program;
-pub use selfvisitor::SelfVisitor;
 pub use stmt::Stmt;
 pub use stratum::Stratum;
 #[cfg(test)]
 pub use var::vardef;
 pub use var::VarDef;
 
-pub use crate::ast::{Struct, Ty, Var};
+pub use crate::ast::{Span, Struct, Ty, TyUse, VarUse, Varname};

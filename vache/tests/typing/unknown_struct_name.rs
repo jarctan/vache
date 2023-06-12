@@ -7,54 +7,54 @@ use super::*;
 fn person_struct<'ctx>() -> Struct<'ctx> {
     Struct {
         name: "Person",
-        fields: vec![("name", StrT), ("age", IntT), ("country", StrT)]
+        fields: vec![("name", strT()), ("age", intT()), ("country", strT())]
             .into_iter()
             .collect(),
+        ..default()
     }
 }
 
 #[test]
-#[should_panic]
-fn unknown_struct_in_field() {
-    test(Program::new(
+#[should_fail(UNKNOWN_STRUCT_ERROR)]
+fn unknown_struct_in_field() -> Program {
+    Program::new(
         vec![Struct {
             name: "Person",
             fields: vec![
-                ("name", StrT),
-                ("age", IntT),
-                ("house", StructT("UnknownStruct")), // should fail
+                ("name", strT()),
+                ("age", intT()),
+                ("house", structT("UnknownStruct")), // should fail
             ]
             .into_iter()
             .collect(),
+            ..default()
         }],
         vec![],
-    ));
+    )
 }
 
 #[test]
-#[should_panic]
-fn unknown_struct_in_params() {
-    test(Program::new(
+#[should_fail(UNKNOWN_STRUCT_ERROR)]
+fn unknown_struct_in_params() -> Program {
+    Program::new(
         vec![person_struct()],
         vec![Fun {
             name: "test",
             params: vec![vardef("a", StructT("UnknownStruct"))], // should fail
-            ret_ty: UnitT,
             body: expr(UnitE),
+            ..default()
         }],
-    ));
+    )
 }
 
 #[test]
-#[should_panic]
-fn unknown_struct_in_declare() {
-    test(Program::new(
+#[should_fail(UNKNOWN_STRUCT_ERROR, TYPE_MISMATCH_ERROR)]
+fn unknown_struct_in_declare() -> Program {
+    Program::new(
         vec![person_struct()],
         vec![Fun {
             name: "test",
-            params: vec![],
-            ret_ty: UnitT,
-            body: stmts(vec![Declare(
+            body: stmts(vec![declare(
                 vardef("john", StructT("UnknownStruct")), // should fail
                 structure(
                     "Person",
@@ -65,6 +65,7 @@ fn unknown_struct_in_declare() {
                     ],
                 ),
             )]),
+            ..default()
         }],
-    ));
+    )
 }

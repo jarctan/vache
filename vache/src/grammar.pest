@@ -6,15 +6,15 @@ params = {"(" ~ (vardef ~ ("," ~ vardef)*)? ~ ")"}
 
 struct_def = { "struct" ~ ident ~ "{" ~ (vardef ~ "," )* ~ "}" }
 
-block = { "{" ~ (stmt ~ ";")* ~ (expr)? ~ "}" }
+block = { "{" ~ stmt* ~ (expr)? ~ "}" }
 
-stmt = { while_loop | declare | assign | expr }
+stmt = { while_loop | declare | assign | (expr ~ ";") }
 
 while_loop = { "while" ~ expr ~ block }
 
-assign = { expr ~ "=" ~ expr }
+assign = { expr ~ "=" ~ expr ~ ";" }
 
-declare = { "var" ~ vardef ~ "=" ~ expr }
+declare = { "var" ~ vardef ~ "=" ~ expr ~ ";" }
 
 vardef = {ident ~ ":" ~ ty}
 
@@ -40,7 +40,14 @@ integer = ${ '0'..'9' ~ ('0'..'9' | "_")* }
 
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
-ty = { array_ty | int_ty | str_ty | bool_ty | unit | ident }
+ty = { iter_ty | array_ty | int_ty | str_ty | bool_ty | unit | ident }
+
+// Separate iter_ty from others because it is left recursive
+iter_ty = { non_iter_ty ~ iter_tail+ }
+
+iter_tail = { ".." }
+
+non_iter_ty = { array_ty | int_ty | str_ty | bool_ty | unit | ident }
 
 array_ty = { "[" ~ ty ~ "]" }
 
@@ -52,14 +59,20 @@ int_ty = { "int" }
 
 keyword = { "var" | "struct" | "if" | "else" | "while" | "int" | "str" | "bool" | "fn" }
 
-infix = _{ add | sub | mul | div | mod | pow }
+infix = _{ add | sub | mul | div | rem | pow | le | lt | ge | gt }
 
 add = { "+" }
 sub = { "-" }
 mul = { "*" }
 div = { "/" }
-mod = { "%" }
+rem = { "%" }
 pow = { "^" }
+le = { "<=" }
+lt = { "<" }
+ge = { ">=" }
+gt = { ">" }
+eq =  { "==" }
+neq = { "!=" }
 
 ident = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 

@@ -84,28 +84,6 @@ impl<'ctx> MIRer<'ctx> {
         self.visit_program(p)
     }
 
-    /// Returns the variable with its suitable addressing:
-    /// * requested `mode` by default
-    /// * BUT if the stratum of the assigned value is clearly longer-lived, then
-    ///   we know we must own the value.
-    ///
-    /// Further refinements to the addressing mode will be made by the next
-    /// phases (liveness analysis for instance).
-    /*fn visit_vardef(
-        src: VarDef<'ctx>,
-        mode: &'ctx mut Mode,
-        dest: Option<&VarDef<'ctx>>,
-    ) -> Reference<'ctx> {
-        // If dest outlives, if must own the variable!
-        if let Some(dest) = dest && dest.stm < src.stm {
-            *mode = Mode::Cloned;
-        }
-        PlaceMode {
-            kind: src.name.into(),
-            mode,
-        }
-    }*/
-
     /// Visits a block. It It will add the nodes for that
     /// block in the CFG, and return the (entry) CFG label for it.
     ///

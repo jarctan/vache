@@ -1,6 +1,6 @@
 //! Defining typed functions.
 
-use super::{Block, Ty, VarDef};
+use super::{Block, TyUse, VarDef};
 
 /// A function in the typed AST.
 #[derive(Debug, Clone)]
@@ -11,7 +11,7 @@ pub struct Fun<'ctx> {
     /// and stratum.
     pub params: Vec<VarDef<'ctx>>,
     /// Return type.
-    pub ret_ty: Ty<'ctx>,
+    pub ret_ty: TyUse<'ctx>,
     /// Body of the function: a list of statements and
     /// a final expression.
     pub body: Block<'ctx>,

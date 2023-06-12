@@ -6,9 +6,10 @@ use super::*;
 fn person_struct<'ctx>() -> Struct<'ctx> {
     Struct {
         name: "Person",
-        fields: vec![("name", StrT), ("age", IntT), ("country", StrT)]
+        fields: vec![("name", strT()), ("age", intT()), ("country", strT())]
             .into_iter()
             .collect(),
+        ..default()
     }
 }
 
@@ -18,10 +19,8 @@ fn simple_structure() {
         vec![person_struct()],
         vec![Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
             body: stmts(vec![
-                Declare(
+                declare(
                     vardef("john", StructT("Person")),
                     structure(
                         "Person",
@@ -32,23 +31,22 @@ fn simple_structure() {
                         ],
                     ),
                 ),
-                Declare(vardef("n", StrT), field(var("john"), "name")),
+                declare(vardef("n", StrT), field(var("john"), "name")),
             ]),
+            ..default()
         }],
     ));
 }
 
 #[test]
-#[should_panic]
-fn access_unknown_field() {
-    test(Program::new(
+#[should_fail(FIELD_ACCESS_ERROR)]
+fn access_unknown_field() -> Program {
+    Program::new(
         vec![person_struct()],
         vec![Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
             body: stmts(vec![
-                Declare(
+                declare(
                     vardef("john", StructT("Person")),
                     structure(
                         "Person",
@@ -59,39 +57,37 @@ fn access_unknown_field() {
                         ],
                     ),
                 ),
-                Declare(vardef("n", StrT), field(var("john"), "test")), // should fail!
+                declare(vardef("n", StrT), field(var("john"), "test")), // should fail!
             ]),
+            ..default()
         }],
-    ));
+    )
 }
 
 #[test]
-#[should_panic]
-fn missing_field() {
-    test(Program::new(
+#[should_fail(STRUCT_INSTANCE_ERROR)]
+fn missing_field() -> Program {
+    Program::new(
         vec![person_struct()],
         vec![Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
-            body: stmts(vec![Declare(
+            body: stmts(vec![declare(
                 vardef("john", StructT("Person")), // should fail!
                 structure("Person", vec![("name", string("doe")), ("age", int(21))]),
             )]),
+            ..default()
         }],
-    ));
+    )
 }
 
 #[test]
-#[should_panic]
-fn extra_field() {
-    test(Program::new(
+#[should_fail(STRUCT_INSTANCE_ERROR)]
+fn extra_field() -> Program {
+    Program::new(
         vec![person_struct()],
         vec![Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
-            body: stmts(vec![Declare(
+            body: stmts(vec![declare(
                 vardef("john", StructT("Person")),
                 structure(
                     "Person",
@@ -103,20 +99,19 @@ fn extra_field() {
                     ],
                 ),
             )]),
+            ..default()
         }],
-    ));
+    )
 }
 
 #[test]
-#[should_panic]
-fn type_mismatch() {
-    test(Program::new(
+#[should_fail(TYPE_MISMATCH_ERROR)]
+fn type_mismatch() -> Program {
+    Program::new(
         vec![person_struct()],
         vec![Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
-            body: stmts(vec![Declare(
+            body: stmts(vec![declare(
                 vardef("john", StructT("Person")),
                 structure(
                     "Person",
@@ -127,6 +122,7 @@ fn type_mismatch() {
                     ],
                 ),
             )]),
+            ..default()
         }],
-    ));
+    )
 }

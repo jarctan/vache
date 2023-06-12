@@ -3,3 +3,4 @@ members = [
   "vache",
   "vache-tests-proc"
 ]
+resolver = "2"

@@ -2,29 +2,29 @@ use super::*;
 
 /// We assign to a variable `e` another variable `d` which is already out of
 /// scope.
+#[should_fail(UNKNOWN_VAR_ERROR)]
 #[test]
-#[should_panic]
-fn wrong_nested_scopes() {
-    test(vec![Fun {
+fn wrong_nested_scopes() -> Program {
+    vec![Fun {
         name: "wrong_scopes",
-        params: vec![],
-        ret_ty: UnitT,
         body: stmts(vec![
-            ExprS(block(stmts(vec![Declare(vardef("d", IntT), int(2))]))),
-            Declare(vardef("e", IntT), var("d")),
+            ExprS(block(stmts(vec![declare(vardef("d", IntT), int(2))]))).into(),
+            declare(vardef("e", IntT), var("d")),
         ]),
-    }]);
+        ..default()
+    }]
+    .into()
 }
 
 #[test]
 fn nested_scopes() {
     test(vec![Fun {
         name: "nested_scopes",
-        params: vec![],
-        ret_ty: UnitT,
         body: Block {
-            stmts: vec![Declare(vardef("e", IntT), int(2))],
-            ret: block(stmts(vec![Declare(vardef("d", IntT), var("e"))])),
+            stmts: vec![declare(vardef("e", IntT), int(2))],
+            ret: block(stmts(vec![declare(vardef("d", IntT), var("e"))])),
+            span: default(),
         },
+        ..default()
     }]);
 }

@@ -1,6 +1,8 @@
 //! Array-related examples.
 #![allow(missing_docs)]
 
+use std::default::default;
+
 use super::*;
 
 /// Create an array, and get an item from it.
@@ -9,11 +11,9 @@ pub fn simple_array_indexing() -> impl Into<Program<'static>> {
         vec![],
         vec![Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
             body: stmts(vec![
-                Declare(
-                    vardef("list", ArrayT(&StrT)),
+                declare(
+                    vardef("list", arrayT(&StrT)),
                     array([
                         string("tomato"),
                         string("lettuce"),
@@ -21,9 +21,10 @@ pub fn simple_array_indexing() -> impl Into<Program<'static>> {
                         string("avocado"),
                     ]),
                 ),
-                Declare(vardef("item", StrT), index(var("list"), int(1))),
+                declare(vardef("item", StrT), index(var("list"), int(1))),
                 print([var("item")]),
             ]),
+            ..default()
         }],
     )
 }
@@ -33,10 +34,8 @@ pub fn separate_index_for_array() -> impl Into<Program<'static>> {
         vec![],
         vec![Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
             body: stmts(vec![
-                Declare(
+                declare(
                     vardef("list", ArrayT(&StrT)),
                     array([
                         string("tomato"),
@@ -45,10 +44,11 @@ pub fn separate_index_for_array() -> impl Into<Program<'static>> {
                         string("avocado"),
                     ]),
                 ),
-                Declare(vardef("ix", IntT), int(2)),
-                Declare(vardef("item", StrT), index(var("list"), var("ix"))),
+                declare(vardef("ix", IntT), int(2)),
+                declare(vardef("item", StrT), index(var("list"), var("ix"))),
                 print([var("item"), var("ix")]),
             ]),
+            ..default()
         }],
     )
 }
@@ -58,10 +58,8 @@ pub fn simple_array_assignment() -> impl Into<Program<'static>> {
         vec![],
         vec![Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
             body: stmts(vec![
-                Declare(
+                declare(
                     vardef("list", ArrayT(&StrT)),
                     array([
                         string("tomato"),
@@ -70,11 +68,12 @@ pub fn simple_array_assignment() -> impl Into<Program<'static>> {
                         string("avocado"),
                     ]),
                 ),
-                Declare(vardef("ix", IntT), int(2)),
-                Assign(idx_place(var("list"), var("ix")), string("cucumber")),
-                Declare(vardef("item", StrT), index(var("list"), var("ix"))),
+                declare(vardef("ix", IntT), int(2)),
+                assign(idx_place(var("list"), var("ix")), string("cucumber")),
+                declare(vardef("item", StrT), index(var("list"), var("ix"))),
                 print([var("item"), var("ix")]),
             ]),
+            ..default()
         }],
     )
 }
@@ -84,10 +83,8 @@ pub fn assignment_while_borrowed() -> impl Into<Program<'static>> {
         vec![],
         vec![Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
             body: stmts(vec![
-                Declare(
+                declare(
                     vardef("list", ArrayT(&StrT)),
                     array([
                         string("tomato"),
@@ -96,12 +93,13 @@ pub fn assignment_while_borrowed() -> impl Into<Program<'static>> {
                         string("avocado"),
                     ]),
                 ),
-                Declare(vardef("ix", IntT), int(2)),
-                Declare(vardef("item_bef", StrT), index(var("list"), var("ix"))),
-                Assign(idx_place(var("list"), var("ix")), string("cucumber")),
-                Declare(vardef("item", StrT), index(var("list"), var("ix"))),
+                declare(vardef("ix", IntT), int(2)),
+                declare(vardef("item_bef", StrT), index(var("list"), var("ix"))),
+                assign(idx_place(var("list"), var("ix")), string("cucumber")),
+                declare(vardef("item", StrT), index(var("list"), var("ix"))),
                 print([var("item"), var("item_bef"), var("ix")]),
             ]),
+            ..default()
         }],
     )
 }
@@ -111,10 +109,8 @@ pub fn cloning_array() -> impl Into<Program<'static>> {
         vec![],
         vec![Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
             body: stmts(vec![
-                Declare(
+                declare(
                     vardef("list", ArrayT(&StrT)),
                     array([
                         string("tomato"),
@@ -123,13 +119,14 @@ pub fn cloning_array() -> impl Into<Program<'static>> {
                         string("avocado"),
                     ]),
                 ),
-                Declare(vardef("list2", ArrayT(&StrT)), var("list")),
-                Assign(idx_place(var("list2"), int(1)), string("cabbage")),
-                Assign(idx_place(var("list"), int(2)), string("cucumber")),
-                Declare(vardef("item1", StrT), index(var("list"), int(2))),
-                Declare(vardef("item2", StrT), index(var("list2"), int(1))),
+                declare(vardef("list2", ArrayT(&StrT)), var("list")),
+                assign(idx_place(var("list2"), int(1)), string("cabbage")),
+                assign(idx_place(var("list"), int(2)), string("cucumber")),
+                declare(vardef("item1", StrT), index(var("list"), int(2))),
+                declare(vardef("item2", StrT), index(var("list2"), int(1))),
                 print([var("item1"), var("item2")]),
             ]),
+            ..default()
         }],
     )
 }

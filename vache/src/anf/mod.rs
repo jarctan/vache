@@ -21,4 +21,4 @@ pub use program::Program;
 pub use rvalue::RValue;
 pub use stmt::Stmt;
 
-pub use crate::tast::{Mode, Stratum, Struct, Ty, Var, VarDef};
+pub use crate::tast::{Mode, Stratum, Struct, Ty, VarDef, VarUse, Varname};

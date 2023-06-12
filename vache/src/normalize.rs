@@ -41,35 +41,14 @@ impl<'ctx> Normalizer<'ctx> {
         self.stm = u64::from(self.stm).checked_sub(1).unwrap().into();
     }
 
-    /// Returns the variable with its suitable addressing:
-    /// * requested `mode` by default
-    /// * BUT if the stratum of the assigned value is clearly longer-lived, then
-    ///   we know we must own the value.
-    ///
-    /// Further refinements to the addressing mode will be made by the next
-    /// phases (liveness analysis for instance).
-    /*fn visit_vardef(
-        src: VarDef<'ctx>,
-        mode: &'ctx mut Mode,
-        dest: Option<&VarDef<'ctx>>,
-    ) -> Reference<'ctx> {
-        // If dest outlives, if must own the variable!
-        if let Some(dest) = dest && dest.stm < src.stm {
-            *mode = Mode::Cloned;
-        }
-        Reference {
-            pointer: src.name.into(),
-            mode,
-        }
-    }*/
-
     /// Creates a fresh variable definition.
     fn fresh_vardef(&self, ty: Ty<'ctx>) -> VarDef<'ctx> {
-        let var = Var::fresh(self.arena);
+        let var = VarUse::fresh(self.arena); // TODO: associate with the right codespan.
         VarDef {
-            name: var,
+            var,
             ty,
             stm: self.stm,
+            span: default(), // TODO: associate with the right codespan.
         }
     }
 
@@ -92,21 +71,21 @@ impl<'ctx> Normalizer<'ctx> {
         match &mut e.kind {
             tast::ExprKind::UnitE => {
                 let vardef = self.fresh_vardef(UnitT);
-                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name.into()));
+                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(Stmt::Declare(vardef));
                 stmts.push(Stmt::Assign(ptr, RValue::Unit));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::IntegerE(i) => {
                 let vardef = self.fresh_vardef(IntT);
-                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name.into()));
+                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(Stmt::Declare(vardef));
                 stmts.push(Stmt::Assign(ptr, RValue::Integer(i)));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::StringE(s) => {
                 let vardef = self.fresh_vardef(StrT);
-                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name.into()));
+                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(Stmt::Declare(vardef));
                 stmts.push(Stmt::Assign(ptr, RValue::String(s)));
                 Reference::new_moved(ptr)
@@ -127,8 +106,8 @@ impl<'ctx> Normalizer<'ctx> {
                         Reference::new(final_ptr, &mut place.mode)
                     }
                     tast::PlaceKind::IndexP(box e, box ix) => {
-                        let e_ptr = self.visit_expr(stmts, e, mode, structs);
-                        let ix_ptr = self.visit_expr(stmts, ix, mode, structs);
+                        let e_ptr = self.visit_expr(stmts, e, Mode::MutBorrowed, structs);
+                        let ix_ptr = self.visit_expr(stmts, ix, Mode::SBorrowed, structs);
                         let final_ptr = Pointer::new(
                             self.arena,
                             self.arena
@@ -145,7 +124,7 @@ impl<'ctx> Normalizer<'ctx> {
                     .collect();
 
                 let vardef = self.fresh_vardef(e.ty);
-                let destination = Pointer::new(self.arena, self.arena.alloc(vardef.name.into()));
+                let destination = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(Stmt::Declare(vardef));
 
                 stmts.push(Stmt::Call {
@@ -158,11 +137,11 @@ impl<'ctx> Normalizer<'ctx> {
             }
             tast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
                 // The switch variable
-                let cond = self.visit_expr(stmts, cond, mode, structs);
+                let cond = self.visit_expr(stmts, cond, Mode::SBorrowed, structs);
 
                 // Destination
                 let dest_def = self.fresh_vardef(iftrue.ret.ty);
-                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name.into()));
+                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
                 stmts.push(Stmt::Declare(dest_def));
 
                 // Branches
@@ -188,7 +167,7 @@ impl<'ctx> Normalizer<'ctx> {
             } => {
                 // Destination
                 let dest_def = self.fresh_vardef(Ty::StructT(s_name));
-                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name.into()));
+                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
                 stmts.push(Stmt::Declare(dest_def));
 
                 let field_vars = fields
@@ -209,7 +188,7 @@ impl<'ctx> Normalizer<'ctx> {
             tast::ExprKind::ArrayE(array) => {
                 // Destination
                 let dest_def = self.fresh_vardef(array[0].ty);
-                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name.into()));
+                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
                 stmts.push(Stmt::Declare(dest_def));
 
                 let array_vars = array
@@ -221,6 +200,7 @@ impl<'ctx> Normalizer<'ctx> {
 
                 Reference::new_moved(destination)
             }
+            tast::ExprKind::HoleE => panic!("Cannot compile code with holes; your code probably went through normalization even if it did not typecheck"),
         }
     }
 
@@ -260,15 +240,15 @@ impl<'ctx> Normalizer<'ctx> {
         structs: &HashMap<&'ctx str, Struct<'ctx>>,
     ) {
         match s {
-            tast::Stmt::Declare(vardef, expr) => {
+            tast::Stmt::DeclareS(vardef, expr) => {
                 stmts.push(Stmt::Declare(*vardef));
                 let tmp = self.visit_expr(stmts, expr, default(), structs);
                 stmts.push(Stmt::Assign(
-                    Pointer::new(self.arena, self.arena.alloc(Place::VarP(vardef.name))),
+                    Pointer::new(self.arena, self.arena.alloc(Place::VarP(vardef.name()))),
                     RValue::Place(tmp),
                 ));
             }
-            tast::Stmt::Assign(place, expr) => {
+            tast::Stmt::AssignS(place, expr) => {
                 let rhs = self.visit_expr(stmts, expr, default(), structs);
                 let lhs = match &mut place.kind {
                     tast::PlaceKind::VarP(ref var) => var.into(),
@@ -288,7 +268,7 @@ impl<'ctx> Normalizer<'ctx> {
                 let lhs = Pointer::new(self.arena, self.arena.alloc(lhs));
                 stmts.push(Stmt::Assign(lhs, RValue::Place(rhs)));
             }
-            tast::Stmt::While { cond, body } => {
+            tast::Stmt::WhileS { cond, body } => {
                 let mut cond_block = vec![];
                 let cond = self.visit_expr(&mut cond_block, cond, Mode::Borrowed, structs);
                 let (_, body) = self.visit_block(body, structs);
@@ -302,6 +282,7 @@ impl<'ctx> Normalizer<'ctx> {
             tast::Stmt::ExprS(e) => {
                 self.visit_expr(stmts, e, Mode::Moved, structs);
             }
+            tast::Stmt::HoleS => panic!("Normalization should not be run on a code with holes"),
         }
     }
 

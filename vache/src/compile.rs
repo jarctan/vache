@@ -1,7 +1,6 @@
 //! Compiler code.
 
 use std::default::default;
-use std::marker::PhantomData;
 
 use num_traits::ToPrimitive;
 use proc_macro2::TokenStream;
@@ -10,260 +9,32 @@ use ExprKind::*;
 use PlaceKind::*;
 use Ty::*;
 
-use crate::tast::{
-    Block, Expr, ExprKind, Fun, Mode, Place, PlaceKind, Program, Stmt, Struct, Ty, Var,
+use crate::{
+    tast::{
+        Block, Expr, ExprKind, Fun, Mode, Place, PlaceKind, Program, Stmt, Struct, Ty, Varname,
+    },
+    Context,
 };
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
-pub(crate) struct Compiler<'ctx> {
-    /// Phantom argument to bind to the `'ctx` lifetime.
-    _lifetime: PhantomData<&'ctx ()>,
+///
+/// 'c: compilation phase lifetime
+/// 'ctx: compiler context lifetime
+pub(crate) struct Compiler<'c, 'ctx: 'c> {
+    /// Compiler context.
+    ctx: &'c mut Context<'ctx>,
 }
-impl<'ctx> Compiler<'ctx> {
+impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     /// Creates a new compiler.
-    pub fn new() -> Self {
-        Self {
-            _lifetime: PhantomData,
-        }
-    }
-
-    /// Producing the necessary prelude for all our outputs.
-    fn prelude() -> TokenStream {
-        quote!(
-            #![allow(clippy::needless_late_init)]
-            #![allow(unused_mut)]
-            #![allow(dead_code)]
-            #[warn(unused_imports)]
-            #[warn(unused_parens)]
-
-            use std::borrow::{Borrow, BorrowMut};
-            use std::fmt;
-            use std::mem::MaybeUninit;
-            use std::ops::{Add, Deref, DerefMut, Div, Mul, Rem, Sub};
-            use num_traits::ToPrimitive;
-
-            pub enum Cow<'a, B>
-            where
-                B: 'a + Clone,
-            {
-                Borrowed(&'a B),
-                MutBorrowed(&'a mut B),
-                Owned(B),
-            }
-
-            impl<B: Clone> fmt::Debug for Cow<'_, B>
-            where
-                B: fmt::Debug,
-            {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    match *self {
-                        Cow::Borrowed(ref b) => write!(f, "&{:?}", b),
-                        Cow::MutBorrowed(ref b) => write!(f, "&mut {:?}", b),
-                        Cow::Owned(ref o) => write!(f, "{:?}", o),
-                    }
-                }
-            }
-
-            impl<B: Clone> fmt::Display for Cow<'_, B>
-            where
-                B: fmt::Display,
-            {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    match *self {
-                        Cow::Borrowed(ref b) => fmt::Display::fmt(b, f),
-                        Cow::MutBorrowed(ref b) => fmt::Display::fmt(b, f),
-                        Cow::Owned(ref o) => fmt::Display::fmt(o, f),
-                    }
-                }
-            }
-
-            impl<'a, B: 'a + Clone> Clone for Cow<'a, B> {
-                fn clone(&self) -> Self {
-                    match self {
-                        Cow::Borrowed(b) => Cow::Borrowed(b),
-                        Cow::MutBorrowed(b) => {
-                            let b: &B = b.borrow();
-                            Cow::Owned(b.to_owned())
-                        }
-                        Cow::Owned(ref b) => {
-                            let b: &B = b.borrow();
-                            Cow::Owned(b.to_owned())
-                        }
-                    }
-                }
-
-                fn clone_from(&mut self, source: &Self) {
-                    match (self, source) {
-                        (&mut Cow::Owned(ref mut dest), Cow::Owned(ref o)) => o.borrow().clone_into(dest),
-                        (t, s) => *t = s.clone(),
-                    }
-                }
-            }
-
-            impl<B: Clone> Cow<'_, B> {
-                pub fn into_owned(self) -> B {
-                    match self {
-                        Cow::Borrowed(borrowed) => borrowed.clone(),
-                        Cow::MutBorrowed(borrowed) => (*borrowed).clone(),
-                        Cow::Owned(owned) => owned,
-                    }
-                }
-            }
-
-            impl<B: Clone> Deref for Cow<'_, B> {
-                type Target = B;
-
-                fn deref(&self) -> &B {
-                    match self {
-                        Cow::Borrowed(borrowed) => borrowed,
-                        Cow::MutBorrowed(borrowed) => borrowed,
-                        Cow::Owned(ref owned) => owned.borrow(),
-                    }
-                }
-            }
-
-            impl<B: Clone> DerefMut for Cow<'_, B> {
-                fn deref_mut(&mut self) -> &mut B {
-                    match self {
-                        Cow::Borrowed(borrowed) => {
-                            *self = Cow::Owned(borrowed.clone());
-                            match self {
-                                Cow::Owned(ref mut owned) => owned,
-                                Cow::Borrowed(..) | Cow::MutBorrowed(..) => unreachable!(),
-                            }
-                        }
-                        Cow::MutBorrowed(borrowed) => borrowed,
-                        Cow::Owned(ref mut owned) => owned,
-                    }
-                }
-            }
-
-            /// Prelude function.
-            pub(crate) fn __eq<B: PartialEq + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
-                let b1: &B = x.borrow();
-                let b2: &B = y.borrow();
-                b1 == b2
-            }
-
-            /// Prelude function.
-            pub(crate) fn __add<'a, B: Add<Output = B> + Clone>(x: Cow<B>, y: Cow<B>) -> Cow<'a, B> {
-                Cow::Owned(x.into_owned() + y.into_owned())
-            }
-
-            /// Prelude function.
-            pub(crate) fn __sub<'a, B: Sub<Output = B> + Clone>(x: Cow<B>, y: Cow<B>) -> Cow<'a, B> {
-                Cow::Owned(x.into_owned() - y.into_owned())
-            }
-
-            /// Prelude function.
-            pub(crate) fn __mul<'a, B: Mul<Output = B> + Clone>(x: Cow<B>, y: Cow<B>) -> Cow<'a, B> {
-                Cow::Owned(x.into_owned() * y.into_owned())
-            }
-
-            /// Prelude function.
-            pub(crate) fn __div<'a, B: Div<Output = B> + Clone>(x: Cow<B>, y: Cow<B>) -> Cow<'a, B> {
-                Cow::Owned(x.into_owned() / y.into_owned())
-            }
-
-            /// Prelude function.
-            pub(crate) fn __rem<'a, B: Rem<Output = B> + Clone>(x: Cow<B>, y: Cow<B>) -> Cow<'a, B> {
-                Cow::Owned(x.into_owned() % y.into_owned())
-            }
-
-            /// Prelude function.
-            pub(crate) fn __ge<B: PartialOrd + Clone>(x: Cow<B>, y: Cow<B>) -> bool {
-                let b1: &B = x.borrow();
-                let b2: &B = y.borrow();
-                b1 >= b2
-            }
-
-            /// Prelude function.
-            #[allow(clippy::ptr_arg)]
-            pub(crate) fn __borrow<'b, 'c: 'b, 'a, B: Clone>(cow: &'c Cow<'a, B>) -> Cow<'b, B> {
-                match cow {
-                    Cow::Borrowed(b) => Cow::Borrowed(b),
-                    Cow::MutBorrowed(b) => Cow::Borrowed(b),
-                    Cow::Owned(ref o) => {
-                        let b: &'c B = o.borrow();
-                        Cow::Borrowed(b)
-                    }
-                }
-            }
-
-            /// Prelude function.
-            #[allow(clippy::ptr_arg)]
-            pub(crate) fn __borrow_mut<'b, 'c: 'b, 'a: 'b, B: Clone>(cow: &'c mut Cow<'a, B>) -> Cow<'b, B> {
-                match cow {
-                    Cow::Borrowed(b) => Cow::Borrowed(b),
-                    Cow::MutBorrowed(b) => Cow::Borrowed(b),
-                    Cow::Owned(ref mut o) => {
-                        let b: &'c mut B = o.borrow_mut();
-                        Cow::MutBorrowed(b)
-                    }
-                }
-            }
-
-            impl<'a, B: Clone> Borrow<B> for Cow<'a, B> {
-                fn borrow(&self) -> &B {
-                    self
-                }
-            }
-
-            impl<'a, B: Clone> BorrowMut<B> for Cow<'a, B> {
-                fn borrow_mut(&mut self) -> &mut B {
-                    self
-                }
-            }
-
-            impl<'a, 'c, 'b: 'c, B: Clone> Cow<'a, Vec<Cow<'b, B>>> {
-                pub fn remove(self, index: usize) -> Cow<'c, B> {
-                    match self {
-                        Cow::Borrowed(b) => b[index].clone(),
-                        Cow::MutBorrowed(array) => array.remove(index),
-                        Cow::Owned(mut array) => array.swap_remove(index),
-                    }
-                }
-            }
-
-            pub struct Field<T>(MaybeUninit<T>);
-
-            impl<T> Field<T> {
-                pub fn new(value: T) -> Self {
-                    Self(MaybeUninit::new(value))
-                }
-
-                pub fn take(&mut self) -> T {
-                    unsafe { std::mem::replace(&mut self.0, MaybeUninit::uninit()).assume_init() }
-                }
-
-                pub fn as_ref(&self) -> &T {
-                    unsafe { self.0.assume_init_ref() }
-                }
-
-                pub fn as_mut(&mut self) -> &mut T {
-                    unsafe { self.0.assume_init_mut() }
-                }
-            }
-
-            impl<T: Clone> Clone for Field<T> {
-                fn clone(&self) -> Self {
-                    Self::new(self.as_ref().clone())
-                }
-            }
-
-            impl<T: ::std::fmt::Debug> ::std::fmt::Debug for Field<T> {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    write!(f, "{:?}", self.as_ref())
-                }
-            }
-        )
+    pub fn new(ctx: &'c mut Context<'ctx>) -> Self {
+        Self { ctx }
     }
 
     /// Compiles a program in our language into an executable source code.
     pub fn compile(&mut self, p: Program<'ctx>) -> String {
         let tokens = self.visit_program(p);
-        let prelude = Self::prelude();
+        let prelude = crate::prelude();
         let file = syn::parse2(quote! {
             #prelude
             #tokens
@@ -286,9 +57,9 @@ impl<'ctx> Compiler<'ctx> {
             }
             StrT => {
                 if show_lifetime {
-                    quote!(Cow<'a, String>)
+                    quote!(Cow<'a, __String>)
                 } else {
-                    quote!(Cow<String>)
+                    quote!(Cow<__String>)
                 }
             }
             StructT(name) => {
@@ -302,16 +73,18 @@ impl<'ctx> Compiler<'ctx> {
             ArrayT(ty) => {
                 let ty = Self::translate_type(ty, show_lifetime);
                 if show_lifetime {
-                    quote!(Cow<'a, Vec<#ty>>)
+                    quote!(Cow<'a, __Vec<#ty>>)
                 } else {
-                    quote!(Cow<Vec<#ty>>)
+                    quote!(Cow<__Vec<#ty>>)
                 }
             }
+            IterT(_) => todo!(),
+            HoleT => unreachable!(),
         }
     }
 
     /// Compiles a variable.
-    fn visit_var(&mut self, var: impl Into<Var<'ctx>>) -> TokenStream {
+    fn visit_var(&mut self, var: impl Into<Varname<'ctx>>) -> TokenStream {
         let ident = format_ident!("{}", var.into().as_str());
         quote!(#ident)
     }
@@ -324,23 +97,32 @@ impl<'ctx> Compiler<'ctx> {
                 match place.mode {
                     Mode::Cloned => quote!(#var.clone()),
                     Mode::Borrowed => quote!(__borrow(&#var)),
-                    Mode::SBorrowed => quote!((&#var)),
-                    Mode::MutBorrowed => quote!((&mut #var)),
+                    Mode::SBorrowed => quote!(#var),
+                    Mode::MutBorrowed => quote!(#var),
                     Mode::Moved => quote!(#var),
                     Mode::Assigning => quote!(#var),
                 }
             }
             IndexP(box array, box index) => {
+                let (line, col) = index.span.line_col(self.ctx.files);
+                let filename = self.ctx.files.name();
+                let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
                 let array = self.visit_expr(array);
                 let index = self.visit_expr(index);
                 let index = quote!((#index).to_usize().unwrap());
                 match place.mode {
-                    Mode::Borrowed => quote!(__borrow(&(#array)[#index])),
-                    Mode::SBorrowed => quote!((&(#array)[#index])),
-                    Mode::MutBorrowed => quote!(__borrow_mut(&mut (#array)[#index])),
-                    Mode::Cloned => quote!((#array)[#index].clone()),
-                    Mode::Moved => quote!((#array).remove(#index)),
-                    Mode::Assigning => quote!((#array)[#index]),
+                    Mode::Borrowed => {
+                        quote!(__borrow((#array).get(#index).context(#codespan)?))
+                    }
+                    Mode::SBorrowed => {
+                        quote!((#array).get(#index).context(#codespan)?)
+                    }
+                    Mode::MutBorrowed => {
+                        quote!(__borrow_mut((#array).get_mut(#index).context(#codespan)?))
+                    }
+                    Mode::Cloned => quote!((#array).get(#index).context(#codespan)?.clone()),
+                    Mode::Moved => quote!((#array).remove(#index).context(#codespan)?),
+                    Mode::Assigning => quote!((*(#array).get_mut(#index).context(#codespan)?)),
                 }
             }
             FieldP(box strukt, field) => {
@@ -352,7 +134,7 @@ impl<'ctx> Compiler<'ctx> {
                     Mode::MutBorrowed => quote!(__borrow_mut((#strukt).#field.as_mut())),
                     Mode::Cloned => quote!((#strukt).#field.clone().take()),
                     Mode::Moved => quote!((#strukt).#field.take()),
-                    Mode::Assigning => unimplemented!(),
+                    Mode::Assigning => quote!(*(#strukt).#field.as_mut()),
                 }
             }
         }
@@ -366,7 +148,7 @@ impl<'ctx> Compiler<'ctx> {
             .into_iter()
             .map(|(k, ty)| {
                 let k = format_ident!("{k}");
-                let ty = Self::translate_type(&ty, true);
+                let ty = Self::translate_type(&ty.kind, true);
                 quote!(#k: Field<#ty>,)
             })
             .collect();
@@ -389,7 +171,7 @@ impl<'ctx> Compiler<'ctx> {
                 quote!(Cow::Owned(::num_bigint::BigInt::try_from(#i).unwrap()))
             }
             StringE(s) => {
-                quote!(Cow::Owned(::std::string::String::from(#s)))
+                quote!(Cow::Owned(__String::from(#s)))
             }
             PlaceE(p) => self.visit_place(p),
             StructE { name, fields } => {
@@ -405,13 +187,13 @@ impl<'ctx> Compiler<'ctx> {
             }
             ArrayE(array) => {
                 let items = array.into_iter().map(|item| self.visit_expr(item));
-                quote!(Cow::Owned(vec![#(#items),*]))
+                quote!(Cow::Owned(__Vec(vec![#(#items),*])))
             }
             CallE { name, args } => {
                 if name == "print" {
                     let mut builder = StringBuilder::default();
 
-                    // Compute the format string
+                    // Compute the format string, which is essentially `{} {} {}...`
                     let mut args_iter = args.iter();
                     if args_iter.next().is_some() {
                         builder.append("{}");
@@ -440,7 +222,7 @@ impl<'ctx> Compiler<'ctx> {
                         _ => name.to_string(),
                     };
                     let name = format_ident!("{name}");
-                    quote!(#name(#(#args),*))
+                    quote!(#name(#(#args),*)?)
                 }
             }
             IfE(box cond, box iftrue, box iffalse) => {
@@ -453,21 +235,24 @@ impl<'ctx> Compiler<'ctx> {
                 }
             }
             BlockE(box block) => self.visit_block(block),
+            HoleE => {
+                panic!("Cannot compile code with holes; your code probably even did not typecheck")
+            }
         }
     }
 
     /// Compiles a single statement.
     fn visit_stmt(&mut self, stmt: Stmt<'ctx>) -> TokenStream {
         match stmt {
-            Stmt::Declare(lhs, rhs) => {
-                let name = format_ident!("{}", lhs.name.as_str());
+            Stmt::DeclareS(lhs, rhs) => {
+                let name = format_ident!("{}", lhs.name().as_str());
                 let ty = Self::translate_type(&lhs.ty, false);
                 let rhs = self.visit_expr(rhs);
                 quote! {
                     let mut #name: #ty = #rhs;
                 }
             }
-            Stmt::Assign(lhs, rhs) => {
+            Stmt::AssignS(lhs, rhs) => {
                 assert!(matches!(lhs.mode, Mode::Assigning));
                 let lhs = self.visit_place(lhs);
                 let rhs = self.visit_expr(rhs);
@@ -481,13 +266,14 @@ impl<'ctx> Compiler<'ctx> {
                     #expr;
                 }
             }
-            Stmt::While { cond, body } => {
+            Stmt::WhileS { cond, body } => {
                 let cond = self.visit_expr(cond);
                 let body = self.visit_block(body);
                 quote! {
                     while #cond #body
                 }
             }
+            Stmt::HoleS => unreachable!(),
         }
     }
 
@@ -518,7 +304,7 @@ impl<'ctx> Compiler<'ctx> {
             .params
             .into_iter()
             .map(|param| {
-                let name = format_ident!("{}", param.name.as_str());
+                let name = format_ident!("{}", param.name().as_str());
                 let ty = Self::translate_type(&param.ty, true);
                 quote! {
                     #name: #ty
@@ -526,23 +312,30 @@ impl<'ctx> Compiler<'ctx> {
             })
             .collect();
 
-        let body = self.visit_block(f.body);
-
-        let ret_ty = match f.ret_ty {
-            UnitT => quote!(),
+        let ret_ty = match f.ret_ty.kind {
+            UnitT => quote!(::anyhow::Result<()>),
             ty => {
                 let ty = Self::translate_type(&ty, true);
-                quote!(-> #ty)
+                quote!(::anyhow::Result<#ty>)
             }
         };
 
+        let body = self.visit_block(f.body);
+
+        let body = quote! {{
+            let res: #ret_ty = try {
+                #body
+            };
+            res
+        }};
+
         if params.is_empty() {
             quote! {
-                pub fn #name(#(#params),*) #ret_ty #body
+                pub fn #name(#(#params),*) -> #ret_ty #body
             }
         } else {
             quote! {
-                pub fn #name<'a>(#(#params),*) #ret_ty #body
+                pub fn #name<'a>(#(#params),*) -> #ret_ty #body
             }
         }
     }

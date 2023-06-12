@@ -7,17 +7,18 @@ use super::*;
 fn basic_lifetime() {
     test(vec![Fun {
         name: "main",
-        params: vec![],
-        ret_ty: UnitT,
         body: Block {
-            stmts: vec![Declare(vardef("x", IntT), int(5))],
-            ret: BlockE(boxed(Block {
+            stmts: vec![declare(vardef("x", IntT), int(5))],
+            ret: block(Block {
                 stmts: vec![
-                    Declare(vardef("y", IntT), int(6)),
-                    Assign(Place::from("y"), var("x")),
+                    declare(vardef("y", IntT), int(6)),
+                    assign(Place::from("y"), var("x")),
                 ],
-                ret: UnitE,
-            })),
+                ret: UnitE.into(),
+                span: default(),
+            }),
+            span: default(),
         },
+        ..default()
     }]);
 }

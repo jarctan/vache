@@ -6,7 +6,7 @@ use std::fmt;
 use slab::Slab;
 
 use super::value::{Value, ValueRef};
-use crate::{mir::Var, tast::Stratum};
+use crate::{mir::Varname, tast::Stratum};
 
 /// Execution environment.
 ///
@@ -18,7 +18,7 @@ pub struct Env<'ctx> {
     /// Slab of actual values.
     slab: Slab<Value<'ctx>>,
     /// Map between vars and their keys in the slab.
-    var_env: HashMap<Var<'ctx>, ValueRef>,
+    var_env: HashMap<Varname<'ctx>, ValueRef>,
     /// Stratum id for this environment.
     stratum: Stratum,
     /// Reference to the dummy value for uninitialized variables.
@@ -73,12 +73,12 @@ impl<'ctx> Env<'ctx> {
     }
 
     /// Gets the definition of a variable.
-    pub fn get_var(&self, v: impl AsRef<Var<'ctx>>) -> Option<&ValueRef> {
+    pub fn get_var(&self, v: impl AsRef<Varname<'ctx>>) -> Option<&ValueRef> {
         self.var_env.get(v.as_ref())
     }
 
     /// Gets a mutable reference into the definition of a variable.
-    pub fn get_var_mut(&mut self, v: impl AsRef<Var<'ctx>>) -> Option<&mut ValueRef> {
+    pub fn get_var_mut(&mut self, v: impl AsRef<Varname<'ctx>>) -> Option<&mut ValueRef> {
         self.var_env.get_mut(v.as_ref())
     }
 
@@ -88,7 +88,7 @@ impl<'ctx> Env<'ctx> {
     /// Panics if the var is not stated as declared in that stratum/environment.
     /// You should only add a var definition in the stratum in which it is
     /// tied to.
-    pub fn add_var(&mut self, name: impl Into<Var<'ctx>>) {
+    pub fn add_var(&mut self, name: impl Into<Varname<'ctx>>) {
         self.var_env.insert(name.into(), self.uninit);
     }
 

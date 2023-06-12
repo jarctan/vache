@@ -672,9 +672,14 @@ mod tests {
     fn multiple_ins_mir() {
         use crate::*;
         let arena = Arena::new();
-        let config = Config { input: "" };
+        let config = default();
         let mut ctx = Context::new(config, &arena);
-        let mut checked = check(&mut ctx, crate::examples::while_loop());
+        let mut checked = check(&mut ctx, crate::examples::while_loop())
+            .unwrap()
+            .unwrap_or_else(|e| {
+                e.display();
+                panic!();
+            });
         let mir = borrow_check(mir(&mut checked));
         let cfg = &mir.funs["main"].body;
         let edges = cfg.node_map[&NodeIx(6)]
@@ -706,9 +711,14 @@ mod tests {
     fn dominators() {
         use crate::*;
         let arena = Arena::new();
-        let config = Config { input: "" };
+        let config = default();
         let mut ctx = Context::new(config, &arena);
-        let mut checked = check(&mut ctx, crate::examples::simple_if());
+        let mut checked = check(&mut ctx, crate::examples::simple_if())
+            .unwrap()
+            .unwrap_or_else(|e| {
+                e.display();
+                panic!();
+            });
         let mir = borrow_check(mir(&mut checked));
         let main_fn = &mir.funs["main"];
         let dominators = main_fn.body.dominators(main_fn.entry_l);
@@ -730,9 +740,14 @@ mod tests {
     fn immediate_dominators() {
         use crate::*;
         let arena = Arena::new();
-        let config = Config { input: "" };
+        let config = default();
         let mut ctx = Context::new(config, &arena);
-        let mut checked = check(&mut ctx, crate::examples::simple_if());
+        let mut checked = check(&mut ctx, crate::examples::simple_if())
+            .unwrap()
+            .unwrap_or_else(|e| {
+                e.display();
+                panic!();
+            });
         let mir = borrow_check(mir(&mut checked));
         eprintln!("MIR: {mir:?}");
         let main_fn = &mir.funs["main"];

@@ -1,9 +1,15 @@
 //! Toy Vache language compiler.
 
-use anyhow::Context as AnyhowContext;
+#![feature(try_blocks)]
+
+use std::process::Command;
+
+use anyhow::{bail, Context as AnyhowContext};
 use clap::{Parser, Subcommand};
+use unindent::Unindent;
 use vache_lib::{
-    borrow_check, check, config::Config, examples::parse_file, mir, run, Arena, Context,
+    borrow_check, check, compile, config::Config, examples::parse_file, execute, mir, Arena,
+    Context,
 };
 
 #[derive(Parser, Debug)]
@@ -16,6 +22,11 @@ struct Cli {
 /// Vache commands.
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Gives the MIR output of a program.
+    Mir {
+        /// The input file to compile.
+        filename: String,
+    },
     /// Compiles a program.
     Compile {
         /// The input file to compile.
@@ -29,41 +40,75 @@ enum Commands {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Check that cargo exist, since we need it to compile.
+    let cargo_chk = Command::new("cargo").arg("--version").output()?;
+    if !cargo_chk.status.success() {
+        bail!("rust/cargo binary could not be found on the system.
+            You need to install rust + cargo first (https://rustup.rs/)."
+            .unindent());
+    }
+
     match Cli::parse().command {
-        Commands::Compile { ref filename } => {
+        Commands::Mir { ref filename } => {
             let arena = Arena::new();
+            let cur_dir = std::env::current_dir().context("Current dir not found")?;
             let input: &str =
                 arena.alloc(std::fs::read_to_string(filename).with_context(|| {
-                    format!(
-                        "Failed to open file `{filename}` in {}",
-                        std::env::current_dir().unwrap_or_default().display()
-                    )
+                    format!("Failed to open file `{filename}` in {}", cur_dir.display())
                 })?);
-            let config = Config { input };
+            let config = Config {
+                input,
+                filename: Some(filename),
+            };
             let mut context = Context::new(config, &arena);
 
             let program = parse_file(&mut context).context("Compilation failed")?;
-            let mut checked = check(&mut context, program);
-            let mir = borrow_check(mir(&mut checked));
-            println!("{mir:?}");
+            match check(&mut context, program)? {
+                Ok(mut checked) => {
+                    let mir = borrow_check(mir(&mut checked));
+                    println!("{:#?}", mir);
+                    Ok(())
+                }
+                Err(diagnostics) => {
+                    diagnostics.display()?;
+                    bail!("Compile errors found");
+                }
+            }
+        }
+        Commands::Compile { ref filename } => {
+            let arena = Arena::new();
+            let cur_dir = std::env::current_dir().context("Current dir not found")?;
+            let input: &str =
+                arena.alloc(std::fs::read_to_string(filename).with_context(|| {
+                    format!("Failed to open file `{filename}` in {}", cur_dir.display())
+                })?);
+            let config = Config {
+                input,
+                filename: Some(filename),
+            };
+            let mut context = Context::new(config, &arena);
+
+            let program = parse_file(&mut context).context("Compilation failed")?;
+            compile(&mut context, program, "binary", &cur_dir)?;
+            Ok(())
         }
         Commands::Run { ref filename } => {
             let arena = Arena::new();
+            let cur_dir = std::env::current_dir().context("Current dir not found")?;
             let input: &str =
                 arena.alloc(std::fs::read_to_string(filename).with_context(|| {
-                    format!(
-                        "Failed to open file `{filename}` in {}",
-                        std::env::current_dir().unwrap_or_default().display()
-                    )
+                    format!("Failed to open file `{filename}` in {}", cur_dir.display())
                 })?);
-            let config = Config { input };
+            let config = Config {
+                input,
+                filename: Some(filename),
+            };
             let mut context = Context::new(config, &arena);
             let program = parse_file(&mut context).context("Compilation failed")?;
-            let mut checked = check(&mut context, program);
-            borrow_check(mir(&mut checked));
-            let res = run(checked, "binary", &std::env::current_dir()?).context("runtime error")?;
+            let res =
+                execute(&mut context, program, "binary", &cur_dir).context("execution error")?;
             println!("{}", res);
+            Ok(())
         }
     }
-    Ok(())
 }

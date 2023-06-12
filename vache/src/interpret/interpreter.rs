@@ -14,7 +14,7 @@ use Value::*;
 
 use super::env::Env;
 use super::value::{Value, ValueRef};
-use crate::mir::{Branch, CfgI, CfgLabel, Fun, InstrKind, Mode, Place, Pointer, RValue, Var};
+use crate::mir::{Branch, CfgI, CfgLabel, Fun, InstrKind, Mode, Place, Pointer, RValue, Varname};
 use crate::tast::Stratum;
 
 /// Interpreter for our language.
@@ -118,8 +118,8 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
 
             // Introduce arguments in the typing context
             for (arg, value) in f.params.iter().zip(args.iter()) {
-                self.add_var(arg.name);
-                self.set_var(arg.name, *value);
+                self.add_var(arg.name());
+                self.set_var(arg.name(), *value);
             }
 
             self.visit_cfg(&f.body, f.entry_l);
@@ -153,7 +153,7 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
     }
 
     /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<Var<'ctx>>) -> ValueRef {
+    fn get_var(&self, v: impl AsRef<Varname<'ctx>>) -> ValueRef {
         let v = v.as_ref();
         // Iterate over environments in reverse (last declared first processed)
         // order
@@ -167,7 +167,7 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
     }
 
     /// Gets a mutable reference into the value of a variable.
-    fn get_var_mut(&mut self, v: impl AsRef<Var<'ctx>>) -> &mut ValueRef {
+    fn get_var_mut(&mut self, v: impl AsRef<Varname<'ctx>>) -> &mut ValueRef {
         // Iterate over environments in reverse (last declared first processed)
         // order
         // Returns the first environment that has that variable declared
@@ -180,12 +180,12 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
     }
 
     /// Declares a new variable in the context.
-    fn add_var(&mut self, name: impl Into<Var<'ctx>>) {
+    fn add_var(&mut self, name: impl Into<Varname<'ctx>>) {
         self.env.last_mut().unwrap().add_var(name.into());
     }
 
     /// Assigns a variable.
-    fn set_var(&mut self, name: impl AsRef<Var<'ctx>>, value: impl Into<ValueRef>) {
+    fn set_var(&mut self, name: impl AsRef<Varname<'ctx>>, value: impl Into<ValueRef>) {
         let name = name.as_ref();
         *self.get_var_mut(name) = value.into();
     }
@@ -318,10 +318,6 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                 let v_ref = self.get_ptr(place.as_ptr());
                 self.opt_clone(&place.mode(), v_ref, stratum)
             }
-            /*RValue::MovedVar(v) => {
-                let v_ref = self.get_var(v);
-                self.opt_clone(&Mode::Moved, v_ref, stratum)
-            }*/
             RValue::Struct { name, fields } => {
                 let fields = fields.iter().map(|(&k, v)| (k, self.get_ptr(v))).collect();
                 self.add_value(StructV(name, fields), stratum)
@@ -339,7 +335,7 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
         let branch = match &cfg[&label].kind {
             InstrKind::Noop => DefaultB,
             InstrKind::Declare(v) => {
-                self.add_var(v.name);
+                self.add_var(v.name());
                 DefaultB
             }
             InstrKind::Assign(ptr, rvalue) => {

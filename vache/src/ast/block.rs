@@ -1,8 +1,11 @@
 //! Parsing blocks, and defining their representation in the AST.
 
-use pest::iterators::Pair;
+use std::default::default;
 
-use super::{Context, Expr, Parsable, Stmt};
+use pest::iterators::Pair;
+use ExprKind::*;
+
+use super::{Context, Expr, ExprKind, Parsable, Span, Stmt};
 use crate::grammar::*;
 
 /// A block in the parser AST.
@@ -14,12 +17,16 @@ pub struct Block<'ctx> {
     pub stmts: Vec<Stmt<'ctx>>,
     /// Final return expression.
     pub ret: Expr<'ctx>,
+    /// Codespan.
+    pub span: Span,
 }
 
 /// Creates a block only made of an expression.
-pub fn expr(expr: Expr<'_>) -> Block<'_> {
+pub fn expr<'ctx>(expr: impl Into<Expr<'ctx>>) -> Block<'ctx> {
+    let expr = expr.into();
     Block {
         stmts: vec![],
+        span: expr.span,
         ret: expr,
     }
 }
@@ -32,15 +39,18 @@ pub fn expr(expr: Expr<'_>) -> Block<'_> {
 ///
 /// The final expression is then chosen to be the unit, no-op expr.
 pub fn stmts<'ctx>(stmts: impl IntoIterator<Item = Stmt<'ctx>>) -> Block<'ctx> {
+    let stmts = stmts.into_iter().collect();
     Block {
-        stmts: stmts.into_iter().collect(),
-        ret: Expr::UnitE,
+        ret: UnitE.into(),
+        span: default(),
+        stmts,
     }
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Block<'ctx> {
     fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
         debug_assert!(matches!(pair.as_rule(), Rule::block | Rule::primitive));
+        let span = Span::from(pair.as_span());
         let mut stmts = vec![];
         let mut ret = None;
         for pair in pair.into_inner() {
@@ -56,21 +66,24 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Block<'ctx> {
         Block {
             stmts,
             ret: ret.unwrap_or_default(),
+            span,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use StmtKind::*;
+
+    use super::super::StmtKind;
     use super::*;
 
     #[parses("{ var x: int = 5; var y: int = 7; x }" as block)]
     #[test]
     fn block(block: Block) {
-        assert!(matches!(
-            &block.stmts[..],
-            [Stmt::Declare(..), Stmt::Declare(..)]
-        ));
+        assert_eq!(block.stmts.len(), 2);
+        assert!(matches!(block.stmts[0].kind, DeclareS(..)));
+        assert!(matches!(block.stmts[1].kind, DeclareS(..)));
         assert_eq!(block.ret.as_var().unwrap(), "x");
     }
 }

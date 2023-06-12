@@ -4,7 +4,7 @@ use std::{collections::HashMap, default::default};
 
 use pest::iterators::Pair;
 
-use super::{Context, Fun, Parsable, Struct, VarDef};
+use super::{Context, Fun, Parsable, Struct};
 use crate::grammar::*;
 
 /// A program: a collection of:
@@ -58,15 +58,8 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Program<'ctx> {
                     funs.insert(fun.name, fun);
                 }
                 Rule::struct_def => {
-                    let mut pairs = pair.into_inner();
-                    let name = pairs.next().unwrap().as_str();
-                    let fields = pairs
-                        .map(|field| {
-                            let vardef: VarDef = ctx.parse(field);
-                            (vardef.name.as_str(), vardef.ty)
-                        })
-                        .collect();
-                    structs.insert(name, Struct { name, fields });
+                    let s: Struct = ctx.parse(pair);
+                    structs.insert(s.name, s);
                 }
                 _ => unreachable!(),
             }

@@ -7,12 +7,14 @@
 #![feature(iter_collect_into)]
 #![feature(default_free_fn)]
 #![feature(iter_array_chunks)]
+#![feature(try_blocks)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
 mod anf;
 pub mod ast;
 mod borrowing;
+pub mod codes;
 mod compile;
 pub mod config;
 pub mod context;
@@ -22,6 +24,8 @@ mod interpret;
 pub mod mir;
 mod miring;
 mod normalize;
+mod prelude;
+pub mod reporter;
 mod tast;
 mod typing;
 mod utils;
@@ -47,6 +51,7 @@ use std::path::Path;
 
 use anyhow::Result;
 pub use context::Context;
+use prelude::prelude;
 pub use steps::{borrow_check, check, interpret, mir, run};
 pub use utils::arena::Arena;
 
@@ -56,10 +61,18 @@ pub fn compile<'ctx>(
     p: impl Into<ast::Program<'ctx>>,
     name: impl AsRef<str>,
     dest_dir: &Path,
-) {
-    let mut checked = check(ctx, p);
-    borrow_check(mir(&mut checked));
-    steps::cargo(steps::compile(checked), name.as_ref(), dest_dir).unwrap();
+) -> Result<()> {
+    match check(ctx, p)? {
+        Ok(mut checked) => {
+            borrow_check(mir(&mut checked));
+            steps::cargo(steps::compile(ctx, checked), name.as_ref(), dest_dir).unwrap();
+            Ok(())
+        }
+        Err(diagnostics) => {
+            diagnostics.display()?;
+            bail!("Compile errors found");
+        }
+    }
 }
 
 /// Executes program `p`, returning its standard output.
@@ -69,10 +82,17 @@ pub fn execute<'ctx>(
     name: impl AsRef<str>,
     dest_dir: &Path,
 ) -> Result<String> {
-    let mut checked: tast::Program<'ctx> = check(ctx, p);
-    borrow_check(mir(&mut checked));
-    let res = steps::run(checked, name, dest_dir)?;
-    Ok(res)
+    match check(ctx, p)? {
+        Ok(mut checked) => {
+            borrow_check(mir(&mut checked));
+            let res = steps::run(ctx, checked, name, dest_dir)?;
+            Ok(res)
+        }
+        Err(diagnostics) => {
+            diagnostics.display()?;
+            bail!("Compile errors found");
+        }
+    }
 }
 
 mod steps {
@@ -90,8 +110,10 @@ mod steps {
     use miring::MIRer;
     use normalize::Normalizer;
     use typing::Typer;
+    use unindent::Unindent;
 
     use super::*;
+    use crate::reporter::Diagnostics;
 
     /// Checks a given program.
     ///
@@ -104,9 +126,14 @@ mod steps {
     pub fn check<'ctx>(
         ctx: &mut Context<'ctx>,
         p: impl Into<ast::Program<'ctx>>,
-    ) -> tast::Program<'ctx> {
+    ) -> Result<Result<tast::Program<'ctx>, Diagnostics<'ctx>>> {
         let mut typer = Typer::new(ctx);
-        typer.check(p.into())
+        let res = typer.check(p.into());
+        if ctx.reporter.has_errors() {
+            Ok(Err(ctx.reporter.flush()))
+        } else {
+            Ok(Ok(res))
+        }
     }
 
     /// Borrow-checks a given program.
@@ -137,8 +164,8 @@ mod steps {
     ///
     /// Under the hood, in charge of allocating a new `Compiler` and launching
     /// it on your program.
-    pub fn compile<'ctx>(p: impl Into<tast::Program<'ctx>>) -> String {
-        let mut compiler = Compiler::new();
+    pub fn compile<'ctx>(ctx: &mut Context<'ctx>, p: impl Into<tast::Program<'ctx>>) -> String {
+        let mut compiler = Compiler::new(ctx);
         compiler.compile(p.into())
     }
 
@@ -153,12 +180,13 @@ mod steps {
 
     /// Runs a given MIR program.
     pub fn run<'ctx>(
+        ctx: &mut Context<'ctx>,
         p: impl Into<tast::Program<'ctx>>,
         name: impl AsRef<str>,
         dest_dir: &Path,
     ) -> Result<String> {
         let name = name.as_ref();
-        cargo(compile(p), name, dest_dir)?;
+        cargo(compile(ctx, p), name, dest_dir)?;
 
         // Cargo run on the file
         let run_cmd = Command::new(format!("./{name}"))
@@ -168,7 +196,8 @@ mod steps {
         if run_cmd.status.success() {
             Ok(String::from_utf8(run_cmd.stdout).unwrap())
         } else {
-            bail!("Your program failed");
+            Err(anyhow!("Program terminated with {}", run_cmd.status)
+                .context(::std::string::String::from_utf8(run_cmd.stderr).unwrap()))
         }
     }
 
@@ -216,14 +245,45 @@ mod steps {
 
         // Write Cargo file
         let mut file = File::create(target_dir.join("Cargo.toml"))?;
-        file.write_all(format!("[package]\nname = \"{binary_name}\"\nversion = \"1.0.0\"\nedition = \"2021\"\n\n[dependencies]\n num-bigint = \"0.4.3\"\nnum-traits = \"0.2.15\"\n\n\n[workspace]").as_bytes())?;
+        file.write_all(
+            format!(
+                "
+        [package]
+        name = \"{binary_name}\"
+        version = \"1.0.0\"
+        edition = \"2021\"
+        
+        [dependencies]
+        num-bigint = \"0.4.3\"
+        num-traits = \"0.2.15\"
+        thiserror = \"1.0.40\"
+        anyhow = \"1.0.71\"
+        
+        [workspace]"
+            )
+            .unindent()
+            .as_bytes(),
+        )?;
+        file.flush()?;
+
+        // Write Cargo toolchain file.
+        let mut file = File::create(target_dir.join("rust-toolchain.toml"))?;
+        file.write_all(
+            "
+            [toolchain]
+            channel = \"nightly-2023-06-01\"
+        "
+            .unindent()
+            .as_bytes(),
+        )?;
         file.flush()?;
 
         // Cargo run on the file
         let cargo_cmd = Command::new("cargo")
             .current_dir(target_dir)
-            .arg("run")
+            .arg("build")
             .arg("--release")
+            .arg("-q")
             .output()?;
 
         if !cargo_cmd.status.success() {

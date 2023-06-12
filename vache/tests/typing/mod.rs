@@ -8,14 +8,22 @@ mod simple;
 mod structures;
 mod unknown_struct_name;
 
+use std::default::default;
+
 use ::vache_lib::{config::Config, Context};
+use vache_lib::codes::*;
 use vache_lib::Arena;
 
 use super::*;
 
 fn test<'ctx>(p: impl Into<Program<'ctx>>) {
     let arena = Arena::new();
-    let config = Config { input: "" };
+    let config = Config {
+        input: "",
+        ..default()
+    };
     let mut context = Context::new(config, &arena);
-    vache_lib::check(&mut context, p.into());
+    if let Err(err) = vache_lib::check(&mut context, p.into()).expect("Compiler error") {
+        err.display().expect("Could not print typer errors");
+    }
 }

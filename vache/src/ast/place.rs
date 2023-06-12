@@ -3,7 +3,7 @@
 use pest::iterators::Pair;
 
 use super::{Context, Parsable};
-use super::{Expr, Var};
+use super::{Expr, ExprKind, VarUse};
 use crate::grammar::*;
 use crate::utils::boxed;
 
@@ -11,13 +11,14 @@ use crate::utils::boxed;
 #[derive(Debug, Clone)]
 pub enum Place<'ctx> {
     /// A mere variable.
-    VarP(Var<'ctx>),
+    VarP(VarUse<'ctx>),
     /// An index in an array/a map.
     IndexP(Box<Expr<'ctx>>, Box<Expr<'ctx>>),
     /// An field in a structure.
     FieldP(Box<Expr<'ctx>>, &'ctx str),
 }
 
+use ExprKind::*;
 use Place::*;
 
 /// Shortcut to create an indexed variable.
@@ -27,7 +28,7 @@ pub fn idx_place<'ctx>(array: impl Into<Expr<'ctx>>, index: impl Into<Expr<'ctx>
 
 impl<'ctx> From<&'ctx str> for Place<'ctx> {
     fn from(v: &'ctx str) -> Self {
-        VarP(Var::from(v))
+        VarP(VarUse::from(v))
     }
 }
 
@@ -36,8 +37,8 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Place<'ctx> {
         assert_eq!(pair.as_rule(), Rule::expr);
 
         let expr: Expr = ctx.parse(pair);
-        match expr {
-            Expr::PlaceE(place) => place,
+        match expr.kind {
+            PlaceE(place) => place,
             _ => panic!("Parser internal error: expected place, found {:?}", expr),
         }
     }

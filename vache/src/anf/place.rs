@@ -2,14 +2,14 @@
 
 use std::fmt;
 
-use super::{Loc, Pointer, Var};
+use super::{Loc, Pointer, VarUse, Varname};
 use crate::utils::set::Set;
 
 /// Kinds of places.
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Place<'ctx> {
     /// Variable.
-    VarP(Var<'ctx>),
+    VarP(Varname<'ctx>),
     /// A field in a struct.
     FieldP(Pointer<'ctx>, &'ctx str),
     /// An indexed slot into a location.
@@ -54,20 +54,37 @@ impl<'ctx> Place<'ctx> {
         match self {
             VarP(v) => [Loc::VarL(*v)].into_iter().collect(),
             FieldP(strukt, field) => [Loc::FieldL(strukt.loc(), field)].into_iter().collect(),
-            IndexP(array, index) => [array.loc(), index.loc()].into_iter().copied().collect(),
+            IndexP(array, index) => array
+                .place()
+                .uses_as_rhs()
+                .into_iter()
+                .chain(index.place().uses_as_rhs().into_iter())
+                .collect(),
         }
     }
 }
 
-impl<'ctx> From<Var<'ctx>> for Place<'ctx> {
-    fn from(var: Var<'ctx>) -> Self {
+impl<'ctx> From<Varname<'ctx>> for Place<'ctx> {
+    fn from(var: Varname<'ctx>) -> Self {
         VarP(var)
     }
 }
 
-impl<'a, 'ctx> From<&'a Var<'ctx>> for Place<'ctx> {
-    fn from(var: &'a Var<'ctx>) -> Self {
+impl<'a, 'ctx> From<&'a Varname<'ctx>> for Place<'ctx> {
+    fn from(var: &'a Varname<'ctx>) -> Self {
         VarP(*var)
+    }
+}
+
+impl<'ctx> From<VarUse<'ctx>> for Place<'ctx> {
+    fn from(var: VarUse<'ctx>) -> Self {
+        VarP(var.into())
+    }
+}
+
+impl<'a, 'ctx> From<&'a VarUse<'ctx>> for Place<'ctx> {
+    fn from(var: &'a VarUse<'ctx>) -> Self {
+        VarP((*var).into())
     }
 }
 

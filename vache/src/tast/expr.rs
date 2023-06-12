@@ -2,7 +2,7 @@
 
 use num_bigint::BigInt;
 
-use super::{Block, Place, Stratum, Ty};
+use super::{Block, Place, Span, Stratum, Ty};
 
 /// An expression in the typed AST.
 ///
@@ -15,6 +15,8 @@ pub struct Expr<'ctx> {
     pub ty: Ty<'ctx>,
     /// Stratum of the expression.
     pub stm: Stratum,
+    /// Code span,
+    pub span: Span,
 }
 
 impl<'ctx> Expr<'ctx> {
@@ -23,11 +25,24 @@ impl<'ctx> Expr<'ctx> {
         kind: impl Into<ExprKind<'ctx>>,
         ty: impl Into<Ty<'ctx>>,
         stm: impl Into<Stratum>,
+        span: impl Into<Span>,
     ) -> Self {
         Self {
             kind: kind.into(),
             ty: ty.into(),
             stm: stm.into(),
+            span: span.into(),
+        }
+    }
+
+    /// Creates a new `hole`/placeholder expression that holds the place for
+    /// some code located at `span`.
+    pub fn hole(span: impl Into<Span>) -> Self {
+        Self {
+            kind: HoleE,
+            ty: Ty::HoleT,
+            stm: Stratum::static_stm(),
+            span: span.into(),
         }
     }
 }
@@ -67,4 +82,8 @@ pub enum ExprKind<'ctx> {
     IfE(Box<Expr<'ctx>>, Box<Block<'ctx>>, Box<Block<'ctx>>),
     /// A block expression.
     BlockE(Box<Block<'ctx>>),
+    /// Hole expression.
+    HoleE,
 }
+
+use ExprKind::*;

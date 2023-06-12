@@ -1,21 +1,61 @@
 //! Parsing structs, and defining their representation in the AST.
 
 use std::collections::HashMap;
+use std::fmt;
 
-use super::Ty;
+use pest::iterators::Pair;
+
+use super::{Context, Parsable, VarDef};
+use super::{Span, Ty, TyUse};
+use crate::grammar::*;
 
 /// A C-like `struct`.
-#[derive(Debug, Clone)]
+#[derive(Clone, Default)]
 pub struct Struct<'ctx> {
     /// Name of the structure.
     pub name: &'ctx str,
     /// Map of field names and their types.
-    pub fields: HashMap<&'ctx str, Ty<'ctx>>,
+    pub fields: HashMap<&'ctx str, TyUse<'ctx>>,
+    /// Code span.
+    pub span: Span,
+}
+
+impl fmt::Debug for Struct<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            name,
+            fields,
+            span: _,
+        } = self; // So that if we add a new field, we don;'t forget it here
+
+        let mut res = f.debug_struct(name);
+        fields
+            .iter()
+            .fold(&mut res, |res, (name, ty)| res.field(name, ty));
+        res.finish()
+    }
 }
 
 impl<'ctx> Struct<'ctx> {
     /// Gets the type of a field in the structure.
-    pub fn get_field(&self, field: impl AsRef<str>) -> &Ty<'ctx> {
-        &self.fields[field.as_ref()]
+    pub fn get_field(&self, field: impl AsRef<str>) -> Option<Ty<'ctx>> {
+        self.fields.get(field.as_ref()).map(|ty| ty.kind)
+    }
+}
+
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Struct<'ctx> {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+        debug_assert!(matches!(pair.as_rule(), Rule::struct_def));
+
+        let span = Span::from(pair.as_span());
+        let mut pairs = pair.into_inner();
+        let name = pairs.next().unwrap().as_str();
+        let fields = pairs
+            .map(|field| {
+                let vardef: VarDef = ctx.parse(field);
+                (vardef.var.as_str(), vardef.ty)
+            })
+            .collect();
+        Struct { name, fields, span }
     }
 }

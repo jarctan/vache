@@ -3,6 +3,8 @@
 //! Complicated code to do simple things.
 #![allow(missing_docs)]
 
+use std::default::default;
+
 use super::*;
 
 pub fn id_fn() -> impl Into<Program<'static>> {
@@ -11,25 +13,26 @@ pub fn id_fn() -> impl Into<Program<'static>> {
         vec![
             Fun {
                 name: "id",
-                params: vec![vardef("n", IntT)],
-                ret_ty: IntT,
+                params: vec![vardef("n", intT())],
+                ret_ty: intT(),
                 body: expr(var("n")),
+                ..default()
             },
             Fun {
                 name: "main",
-                params: vec![],
-                ret_ty: UnitT,
                 body: stmts(vec![
-                    Declare(vardef("x", IntT), int(12)),
-                    Declare(
-                        vardef("res", IntT),
+                    declare(vardef("x", intT()), int(12)),
+                    declare(
+                        vardef("res", intT()),
                         block(Block {
-                            stmts: vec![Declare(vardef("n", IntT), call("id", vec![var("x")]))],
+                            stmts: vec![declare(vardef("n", intT()), call("id", vec![var("x")]))],
                             ret: var("n"),
+                            span: default(),
                         }),
                     ),
                     print(vec![var("res")]),
                 ]),
+                ..default()
             },
         ],
     )

@@ -31,7 +31,7 @@ pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<LocTr
             let outs: LocTree<()> = successors.map(|x| var_flow[&x].ins.clone()).sum();
             let ins: LocTree<()> = match &instr.kind {
                 InstrKind::Noop => outs.clone(),
-                InstrKind::Declare(var) => outs.clone() - Loc::from(var.name),
+                InstrKind::Declare(var) => outs.clone() - Loc::from(var.name()),
                 InstrKind::Assign(lhs, RValue::Unit)
                 | InstrKind::Assign(lhs, RValue::String(_))
                 | InstrKind::Assign(lhs, RValue::Integer(_)) => {
@@ -58,7 +58,9 @@ pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<LocTr
                     destination,
                 } => {
                     outs.clone() - destination.as_ref().map(|x| *x.loc())
-                        + args.iter().map(|x| *x.loc())
+                        + args
+                            .iter()
+                            .flat_map(|x| x.place().uses_as_rhs().into_iter())
                 }
                 InstrKind::Branch(v) => outs.clone() + Loc::from(v),
                 InstrKind::Return(v) => outs.clone() + Loc::from(v),
@@ -105,7 +107,7 @@ fn loan_liveness<'ctx>(
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
             let outs: Ledger = match &instr.kind {
                 InstrKind::Noop => ins.clone(),
-                InstrKind::Declare(var) => ins.clone() - Place::from(var.name),
+                InstrKind::Declare(var) => ins.clone() - Place::from(var.name()),
                 InstrKind::Assign(lhs, RValue::Unit)
                 | InstrKind::Assign(lhs, RValue::String(_))
                 | InstrKind::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs.place(),
@@ -229,7 +231,7 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
             | InstrKind::Branch(_)
             | InstrKind::Return(_) => (),
             // Optimize assignments for variables that are not live afterwards.
-            InstrKind::Assign(lhs, RValue::Place(_)) if !outs.contains(lhs.loc()) => {
+            InstrKind::Assign(lhs, _) if !outs.contains(lhs.loc()) => {
                 instr.kind = InstrKind::Noop;
             }
             InstrKind::Assign(_, RValue::Place(place)) => {
@@ -305,10 +307,10 @@ mod tests {
         let forty_two = 42.into();
 
         // Variables
-        let x = Var::from("x");
+        let x = VarUse::from("x");
         let x_def = vardef("x", Ty::IntT, stm);
         let x_ptr = Pointer::new(&arena, arena.alloc(x.into()));
-        let y = Var::from("y");
+        let y = VarUse::from("y");
         let y_def = vardef("y", Ty::IntT, stm);
         let y_ptr = Pointer::new(&arena, arena.alloc(y.into()));
 
@@ -366,10 +368,10 @@ mod tests {
         let forty_two = 42.into();
 
         // Variables
-        let x = Var::from("x");
+        let x = VarUse::from("x");
         let x_def = vardef("x", Ty::IntT, stm);
         let x_ptr = Pointer::new(&arena, arena.alloc(x.into()));
-        let y = Var::from("y");
+        let y = VarUse::from("y");
         let y_def = vardef("y", Ty::IntT, stm);
         let y_ptr = Pointer::new(&arena, arena.alloc(y.into()));
 
@@ -445,10 +447,10 @@ mod tests {
         let forty_two = 42.into();
 
         // Variables
-        let x = Var::from("x");
+        let x = VarUse::from("x");
         let x_def = vardef("x", Ty::IntT, stm);
         let x_ptr = Pointer::new(&arena, arena.alloc(x.into()));
-        let y = Var::from("y");
+        let y = VarUse::from("y");
         let y_def = vardef("y", Ty::IntT, stm);
         let y_ptr = Pointer::new(&arena, arena.alloc(y.into()));
 
@@ -527,10 +529,10 @@ mod tests {
         let thirty_six = 36.into();
 
         // Variables
-        let x = Var::from("x");
+        let x = VarUse::from("x");
         let x_def = vardef("x", Ty::IntT, stm);
         let x_ptr = Pointer::new(&arena, arena.alloc(x.into()));
-        let y = Var::from("y");
+        let y = VarUse::from("y");
         let y_def = vardef("y", Ty::IntT, stm);
         let y_ptr = Pointer::new(&arena, arena.alloc(y.into()));
 

@@ -9,19 +9,25 @@ fn mutual_structs() {
         vec![
             Struct {
                 name: "Person",
-                fields: vec![("name", StrT), ("age", IntT), ("house", StructT("House"))]
-                    .into_iter()
-                    .collect(),
+                fields: vec![
+                    ("name", strT()),
+                    ("age", intT()),
+                    ("house", structT("House")),
+                ]
+                .into_iter()
+                .collect(),
+                ..default()
             },
             Struct {
                 name: "House",
                 fields: vec![
-                    ("name", StrT),
-                    ("owner", StructT("Person")),
-                    ("built", IntT),
+                    ("name", strT()),
+                    ("owner", structT("Person")),
+                    ("built", intT()),
                 ]
                 .into_iter()
                 .collect(),
+                ..default()
             },
         ],
         vec![],

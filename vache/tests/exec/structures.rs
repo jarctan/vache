@@ -3,9 +3,10 @@ use super::*;
 fn person_struct<'ctx>() -> Struct<'ctx> {
     Struct {
         name: "Person",
-        fields: vec![("name", StrT), ("age", IntT), ("country", StrT)]
+        fields: vec![("name", strT()), ("age", intT()), ("country", strT())]
             .into_iter()
             .collect(),
+        ..default()
     }
 }
 
@@ -15,10 +16,8 @@ fn simple_field_access() -> Program {
         vec![person_struct()],
         vec![Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
             body: stmts(vec![
-                Declare(
+                declare(
                     vardef("john", StructT("Person")),
                     structure(
                         "Person",
@@ -29,9 +28,10 @@ fn simple_field_access() -> Program {
                         ],
                     ),
                 ),
-                Declare(vardef("n", StrT), field(var("john"), "name")),
+                declare(vardef("n", StrT), field(var("john"), "name")),
                 print(vec![var("n")]),
             ]),
+            ..default()
         }],
     )
 }

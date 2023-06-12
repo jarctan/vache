@@ -1,6 +1,6 @@
 //! Defining typed blocks.
 
-use super::{Expr, Stmt};
+use super::{Expr, Span, Stmt};
 
 /// A block in the typed AST.
 ///
@@ -11,4 +11,6 @@ pub struct Block<'ctx> {
     pub stmts: Vec<Stmt<'ctx>>,
     /// Final return expression.
     pub ret: Expr<'ctx>,
+    /// Code span.
+    pub span: Span,
 }

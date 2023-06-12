@@ -4,6 +4,8 @@
 //! to no problem, ie we preserve the value of our argument in the end and we
 //! compute the right thing.
 
+use std::default::default;
+
 use super::*;
 
 #[allow(missing_docs)]
@@ -11,22 +13,23 @@ pub fn custom_addition() -> impl Into<Program<'static>> {
     vec![
         Fun {
             name: "add",
-            params: vec![vardef("n", IntT), vardef("m", IntT)],
-            ret_ty: IntT,
+            params: vec![vardef("n", intT()), vardef("m", intT())],
+            ret_ty: intT(),
             body: expr(binop(var("m"), "+", var("n"))),
+            ..default()
         },
         Fun {
             name: "main",
-            params: vec![],
-            ret_ty: UnitT,
             body: Block {
                 stmts: vec![
-                    Declare(vardef("n", IntT), int(12)),
-                    Declare(vardef("res", IntT), call("add", vec![var("n"), var("n")])),
+                    declare(vardef("n", intT()), int(12)),
+                    declare(vardef("res", intT()), call("add", vec![var("n"), var("n")])),
                     print(vec![var("res"), var("n")]),
                 ],
-                ret: UnitE,
+                ret: UnitE.into(),
+                span: default(),
             },
+            ..default()
         },
     ]
 }

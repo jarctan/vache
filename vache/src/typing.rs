@@ -3,12 +3,14 @@
 use std::collections::{HashMap, HashSet};
 use std::default::default;
 
+use codespan_reporting::diagnostic::Label;
 use ExprKind::*;
 use PlaceKind::*;
 use Ty::*;
 
 use crate::ast::fun::binop_int_sig;
-use crate::ast::SelfVisitor;
+use crate::codes::*;
+use crate::reporter::Diagnostic;
 use crate::tast::*;
 use crate::utils::{boxed, keys_match};
 use crate::{ast, Context};
@@ -18,7 +20,7 @@ use crate::{ast, Context};
 /// Contains definitions for variables and functions.
 struct Env<'ctx> {
     /// Map between vars and their definitions.
-    var_env: HashMap<Var<'ctx>, ast::VarDef<'ctx>>,
+    var_env: HashMap<Varname<'ctx>, ast::VarDef<'ctx>>,
 }
 
 impl<'ctx> Env<'ctx> {
@@ -30,7 +32,7 @@ impl<'ctx> Env<'ctx> {
     }
 
     /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<Var<'ctx>>) -> Option<&ast::VarDef<'ctx>> {
+    fn get_var(&self, v: impl AsRef<Varname<'ctx>>) -> Option<&ast::VarDef<'ctx>> {
         self.var_env.get(v.as_ref())
     }
 
@@ -42,7 +44,7 @@ impl<'ctx> Env<'ctx> {
     /// tied to.
     fn add_var(&mut self, vardef: impl Into<ast::VarDef<'ctx>>) {
         let vardef = vardef.into();
-        self.var_env.insert(vardef.name.to_owned(), vardef);
+        self.var_env.insert(vardef.name(), vardef);
     }
 }
 
@@ -119,7 +121,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     ///
     /// It will return a reference into that definition, and the id of the
     /// stratum in which the variables resides.
-    fn get_var(&self, v: impl AsRef<Var<'ctx>>) -> Option<(&ast::VarDef<'ctx>, Stratum)> {
+    fn get_var(&self, v: impl AsRef<Varname<'ctx>>) -> Option<(&ast::VarDef<'ctx>, Stratum)> {
         // Iterate over environments in reverse (last declared first processed)
         // order
         // Returns the first environment that has that variable declared
@@ -137,20 +139,10 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         self.env.last_mut().unwrap().add_var(vardef);
     }
 
-    /// Gets the definition of a function.
-    fn get_fun(&self, f: impl AsRef<str>) -> Option<&ast::FunSig<'ctx>> {
-        self.fun_env.get(f.as_ref())
-    }
-
     /// Declares a new function in the context.
     fn add_fun(&mut self, fun_def: impl Into<ast::FunSig<'ctx>>) {
         let fun_def = fun_def.into();
         self.fun_env.insert(fun_def.name, fun_def);
-    }
-
-    /// Gets the definition of a structure.
-    fn get_struct(&self, s: impl AsRef<str>) -> Option<&Struct<'ctx>> {
-        self.struct_env.get(s.as_ref())
     }
 
     /// Declares a new structure in the context.
@@ -167,120 +159,258 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     /// Checks that `ty` is well defined in the environment.
     ///
     /// In particular, unknown structure names will raise an error.
-    fn check_ty(&self, ty: &Ty) {
-        match ty {
-            UnitT | BoolT | IntT | StrT => (),
-            ArrayT(ty) => self.check_ty(ty),
-            StructT(name) => assert!(
-                self.valid_type_names.contains(name),
-                "Unknown struct {name}"
-            ),
+    fn check_ty(&mut self, ty: ast::TyUse) {
+        match ty.kind {
+            UnitT | BoolT | IntT | StrT | HoleT => (),
+            ArrayT(item) => self.check_ty(item.with_span(ty.span)),
+            IterT(item) => self.check_ty(item.with_span(ty.span)),
+            StructT(name) => {
+                if !self.valid_type_names.contains(name) {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(UNKNOWN_STRUCT_ERROR)
+                            .with_message(format!("Unknown struct `{name}`"))
+                            .with_labels(vec![ty.span.into()]),
+                    );
+                }
+            }
         }
     }
 
-    /// Types a place (lhs expression).
-    fn visit_place(&mut self, place: ast::Place<'ctx>, mode: Mode) -> Place<'ctx> {
+    /// Type-checks a place (lhs expression).
+    fn visit_place(&mut self, place: ast::Place<'ctx>, mode: Mode) -> Option<Place<'ctx>> {
         match place {
             ast::Place::VarP(var) => {
-                let (vardef, stm) = self
-                    .get_var(var)
-                    .unwrap_or_else(|| panic!("Assigning to an undeclared variable {var}"));
-                Place::var(var, vardef.ty, stm, mode)
+                if let Some((vardef, stm)) = self.get_var(var) {
+                    Some(Place::var(var, vardef.ty, stm, mode))
+                } else {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(UNKNOWN_VAR_ERROR)
+                            .with_message(format!("Unknown variable `{var}`"))
+                            .with_labels(vec![var.as_span().into()]),
+                    );
+                    None
+                }
             }
             ast::Place::IndexP(box e, box ix) => {
                 let e = self.visit_expr(e);
                 let ix = self.visit_expr(ix);
-                if let ArrayT(item_ty) = e.ty && let IntT = ix.ty {
-                    let ty = *item_ty; // Needed now because we move e after
-                    let e_stm = e.stm; // Needed now because we move e after
-                    Place {
-                        kind: IndexP(boxed(e), boxed(ix)),
-                        ty,
-                        stm: e_stm,
-                        mode,
+                match (e.ty.as_array(), ix.ty.is_int()) {
+                    (Some(ty), true) => {
+                        let e_stm = e.stm; // Needed now because we move e after
+                        Some(Place {
+                            kind: IndexP(boxed(e), boxed(ix)),
+                            ty,
+                            stm: e_stm,
+                            mode,
+                        })
                     }
-                } else {
-                    panic!("Only integer indexing is supported, and for arrays only");
+                    (None, true) => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message(format!("Expected array type, found type {}", e.ty))
+                                .with_labels(vec![e.span.as_label()])
+                                .with_notes(vec!["Only array can be indexed".to_string()]),
+                        );
+                        None
+                    }
+                    (_, false) => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message(format!("Expected type int, found type {}", ix.ty))
+                                .with_labels(vec![ix.span.as_label()])
+                                .with_notes(vec![
+                                    "Only integer indexing is supported for arrays".to_string()
+                                ]),
+                        );
+                        None
+                    }
                 }
             }
-            ast::Place::FieldP(_, _) => todo!(),
+            ast::Place::FieldP(box s, field) => {
+                let s = self.visit_expr(s);
+                match s.ty {
+                    StructT(name) => {
+                        let strukt = self.struct_env.get(name).unwrap();
+
+                        // Check that the field we want to access exists
+                        let ty = match strukt.get_field(field) {
+                            Some(ty) => ty,
+                            None => {
+                                self.ctx.emit(
+                                    Diagnostic::error()
+                                        .with_code(FIELD_ACCESS_ERROR)
+                                        .with_message(format!("No such field `{field}`"))
+                                        .with_labels(vec![s.span.as_label().with_message(
+                                            format!("has no field named `{field}`"),
+                                        )]),
+                                );
+                                return None;
+                            }
+                        };
+
+                        Some(Place {
+                            stm: s.stm,
+                            kind: FieldP(boxed(s), field),
+                            mode,
+                            ty,
+                        })
+                    }
+                    HoleT => Some(Place {
+                        stm: s.stm,
+                        kind: FieldP(boxed(s), field),
+                        mode,
+                        ty: HoleT,
+                    }),
+                    _ => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_message(
+                                    "Cannot get a field of something which is not a struct",
+                                )
+                                .with_labels(vec![s.span.as_label().with_message("has no fields")]),
+                        );
+                        None
+                    }
+                }
+            }
         }
     }
-}
 
-impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
-    type BOutput = Block<'ctx>;
-    type EOutput = Expr<'ctx>;
-    type FOutput = Fun<'ctx>;
-    type POutput = Program<'ctx>;
-    type SOutput = Stmt<'ctx>;
-    type TOutput = Struct<'ctx>;
-
+    /// Type-checks an expression.
     fn visit_expr(&mut self, e: ast::Expr<'ctx>) -> Expr<'ctx> {
-        match e {
-            ast::Expr::UnitE => Expr::new(UnitE, UnitT, self.current_stratum()),
-            ast::Expr::IntegerE(i) => Expr::new(IntegerE(i), IntT, self.current_stratum()),
-            ast::Expr::StringE(s) => Expr::new(StringE(s), StrT, self.current_stratum()),
-            ast::Expr::PlaceE(place) => match place {
-                ast::Place::VarP(v) => {
-                    let (vardef, stm) = self
-                        .get_var(v)
-                        .unwrap_or_else(|| panic!("{v} does not exist in this context"));
-                    Expr::new(
-                        PlaceE(Place::var(vardef.name, vardef.ty, stm, default())),
+        let span = e.span;
+        match e.kind {
+            ast::ExprKind::UnitE => Expr::new(UnitE, UnitT, self.current_stratum(), span),
+            ast::ExprKind::IntegerE(i) => {
+                Expr::new(IntegerE(i), IntT, self.current_stratum(), span)
+            }
+            ast::ExprKind::StringE(s) => Expr::new(StringE(s), StrT, self.current_stratum(), span),
+            ast::ExprKind::PlaceE(place) => match place {
+                ast::Place::VarP(v) => match self.get_var(v) {
+                    Some((vardef, stm)) => Expr::new(
+                        PlaceE(Place::var(vardef.var, vardef.ty, stm, default())),
                         vardef.ty,
                         stm,
-                    )
-                }
+                        span,
+                    ),
+                    None => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(UNKNOWN_VAR_ERROR)
+                                .with_message(format!("Unknown variable `{v}`"))
+                                .with_labels(vec![v.as_span().into()]),
+                        );
+                        Expr::hole(span)
+                    }
+                },
                 ast::Place::FieldP(box s, field) => {
                     let s = self.visit_expr(s);
                     if let StructT(name) = &s.ty {
-                        let strukt = self.get_struct(name).unwrap();
-                        let ty = *strukt.get_field(field);
-                        let s_stm = s.stm; // Needed now because we move s after
+                        let strukt = self.struct_env.get(name).unwrap();
+                        // Check that the field we want to access exists
+                        let ty = match strukt.get_field(field) {
+                            Some(ty) => ty,
+                            None => {
+                                self.ctx.emit(
+                                    Diagnostic::error()
+                                        .with_code(FIELD_ACCESS_ERROR)
+                                        .with_message(format!("No such field `{field}`"))
+                                        .with_labels(vec![s.span.as_label().with_message(
+                                            format!("has no field named `{field}`"),
+                                        )]),
+                                );
+                                HoleT
+                            }
+                        };
+                        let stm = s.stm; // Needed now because we move s after
                         Expr::new(
                             PlaceE(Place {
                                 kind: FieldP(boxed(s), field),
                                 mode: default(),
                                 ty,
-                                stm: s_stm,
+                                stm,
                             }),
                             ty,
-                            s_stm,
+                            stm,
+                            span,
                         )
                     } else {
-                        panic!("Cannot get a field of something which is not a struct");
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_message(
+                                    "Cannot get a field of something which is not a struct",
+                                )
+                                .with_labels(vec![s.span.as_label().with_message("has no fields")]),
+                        );
+                        Expr::hole(span)
                     }
                 }
 
                 ast::Place::IndexP(box e, box ix) => {
                     let e = self.visit_expr(e);
                     let ix = self.visit_expr(ix);
-                    if let ArrayT(item_ty) = e.ty && let IntT = ix.ty {
-                    let ty = *item_ty;
-                    let e_stm = e.stm; // Needed now because we move e after
-                    Expr::new(PlaceE(Place {
-                        kind: IndexP(boxed(e), boxed(ix)),
-                        mode: default(),
-                        ty,
-                        stm: e_stm
-                    }), ty, e_stm)
-                } else {
-                    panic!("Only integer indexing is supported, and for arrays only");
-                }
+                    match (e.ty.as_array(), ix.ty.is_int()) {
+                        (Some(ty), true) => {
+                            let e_stm = e.stm; // Needed now because we move e after
+                            Expr::new(
+                                PlaceE(Place {
+                                    kind: IndexP(boxed(e), boxed(ix)),
+                                    mode: default(),
+                                    ty,
+                                    stm: e_stm,
+                                }),
+                                ty,
+                                e_stm,
+                                span,
+                            )
+                        }
+                        (None, true) => {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(TYPE_MISMATCH_ERROR)
+                                    .with_message(format!(
+                                        "Expected array type, found type {}",
+                                        e.ty
+                                    ))
+                                    .with_labels(vec![e.span.as_label()])
+                                    .with_notes(vec!["Only array can be indexed".to_string()]),
+                            );
+                            Expr::hole(span)
+                        }
+                        (_, false) => {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(TYPE_MISMATCH_ERROR)
+                                    .with_message(format!(
+                                        "Expected type int, found type {}",
+                                        ix.ty
+                                    ))
+                                    .with_labels(vec![ix.span.as_label()])
+                                    .with_notes(vec![
+                                        "Only integer indexing is supported for arrays".to_string(),
+                                    ]),
+                            );
+                            Expr::hole(span)
+                        }
+                    }
                 }
             },
             // Make a special case for `print` until we get generic functions so that we
             // can express `print` more elegantly with the other builtin functions.
-            ast::Expr::CallE { name, args } if name == "print" => {
+            ast::ExprKind::CallE { name, args } if name == "print" => {
                 let args: Vec<Expr> = args.into_iter().map(|arg| self.visit_expr(arg)).collect();
 
-                Expr::new(CallE { name, args }, UnitT, self.current_stratum())
+                Expr::new(CallE { name, args }, UnitT, self.current_stratum(), span)
             }
-            ast::Expr::CallE { name, args } => {
+            ast::ExprKind::CallE { name, args } => {
                 let args: Vec<Expr> = args.into_iter().map(|arg| self.visit_expr(arg)).collect();
                 let fun = self
-                    .get_fun(name)
+                    .fun_env
+                    .get(name)
                     .unwrap_or_else(|| panic!("Function {name} does not exist in this scope"));
 
                 // Check the number of arguments.
@@ -293,18 +423,41 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
                 );
 
                 // Check type of arguments.
-                for (i, (Expr { ty: arg_ty, .. }, ast::VarDef { ty: param_ty, .. })) in
-                    args.iter().zip(fun.params.iter()).enumerate()
+                for (
+                    i,
+                    (
+                        Expr {
+                            ty: arg_ty, span, ..
+                        },
+                        ast::VarDef { ty: param_ty, .. },
+                    ),
+                ) in args.iter().zip(fun.params.iter()).enumerate()
                 {
-                    assert_eq!(
-                        arg_ty, param_ty,
-                        "type of {i}th argument should be {param_ty}, not {arg_ty}"
-                    );
+                    if arg_ty != param_ty {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message(format!(
+                                    "expected type {param_ty}, found type {arg_ty}"
+                                ))
+                                .with_labels(vec![span.as_label()])
+                                .with_notes(vec![format!(
+                                    "{param_ty} is the expected type for argument #{} of `{}`",
+                                    i + 1,
+                                    name
+                                )]),
+                        );
+                    }
                 }
 
-                Expr::new(CallE { name, args }, fun.ret_ty, self.current_stratum())
+                Expr::new(
+                    CallE { name, args },
+                    fun.ret_ty,
+                    self.current_stratum(),
+                    span,
+                )
             }
-            ast::Expr::IfE(box cond, box iftrue, box iffalse) => {
+            ast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
                 let cond = self.visit_expr(cond);
                 let iftrue = self.visit_block(iftrue);
                 let iffalse = self.visit_block(iffalse);
@@ -324,15 +477,16 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
                     IfE(boxed(cond), boxed(iftrue), boxed(iffalse)),
                     if_ty,
                     std::cmp::max(iftrue_stm, iffalse_stm),
+                    span,
                 )
             }
-            ast::Expr::BlockE(box e) => {
+            ast::ExprKind::BlockE(box e) => {
                 let b = self.visit_block(e);
                 let ret_stm = b.ret.stm;
                 let ret_ty = b.ret.ty;
-                Expr::new(BlockE(boxed(b)), ret_ty, ret_stm)
+                Expr::new(BlockE(boxed(b)), ret_ty, ret_stm, span)
             }
-            ast::Expr::StructE {
+            ast::ExprKind::StructE {
                 name: s_name,
                 fields,
             } => {
@@ -345,23 +499,44 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
                     .map(|(name, expr)| (name, self.visit_expr(expr)))
                     .collect();
 
-                let strukt = self.get_struct(s_name).unwrap();
+                let strukt = self.struct_env.get(s_name).unwrap();
 
                 // Check that the instance has the same field names as the declaration
-                assert!(
-                    keys_match(&strukt.fields, fields.iter().map(|(field, _)| field)),
-                    "{:?} do not match {:?}",
-                    fields.iter().map(|(field, _)| field).collect::<Vec<_>>(),
-                    strukt.fields,
-                );
-
-                // Check that the type of each field matches the expected one
-                for (fname, Expr { ty, .. }) in &fields {
-                    let expected = strukt.get_field(fname);
-                    assert_eq!(
-                        expected, ty,
-                        "field `{fname}` of `{s_name}` should be of type {expected}, found {ty}"
+                if !keys_match(&strukt.fields, fields.iter().map(|(field, _)| field)) {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(STRUCT_INSTANCE_ERROR)
+                            .with_message(
+                                "Erroneous struct instantiation (missing or extraneous fields)",
+                            )
+                            .with_labels(vec![
+                                span.as_label().with_message("your instantiation"),
+                                strukt
+                                    .span
+                                    .as_secondary_label()
+                                    .with_message("struct definition"),
+                            ]),
                     );
+                } else {
+                    // Ok, so the field names match
+                    // Check that the type of each field matches the expected one
+                    for (fname, Expr { ty, span, .. }) in &fields {
+                        let expected = strukt.get_field(fname).unwrap(); // Ok because we checked just before our declaration matches the structure
+                                                                         // fields.
+                        if expected != *ty {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(TYPE_MISMATCH_ERROR)
+                                    .with_message(format!(
+                                        "expected type {expected}, found type {ty}"
+                                    ))
+                                    .with_labels(vec![span.as_label()])
+                                    .with_notes(vec![format!(
+                                        "field `{fname}` of `{s_name}` is of type {ty}"
+                                    )]),
+                            );
+                        }
+                    }
                 }
 
                 let common_stm = fields
@@ -377,10 +552,19 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
                     },
                     StructT(s_name),
                     common_stm,
+                    span,
                 )
             }
-            ast::Expr::ArrayE(array) => {
-                assert!(!array.is_empty(), "empty arrays are not supported yet");
+            ast::ExprKind::ArrayE(array) => {
+                if array.is_empty() {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(EMPTY_LIST_ERROR)
+                            .with_message("empty arrays are not supported yet")
+                            .with_labels(vec![span.into()]),
+                    );
+                    return Expr::hole(span);
+                }
                 // Compute the type of the items
                 // Because of borrowing rules, we need to do that before we immutably borrow
                 // `self` through `.get_struct()` since we need a mutable borrow into `self`
@@ -396,38 +580,53 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
                         core::cmp::max(s1, *s2)
                     });
                 let ty = ArrayT(self.ctx.alloc(array[0].ty));
-                assert!(
-                    array.iter().all(|item| item.ty == array[0].ty),
-                    "all items in the list should have the same type"
-                );
-                Expr::new(ArrayE(array), ty, common_stm)
+                if !array.iter().all(|item| item.ty == array[0].ty) {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(HETEROGENEOUS_LISTS_ERROR)
+                            .with_message(format!(
+                                "all items in the list should have the same type {}",
+                                array[0].ty,
+                            ))
+                            .with_labels(vec![span.into()]),
+                    );
+                }
+                Expr::new(ArrayE(array), ty, common_stm, span)
             }
         }
     }
 
+    /// Type-checks a block.
     fn visit_block(&mut self, b: ast::Block<'ctx>) -> Block<'ctx> {
+        let span = b.span;
         self.push_scope();
         let stmts = b.stmts.into_iter().map(|s| self.visit_stmt(s)).collect();
         let ret = self.visit_expr(b.ret);
         self.pop_scope().unwrap();
-        Block { stmts, ret }
+        Block { stmts, ret, span }
     }
 
+    /// Type-checks a function.
     fn visit_fun(&mut self, f: ast::Fun<'ctx>) -> Fun<'ctx> {
         let stm = self.current_stratum();
         // Introduce arguments in the typing context
         for &arg in &f.params {
-            self.check_ty(&arg.ty);
+            self.check_ty(arg.ty);
             self.add_var(arg);
         }
 
         let body = self.visit_block(f.body);
         let body_ty = &body.ret.ty;
-        assert_eq!(
-            body_ty, &f.ret_ty,
-            "the body should return a value of type {}, got {body_ty} instead",
-            f.ret_ty,
-        );
+        if body_ty != &f.ret_ty {
+            self.ctx.emit(
+                Diagnostic::error()
+                    .with_message("Mismatched type")
+                    .with_labels(vec![f.span.as_label().with_message(format!(
+                        "the body should return a value of type {}, got {body_ty} instead",
+                        f.ret_ty,
+                    ))]),
+            );
+        }
 
         Fun {
             name: f.name,
@@ -441,53 +640,81 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
         }
     }
 
+    /// Type-checks a statement.
     fn visit_stmt(&mut self, s: ast::Stmt<'ctx>) -> Stmt<'ctx> {
         use Stmt::*;
-        match s {
-            ast::Stmt::Declare(vardef, expr) => {
-                let stm = self.current_stratum();
-                self.add_var(vardef);
-                let expr = self.visit_expr(expr);
-                let expr_ty = &expr.ty;
+        let res: Option<Stmt> = try {
+            match s.kind {
+                ast::StmtKind::DeclareS(vardef, expr) => {
+                    let rhs_span = expr.span;
+                    let stm = self.current_stratum();
+                    self.add_var(vardef);
+                    let expr = self.visit_expr(expr);
+                    let expr_ty = &expr.ty;
 
-                // Check type declaration.
-                self.check_ty(&vardef.ty);
+                    // Check type declaration.
+                    self.check_ty(vardef.ty);
 
-                // Check the type
-                assert_eq!(
-                    &vardef.ty, expr_ty,
-                    "expression type ({expr_ty}) of {expr:?} should match type annotation ({})",
-                    vardef.ty
-                );
+                    // Check the type
+                    if &vardef.ty != expr_ty {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message("Left and right hand side have incompatible types")
+                                .with_labels(vec![rhs_span.as_label().with_message(format!(
+                                    "expected type {}, found type {expr_ty}",
+                                    vardef.ty
+                                ))]),
+                        );
+                    }
 
-                Declare(VarDef::with_stratum(vardef, stm), expr)
+                    DeclareS(VarDef::with_stratum(vardef, stm), expr)
+                }
+                ast::StmtKind::AssignS(place, expr) => {
+                    let rhs_span = expr.span;
+                    let expr = self.visit_expr(expr);
+                    let expr_ty = &expr.ty;
+                    let place = self.visit_place(place, Mode::Assigning)?;
+
+                    // Check the type
+                    if &place.ty != expr_ty {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message("Left and right hand side have incompatible types")
+                                .with_labels(vec![rhs_span.as_label().with_message(format!(
+                                    "expected type {}, found type {expr_ty}",
+                                    place.ty
+                                ))]),
+                        );
+                    }
+
+                    AssignS(place, expr)
+                }
+                ast::StmtKind::WhileS { cond, body } => {
+                    let cond = self.visit_expr(cond);
+                    assert_eq!(
+                        cond.ty, BoolT,
+                        "condition {cond:?} should compute to a boolean value"
+                    );
+                    let body = self.visit_block(body);
+
+                    if body.ret.ty != UnitT {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_message("body of expression should not return anything")
+                                .with_labels(vec![body.span.as_label().with_message("here")]),
+                        );
+                    }
+                    WhileS { cond, body }
+                }
+                ast::StmtKind::ExprS(e) => ExprS(self.visit_expr(e)),
             }
-            ast::Stmt::Assign(place, expr) => {
-                let expr = self.visit_expr(expr);
-                let expr_ty = &expr.ty;
-                let place = self.visit_place(place, Mode::Assigning);
-
-                // Check the type
-                assert_eq!(&place.ty, expr_ty, "expression type ({expr_ty}) of {expr:?} should match the type of variable {place:?} ({})", place.ty);
-                Assign(place, expr)
-            }
-            ast::Stmt::While { cond, body } => {
-                let cond = self.visit_expr(cond);
-                assert_eq!(
-                    cond.ty, BoolT,
-                    "condition {cond:?} should compute to a boolean value"
-                );
-                let body = self.visit_block(body);
-                assert_eq!(
-                    body.ret.ty, UnitT,
-                    "body of expression should not return anything"
-                );
-                While { cond, body }
-            }
-            ast::Stmt::ExprS(e) => ExprS(self.visit_expr(e)),
-        }
+        };
+        res.unwrap_or_default()
     }
 
+    /// Type-checks a program.
     fn visit_program(&mut self, p: ast::Program<'ctx>) -> Program<'ctx> {
         let ast::Program { funs, structs } = p;
 
@@ -500,10 +727,13 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
         // Add all valid type names in the context, so they may be referenced
         // everywhere.
         for &name in structs.keys() {
-            assert!(
-                self.valid_type_names.insert(name),
-                "{name} is defined twice"
-            );
+            if !self.valid_type_names.insert(name) {
+                self.ctx.emit(
+                    Diagnostic::error()
+                        .with_message(format!("{name} is defined several times"))
+                        .with_labels(vec![Label::primary((), 0..2).with_message("redefined here")]),
+                );
+            }
         }
 
         // Note: order is important.
@@ -521,9 +751,10 @@ impl<'t, 'ctx> SelfVisitor<'ctx> for Typer<'t, 'ctx> {
         }
     }
 
+    /// Type-checks a structure.
     fn visit_struct(&mut self, strukt: ast::Struct<'ctx>) -> Struct<'ctx> {
         // Check that all types in the structure exist.
-        for ty in strukt.fields.values() {
+        for &ty in strukt.fields.values() {
             self.check_ty(ty);
         }
 
@@ -545,7 +776,10 @@ mod tests {
     #[test]
     fn check_pop_option() {
         let arena = Arena::new();
-        let config = Config { input: "" };
+        let config = Config {
+            input: "",
+            ..default()
+        };
         let mut ctx = Context::new(config, &arena);
         let mut typer = Typer::new(&mut ctx);
         assert_eq!(typer.pop_scope(), None); // Cannot pop the static stratum

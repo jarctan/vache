@@ -1,26 +1,68 @@
 //! Parsing expressions, and defining their representation in the AST.
 
+use std::default::default;
+use std::ops::{Deref, DerefMut};
+
 use num_bigint::BigInt;
 use pest::iterators::Pair;
 use pest::pratt_parser::*;
 use Place::*;
 
-use super::{Block, Context, Parsable, Place, Var};
+use super::{Block, Context, Parsable, Place, Span, VarUse};
 use crate::grammar::*;
 use crate::utils::boxed;
 
 lazy_static! {
     static ref PRATT_PARSER: PrattParser<Rule> = PrattParser::new()
+        .op(Op::infix(Rule::eq, Assoc::Left) | Op::infix(Rule::neq, Assoc::Left))
+        .op(Op::infix(Rule::le, Assoc::Left)
+            | Op::infix(Rule::lt, Assoc::Left)
+            | Op::infix(Rule::ge, Assoc::Left)
+            | Op::infix(Rule::gt, Assoc::Left))
         .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
-        .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::div, Assoc::Left))
+        .op(Op::infix(Rule::mul, Assoc::Left)
+            | Op::infix(Rule::div, Assoc::Left)
+            | Op::infix(Rule::rem, Assoc::Left))
         .op(Op::infix(Rule::pow, Assoc::Right));
 }
 
-/// An expression in the parser AST.
+/// An located expression.
+#[derive(Debug, Clone, Default)]
+pub struct Expr<'ctx> {
+    /// Expression kind.
+    pub kind: ExprKind<'ctx>,
+    /// Codespan.
+    pub span: Span,
+}
+
+impl<'ctx> Deref for Expr<'ctx> {
+    type Target = ExprKind<'ctx>;
+
+    fn deref(&self) -> &ExprKind<'ctx> {
+        &self.kind
+    }
+}
+
+impl<'ctx> DerefMut for Expr<'ctx> {
+    fn deref_mut(&mut self) -> &mut ExprKind<'ctx> {
+        &mut self.kind
+    }
+}
+
+impl<'ctx> From<ExprKind<'ctx>> for Expr<'ctx> {
+    fn from(kind: ExprKind<'ctx>) -> Self {
+        Self {
+            kind,
+            span: default(),
+        }
+    }
+}
+
+/// Expression kinds in the AST.
 ///
 /// Rule: all variants end with a capital `E`.
 #[derive(Debug, Clone, Default)]
-pub enum Expr<'ctx> {
+pub enum ExprKind<'ctx> {
     /// Unit expression, that does nothing.
     #[default]
     UnitE,
@@ -54,7 +96,7 @@ pub enum Expr<'ctx> {
     BlockE(Box<Block<'ctx>>),
 }
 
-use Expr::*;
+use ExprKind::*;
 
 impl<'ctx> Expr<'ctx> {
     /// Sees this expression as a field.
@@ -64,7 +106,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not a field.
     pub fn as_field(&self) -> Option<(&Expr<'ctx>, &'ctx str)> {
-        if let PlaceE(FieldP(box strukt, field)) = self {
+        if let PlaceE(FieldP(box strukt, field)) = &self.kind {
             Some((strukt, field))
         } else {
             None
@@ -78,7 +120,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not a index.
     pub fn as_index(&self) -> Option<(&Expr<'ctx>, &Expr<'ctx>)> {
-        if let PlaceE(IndexP(box array, box index)) = self {
+        if let PlaceE(IndexP(box array, box index)) = &self.kind {
             Some((array, index))
         } else {
             None
@@ -92,7 +134,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not a function call.
     pub fn as_call(&self) -> Option<(&'ctx str, &[Expr<'ctx>])> {
-        if let CallE { name, args } = self {
+        if let CallE { name, args } = &self.kind {
             Some((name, args.as_slice()))
         } else {
             None
@@ -104,7 +146,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not an integer.
     pub fn as_integer(&self) -> Option<&BigInt> {
-        if let IntegerE(ref i) = self {
+        if let IntegerE(ref i) = &self.kind {
             Some(i)
         } else {
             None
@@ -116,7 +158,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not a string.
     pub fn as_string(&self) -> Option<&'ctx str> {
-        if let StringE(s) = self {
+        if let StringE(s) = &self.kind {
             Some(s)
         } else {
             None
@@ -127,8 +169,8 @@ impl<'ctx> Expr<'ctx> {
     ///
     /// # Errors
     /// Returns `None` if the expression is not a variable.
-    pub fn as_var(&self) -> Option<Var<'ctx>> {
-        if let PlaceE(VarP(var)) = self {
+    pub fn as_var(&self) -> Option<VarUse<'ctx>> {
+        if let PlaceE(VarP(var)) = &self.kind {
             Some(*var)
         } else {
             None
@@ -140,7 +182,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not an array declaration.
     pub fn as_array(&self) -> Option<&[Expr<'ctx>]> {
-        if let ArrayE(ref array) = self {
+        if let ArrayE(ref array) = &self.kind {
             Some(array)
         } else {
             None
@@ -154,7 +196,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not an if-then expression.
     pub fn as_if_then(&self) -> Option<(&Expr<'ctx>, &Block<'ctx>, &Block<'ctx>)> {
-        if let IfE(box cond, box iftrue, box iffalse) = self {
+        if let IfE(box cond, box iftrue, box iffalse) = &self.kind {
             Some((cond, iftrue, iffalse))
         } else {
             None
@@ -164,17 +206,17 @@ impl<'ctx> Expr<'ctx> {
 
 /// Shortcut to create an `Expr` which is just a variable, based on its name.
 pub fn var(v: &str) -> Expr<'_> {
-    PlaceE(VarP(v.into()))
+    PlaceE(VarP(v.into())).into()
 }
 
 /// Shortcut to create a constant integer `Expr` based on some integer value.
 pub fn int<'ctx>(value: impl Into<BigInt>) -> Expr<'ctx> {
-    IntegerE(value.into())
+    IntegerE(value.into()).into()
 }
 
 /// Shortcut to create a constant string `String` based on some string value.
 pub fn string(value: &str) -> Expr<'_> {
-    StringE(value)
+    StringE(value).into()
 }
 
 /// Shortcut to create a call `Expr`.
@@ -183,11 +225,12 @@ pub fn call<'ctx>(name: &'ctx str, stmts: impl IntoIterator<Item = Expr<'ctx>>) 
         name,
         args: stmts.into_iter().collect(),
     }
+    .into()
 }
 
 /// Shortcut to create a `s.field` expression.
 pub fn field<'ctx>(e: Expr<'ctx>, member: &'ctx str) -> Expr<'ctx> {
-    PlaceE(FieldP(boxed(e), member))
+    PlaceE(FieldP(boxed(e), member)).into()
 }
 
 /// Shortcut to create an if expression.
@@ -196,12 +239,12 @@ pub fn if_e<'ctx>(
     iftrue: impl Into<Block<'ctx>>,
     iffalse: impl Into<Block<'ctx>>,
 ) -> Expr<'ctx> {
-    IfE(boxed(e), boxed(iftrue.into()), boxed(iffalse.into()))
+    IfE(boxed(e), boxed(iftrue.into()), boxed(iffalse.into())).into()
 }
 
 /// Shortcut to create a `x[y]` expression.
 pub fn index<'ctx>(e1: Expr<'ctx>, ix: Expr<'ctx>) -> Expr<'ctx> {
-    PlaceE(IndexP(boxed(e1), boxed(ix)))
+    PlaceE(IndexP(boxed(e1), boxed(ix))).into()
 }
 
 /// Shortcut to create a `MyStruct { (field: value)* }` expression.
@@ -213,16 +256,17 @@ pub fn structure<'ctx>(
         name,
         fields: fields.into_iter().collect(),
     }
+    .into()
 }
 
 /// Shortcut to create a `[el1, el2, ..]` expression.
 pub fn array<'ctx>(items: impl IntoIterator<Item = Expr<'ctx>>) -> Expr<'ctx> {
-    ArrayE(items.into_iter().collect())
+    ArrayE(items.into_iter().collect()).into()
 }
 
 /// Shortcut to create a block `Expr`.
 pub fn block<'ctx>(value: impl Into<Block<'ctx>>) -> Expr<'ctx> {
-    BlockE(Box::new(value.into()))
+    BlockE(Box::new(value.into())).into()
 }
 
 /// Shortcut to create a binary operation `Expr`.
@@ -230,15 +274,19 @@ pub fn binop<'ctx>(lhs: Expr<'ctx>, op: &'ctx str, rhs: Expr<'ctx>) -> Expr<'ctx
     call(op, vec![lhs, rhs])
 }
 
-impl<'ctx> From<Var<'ctx>> for Expr<'ctx> {
-    fn from(v: Var<'ctx>) -> Self {
-        PlaceE(VarP(v))
+impl<'ctx> From<VarUse<'ctx>> for Expr<'ctx> {
+    fn from(v: VarUse<'ctx>) -> Self {
+        Expr {
+            span: v.as_span(),
+            kind: PlaceE(VarP(v)),
+        }
     }
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
     fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
-        match pair.as_rule() {
+        let span = Span::from(pair.as_span());
+        let kind = match pair.as_rule() {
             Rule::expr | Rule::primitive => {
                 let pair = pair.into_inner().next().unwrap();
                 match pair.as_rule() {
@@ -247,7 +295,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                     Rule::string => StringE(ctx.parse(pair)),
                     Rule::ident => PlaceE(VarP(ctx.parse(pair))),
                     Rule::array => ArrayE(pair.into_inner().map(|pair| ctx.parse(pair)).collect()),
-                    Rule::with_postfix => ctx.parse(pair),
+                    Rule::with_postfix => Expr::parse(pair, ctx).kind,
                     Rule::if_then => {
                         let mut pairs = pair.into_inner();
                         let cond = ctx.parse(pairs.next().unwrap());
@@ -256,67 +304,87 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                             pairs.next().map(|pair| ctx.parse(pair)).unwrap_or_default();
                         IfE(boxed(cond), boxed(if_block), boxed(else_block))
                     }
-                    Rule::binop => PRATT_PARSER
-                        .map_primary(|primary| Expr::parse(primary, ctx))
-                        .map_infix(|lhs, op, rhs| CallE {
-                            name: op.as_str(),
-                            args: vec![lhs, rhs],
-                        })
-                        .parse(pair.into_inner()),
+                    Rule::binop => {
+                        PRATT_PARSER
+                            .map_primary(|primary| Expr::parse(primary, ctx))
+                            .map_infix(|lhs, op, rhs| {
+                                let span = rhs.span.merge(rhs.span);
+                                let kind = CallE {
+                                    name: op.as_str(),
+                                    args: vec![lhs, rhs],
+                                };
+                                Expr { span, kind }
+                            })
+                            .parse(pair.into_inner())
+                            .kind
+                    }
                     Rule::struct_instance => {
                         let mut pairs = pair.into_inner();
                         let name = pairs.next().unwrap().as_str();
                         let fields = pairs
                             .array_chunks::<2>()
                             .map(|[field, value]| {
-                                let field: Var = ctx.parse(field);
+                                let field: VarUse = ctx.parse(field);
                                 let value: Expr = ctx.parse(value);
                                 (field.as_str(), value)
                             })
                             .collect();
                         StructE { name, fields }
                     }
+                    Rule::expr => Expr::parse(pair, ctx).kind,
                     rule => panic!("parser internal error: expected expression, found {rule:?}"),
                 }
             }
             Rule::with_postfix => {
                 let mut pairs = pair.into_inner();
-                let expr = ctx.parse(pairs.next().unwrap());
-                pairs.fold(expr, |acc, pair| match pair.as_rule() {
-                    Rule::field_postfix => {
-                        let inner = pair.into_inner().next().unwrap();
-                        let field: Var = ctx.parse(inner);
-                        PlaceE(FieldP(boxed(acc), field.into()))
-                    }
-                    Rule::index_postfix => PlaceE(IndexP(
-                        boxed(acc),
-                        boxed(ctx.parse(pair.into_inner().next().unwrap())),
-                    )),
-                    Rule::call_postfix => {
-                        if let PlaceE(VarP(name)) = acc {
-                            CallE {
-                                name: name.into(),
-                                args: pair.into_inner().map(|pair| ctx.parse(pair)).collect(),
+                let expr: Expr = ctx.parse(pairs.next().unwrap());
+                pairs
+                    .fold(expr, |acc, pair| {
+                        let span = acc.span.merge(Span::from(pair.as_span()));
+                        let kind = match pair.as_rule() {
+                            Rule::field_postfix => {
+                                let inner = pair.into_inner().next().unwrap();
+                                let field: VarUse = ctx.parse(inner);
+                                PlaceE(FieldP(boxed(acc), field.into()))
                             }
-                        } else {
-                            panic!("Expected a function name")
-                        }
-                    }
-                    rule => panic!("expected postfix, found {rule:?}"),
-                })
+                            Rule::index_postfix => PlaceE(IndexP(
+                                boxed(acc),
+                                boxed(ctx.parse(pair.into_inner().next().unwrap())),
+                            )),
+                            Rule::call_postfix => {
+                                if let PlaceE(VarP(name)) = acc.kind {
+                                    CallE {
+                                        name: name.into(),
+                                        args: pair
+                                            .into_inner()
+                                            .map(|pair| ctx.parse(pair))
+                                            .collect(),
+                                    }
+                                } else {
+                                    panic!("Expected a function name")
+                                }
+                            }
+                            rule => panic!("expected postfix, found {rule:?}"),
+                        };
+                        Expr { kind, span }
+                    })
+                    .kind
             }
             _ => panic!(
                 "Parser internal error: expected primitive or an expr, found {:?} for {}",
                 pair.as_rule(),
                 pair.as_str()
             ),
-        }
+        };
+        Self { kind, span }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::Stmt;
+    use StmtKind::*;
+
+    use super::super::StmtKind;
     use super::*;
 
     #[parses("test123" as expr)]
@@ -340,7 +408,7 @@ mod tests {
     #[parses("()" as expr)]
     #[test]
     fn unit(expr: Expr) {
-        assert!(matches!(expr, UnitE));
+        assert!(matches!(expr.kind, UnitE));
     }
 
     #[parses("test.a" as expr)]
@@ -449,9 +517,10 @@ mod tests {
             .as_if_then()
             .context("expr should be an if then else")?;
         assert!(cond.as_var().context("not a var")? == "x");
-        assert!(matches!(&if_block.stmts[..], [Stmt::Declare(..)]));
+        assert_eq!(if_block.stmts.len(), 1);
         assert!(if_block.ret.as_var().context("not a var")? == "y");
-        assert!(matches!(&else_block.stmts[..], [Stmt::Declare(..)]));
+        assert_eq!(else_block.stmts.len(), 1);
+        assert!(matches!(else_block.stmts[0].kind, DeclareS(..)));
         assert!(else_block.ret.as_var().context("not a var")? == "z");
     }
 
