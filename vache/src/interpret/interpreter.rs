@@ -331,6 +331,13 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                 let end = self.get_ptr(end);
                 self.add_value(RangeV(start, end), stratum)
             }
+            RValue::Variant {
+                enun,
+                variant,
+                args,
+            } => {
+                todo!()
+            }
         }
     }
 
@@ -357,7 +364,7 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                 let stratum = destination
                     .as_ref()
                     .map_or(self.current_stratum(), |dest| self.get_ptr(dest).stratum);
-                let call_result = self.call(name, args, stratum);
+                let call_result = self.call(name.name, args, stratum);
                 if let Some(destination) = destination {
                     self.set_at_ptr(
                         destination,

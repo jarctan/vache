@@ -1,7 +1,6 @@
 //! Giving examples for lists of lists (matrices).
-#![allow(missing_docs)]
 
-use std::default::default;
+#![allow(missing_docs)]
 
 use super::*;
 
@@ -10,6 +9,7 @@ use super::*;
 pub fn simple_matrix_modify_consume() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![
@@ -29,6 +29,7 @@ pub fn simple_matrix_modify_consume() -> impl Into<Program<'static>> {
 pub fn simple_matrix_modify() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![

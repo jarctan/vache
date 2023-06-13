@@ -17,11 +17,12 @@ fn person_struct<'ctx>() -> Struct<'ctx> {
 fn simple_structure() {
     test(Program::new(
         vec![person_struct()],
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![
                 declare(
-                    vardef("john", StructT("Person")),
+                    vardef("john", VarT("Person")),
                     structure(
                         "Person",
                         vec![
@@ -43,11 +44,12 @@ fn simple_structure() {
 fn access_unknown_field() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![
                 declare(
-                    vardef("john", StructT("Person")),
+                    vardef("john", VarT("Person")),
                     structure(
                         "Person",
                         vec![
@@ -69,10 +71,11 @@ fn access_unknown_field() -> Program {
 fn missing_field() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![declare(
-                vardef("john", StructT("Person")), // should fail!
+                vardef("john", VarT("Person")), // should fail!
                 structure("Person", vec![("name", string("doe")), ("age", int(21))]),
             )]),
             ..default()
@@ -85,10 +88,11 @@ fn missing_field() -> Program {
 fn extra_field() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![declare(
-                vardef("john", StructT("Person")),
+                vardef("john", VarT("Person")),
                 structure(
                     "Person",
                     vec![
@@ -109,10 +113,11 @@ fn extra_field() -> Program {
 fn type_mismatch() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![declare(
-                vardef("john", StructT("Person")),
+                vardef("john", VarT("Person")),
                 structure(
                     "Person",
                     vec![

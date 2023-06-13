@@ -1,11 +1,9 @@
 //! Change the value of a field through another variable.
 
-use std::default::default;
-
 use super::*;
 
 #[allow(missing_docs)]
-pub fn change_field() -> impl Into<Program<'static>> {
+pub fn change_field<'ctx>() -> Program<'ctx> {
     Program::new(
         vec![Struct {
             name: "Person",
@@ -14,11 +12,12 @@ pub fn change_field() -> impl Into<Program<'static>> {
                 .collect(),
             ..default()
         }],
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![
                 declare(
-                    vardef("john", StructT("Person")),
+                    vardef("john", VarT("Person")),
                     structure(
                         "Person",
                         vec![

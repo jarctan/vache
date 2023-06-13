@@ -9,12 +9,10 @@ use ExprKind::*;
 use PlaceKind::*;
 use Ty::*;
 
-use crate::{
-    tast::{
-        Block, Expr, ExprKind, Fun, Mode, Place, PlaceKind, Program, Stmt, Struct, Ty, Varname,
-    },
-    Context,
+use crate::tast::{
+    Block, Enum, Expr, ExprKind, Fun, Mode, Place, PlaceKind, Program, Stmt, Struct, Ty, Varname,
 };
+use crate::Context;
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
@@ -63,6 +61,22 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             }
             StructT(name) => {
+                let name = format_ident!("{}", name);
+                if show_lifetime {
+                    quote!(Cow<'a, #name>)
+                } else {
+                    quote!(Cow<#name>)
+                }
+            }
+            EnumT(name) => {
+                let name = format_ident!("{}", name);
+                if show_lifetime {
+                    quote!(Cow<'a, #name>)
+                } else {
+                    quote!(Cow<#name>)
+                }
+            }
+            VarT(name) => {
                 let name = format_ident!("{}", name);
                 if show_lifetime {
                     quote!(Cow<'a, #name>)
@@ -148,21 +162,45 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     }
 
     /// Compiles a struct.
-    fn visit_struct(&mut self, strukt: Struct) -> TokenStream {
+    fn visit_struct(&mut self, strukt: &Struct) -> TokenStream {
         let name = format_ident!("{}", strukt.name);
         let fields: TokenStream = strukt
             .fields
-            .into_iter()
-            .map(|(k, ty)| {
-                let k = format_ident!("{k}");
+            .iter()
+            .map(|(field, ty)| {
+                let field = format_ident!("{field}");
                 let ty = Self::translate_type(&ty.kind, true);
-                quote!(#k: Field<#ty>,)
+                quote!(#field: Field<#ty>,)
             })
             .collect();
         quote!(
             #[derive(Debug, Clone)]
             pub struct #name<'a> {
                 #fields
+            }
+        )
+    }
+
+    /// Compiles an `enum`.
+    fn visit_enum(&mut self, enun: &Enum) -> TokenStream {
+        let name = format_ident!("{}", enun.name);
+        let variants: TokenStream = enun
+            .variants
+            .iter()
+            .map(|(variant, args)| {
+                let variant = format_ident!("{variant}");
+                if args.is_empty() {
+                    quote!(#variant,)
+                } else {
+                    let args = args.iter().map(|arg| Self::translate_type(&arg.kind, true));
+                    quote!(#variant(#(#args),*),)
+                }
+            })
+            .collect();
+        quote!(
+            #[derive(Debug, Clone)]
+            pub enum #name<'a> {
+                #variants
             }
         )
     }
@@ -197,7 +235,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 quote!(Cow::Owned(__Vec(vec![#(#items),*])))
             }
             CallE { name, args } => {
-                if name == "print" {
+                if name.name == "print" {
                     let mut builder = StringBuilder::default();
 
                     // Compute the format string, which is essentially `{} {} {}...`
@@ -214,7 +252,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     quote!(println!(#fmt_str, #(#args),*))
                 } else {
                     let args = args.into_iter().map(|arg| self.visit_expr(arg));
-                    let name = match name {
+                    let name = match name.name {
                         "+" => "__add".to_string(),
                         "-" => "__sub".to_string(),
                         "*" => "__mul".to_string(),
@@ -226,10 +264,26 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         ">=" => "__ge".to_string(),
                         "==" => "__eq".to_string(),
                         "!=" => "__neq".to_string(),
-                        _ => name.to_string(),
+                        _ => name.name.to_string(),
                     };
                     let name = format_ident!("{name}");
                     quote!(#name(#(#args),*)?)
+                }
+            }
+            VariantE {
+                enun,
+                variant,
+                args,
+            } => {
+                let enun = format_ident!("{enun}");
+                let variant = format_ident!("{variant}");
+
+                // Special case for unit variant, do not show the `()`
+                if args.is_empty() {
+                    quote!(Cow::Owned(#enun::#variant))
+                } else {
+                    let args = args.into_iter().map(|arg| self.visit_expr(arg));
+                    quote!(Cow::Owned(#enun::#variant(#(#args),*)))
                 }
             }
             IfE(box cond, box iftrue, box iffalse) => {
@@ -366,15 +420,15 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         let Program {
             funs,
             structs,
+            enums,
             arena: _,
         } = p;
         let funs: Vec<TokenStream> = funs.into_values().map(|f| self.visit_fun(f)).collect();
-        let structs: Vec<TokenStream> = structs
-            .into_values()
-            .map(|s| self.visit_struct(s))
-            .collect();
+        let structs: Vec<TokenStream> = structs.values().map(|s| self.visit_struct(s)).collect();
+        let enums: Vec<TokenStream> = enums.values().map(|s| self.visit_enum(s)).collect();
         quote! {
             #(#structs)*
+            #(#enums)*
             #(#funs)*
         }
     }

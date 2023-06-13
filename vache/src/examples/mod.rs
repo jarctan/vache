@@ -13,6 +13,8 @@ mod out_of_scope;
 mod structures;
 mod while_loop;
 
+pub use std::default::default;
+
 pub use arrays::*;
 pub use borrows::*;
 pub use change_field::*;

@@ -45,15 +45,24 @@ pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<LocTr
                 InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
                     outs.clone() - lhs.place().def()
                         + lhs.place().uses_as_lhs()
-                        + fields
-                            .values()
-                            .map(|field| field.place.uses_as_rhs())
-                            .flatten()
+                        + fields.values().flat_map(|field| field.place.uses_as_rhs())
+                }
+                InstrKind::Assign(
+                    lhs,
+                    RValue::Variant {
+                        enun: _,
+                        variant: _,
+                        args,
+                    },
+                ) => {
+                    outs.clone() - lhs.place().def()
+                        + lhs.place().uses_as_lhs()
+                        + args.iter().flat_map(|arg| arg.place.uses_as_rhs())
                 }
                 InstrKind::Assign(lhs, RValue::Array(array)) => {
                     outs.clone() - lhs.place().def()
                         + lhs.place().uses_as_lhs()
-                        + array.iter().map(|item| item.place.uses_as_rhs()).flatten()
+                        + array.iter().flat_map(|item| item.place.uses_as_rhs())
                 }
                 InstrKind::Assign(lhs, RValue::Range(start, end)) => {
                     outs.clone() - lhs.place().def()
@@ -137,6 +146,27 @@ fn loan_liveness<'ctx>(
                             fields
                                 .values()
                                 .map(|field| ins.borrow(field, label))
+                                .sum::<Borrows>(),
+                        );
+                    } else {
+                        ledger.flush_place(lhs.place());
+                    }
+                    ledger
+                }
+                InstrKind::Assign(
+                    lhs,
+                    RValue::Variant {
+                        enun: _,
+                        variant: _,
+                        args,
+                    },
+                ) => {
+                    let mut ledger = ins.clone();
+                    if var_flow[&label].outs.contains(lhs.loc()) {
+                        ledger.set_borrows(
+                            lhs.place(),
+                            args.iter()
+                                .map(|arg| ins.borrow(arg, label))
                                 .sum::<Borrows>(),
                         );
                     } else {
@@ -276,6 +306,20 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
                 for field in fields.values_mut() {
                     if !outs.contains(field.loc()) {
                         field.make_moved();
+                    }
+                }
+            }
+            InstrKind::Assign(
+                _,
+                RValue::Variant {
+                    enun: _,
+                    variant: _,
+                    args,
+                },
+            ) => {
+                for arg in args {
+                    if !outs.contains(arg.loc()) {
+                        arg.make_moved();
                     }
                 }
             }
@@ -424,7 +468,7 @@ mod tests {
                     ),
                     instr(
                         InstrKind::Call {
-                            name: "+",
+                            name: "+".into(),
                             args: vec![
                                 Reference::new(y_ptr, &mut y_mode2),
                                 Reference::new(y_ptr, &mut y_mode3),
@@ -438,7 +482,7 @@ mod tests {
                     ),
                     instr(
                         InstrKind::Call {
-                            name: "print",
+                            name: "print".into(),
                             args: vec![Reference::new(x_ptr, &mut x_mode1)], /* ...use x after so
                                                                               * x is live */
                             destination: None,
@@ -505,7 +549,7 @@ mod tests {
                         // We then use x non mutably so that we do not optimize away the assignment
                         // of x.
                         InstrKind::Call {
-                            name: "print",
+                            name: "print".into(),
                             args: vec![Reference::new(x_ptr, &mut x_mode1)],
                             destination: None,
                         },
@@ -513,7 +557,7 @@ mod tests {
                     ),
                     instr(
                         InstrKind::Call {
-                            name: "+",
+                            name: "+".into(),
                             args: vec![
                                 Reference::new(y_ptr, &mut y_mode2),
                                 Reference::new(y_ptr, &mut y_mode3),
@@ -584,7 +628,7 @@ mod tests {
                                                                                * but we don't
                                                                                * need y,
                                                                                * so x can own it */
-                instr(InstrKind::Call { name: "print", args: vec![Reference::new(x_ptr, &mut x_mode1)], destination: None }, stm),
+                instr(InstrKind::Call { name: "print".into(), args: vec![Reference::new(x_ptr, &mut x_mode1)], destination: None }, stm),
             ],
             (),
         );

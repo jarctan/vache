@@ -633,7 +633,6 @@ impl<'a, N, E> DoubleEndedIterator for PostOrder<'a, N, E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
 
     /// Check that in edges matches out edges in a block.
     #[test]

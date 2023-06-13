@@ -2,7 +2,7 @@
 
 use num_bigint::BigInt;
 
-use super::{Block, Place, Span, Stratum, Ty};
+use super::{Block, Namespaced, Place, Span, Stratum, Ty};
 
 /// An expression in the typed AST.
 ///
@@ -78,7 +78,7 @@ pub enum ExprKind<'ctx> {
     /// A function call.
     CallE {
         /// Name/identifier of the function.
-        name: &'ctx str,
+        name: Namespaced<'ctx>,
         /// Arguments to that function.
         args: Vec<Expr<'ctx>>,
     },
@@ -88,6 +88,15 @@ pub enum ExprKind<'ctx> {
     BlockE(Box<Block<'ctx>>),
     /// Hole expression.
     HoleE,
+    /// Enum variant.
+    VariantE {
+        /// Enumerated type from which the variant originates.
+        enun: &'ctx str,
+        /// Variant name.
+        variant: &'ctx str,
+        /// Variant arguments.
+        args: Vec<Expr<'ctx>>,
+    },
 }
 
 use ExprKind::*;

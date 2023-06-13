@@ -9,6 +9,7 @@
         "cfgs",
         "decr",
         "Deque",
+        "enun",
         "fibo",
         "fixpoint",
         "Flowable",
@@ -42,7 +43,7 @@
         "unparse",
         "vache",
         "vardef",
-        "varmode"
+        "varmode",
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }

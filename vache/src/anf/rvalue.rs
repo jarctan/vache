@@ -31,6 +31,15 @@ pub enum RValue<'ctx> {
     ///
     /// Format: `Range(start, end).`
     Range(Reference<'ctx>, Reference<'ctx>),
+    /// Enum variant.
+    Variant {
+        /// Enumerated type from which the variant originates.
+        enun: &'ctx str,
+        /// Variant name.
+        variant: &'ctx str,
+        /// Variant arguments.
+        args: Vec<Reference<'ctx>>,
+    },
 }
 
 impl<'ctx> fmt::Debug for RValue<'ctx> {
@@ -50,6 +59,21 @@ impl<'ctx> fmt::Debug for RValue<'ctx> {
             }
             Array(array) => f.debug_list().entries(array).finish(),
             Range(start, end) => write!(f, "{start:?}..{end:?}"),
+            Variant {
+                enun,
+                variant,
+                args,
+            } => {
+                write!(f, "{enun}::{variant}")?;
+                if !args.is_empty() {
+                    let mut iter = args.iter();
+                    write!(f, "{:?}", iter.next().unwrap())?; // `args` is not empty so unwrap is ok
+                    for arg in iter {
+                        write!(f, ", {:?}", arg)?;
+                    }
+                }
+                Ok(())
+            }
         }
     }
 }

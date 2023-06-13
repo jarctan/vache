@@ -14,11 +14,12 @@ fn person_struct<'ctx>() -> Struct<'ctx> {
 fn simple_field_access() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![
                 declare(
-                    vardef("john", StructT("Person")),
+                    vardef("john", VarT("Person")),
                     structure(
                         "Person",
                         vec![
@@ -38,5 +39,5 @@ fn simple_field_access() -> Program {
 
 #[vache_test("12 doe\n")]
 fn get_field_and_mutate() -> Program {
-    examples::get_field_and_mutate().into()
+    examples::get_field_and_mutate()
 }

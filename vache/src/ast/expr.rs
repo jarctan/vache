@@ -8,7 +8,7 @@ use pest::iterators::Pair;
 use pest::pratt_parser::*;
 use Place::*;
 
-use super::{Block, Context, Parsable, Place, Span, VarUse};
+use super::{Block, Context, Namespaced, Parsable, Place, Span, VarUse};
 use crate::grammar::*;
 use crate::utils::boxed;
 
@@ -90,7 +90,7 @@ pub enum ExprKind<'ctx> {
     /// A function call.
     CallE {
         /// Name/identifier of the function.
-        name: &'ctx str,
+        name: Namespaced<'ctx>,
         /// Arguments to that function.
         args: Vec<Expr<'ctx>>,
     },
@@ -98,6 +98,8 @@ pub enum ExprKind<'ctx> {
     IfE(Box<Expr<'ctx>>, Box<Block<'ctx>>, Box<Block<'ctx>>),
     /// A block expression.
     BlockE(Box<Block<'ctx>>),
+    /// A namespaced symbol.
+    NamespacedE(Namespaced<'ctx>),
 }
 
 use ExprKind::*;
@@ -137,9 +139,9 @@ impl<'ctx> Expr<'ctx> {
     ///
     /// # Errors
     /// Returns `None` if the expression is not a function call.
-    pub fn as_call(&self) -> Option<(&'ctx str, &[Expr<'ctx>])> {
+    pub fn as_call(&self) -> Option<(Namespaced<'ctx>, &[Expr<'ctx>])> {
         if let CallE { name, args } = &self.kind {
-            Some((name, args.as_slice()))
+            Some((*name, args.as_slice()))
         } else {
             None
         }
@@ -224,9 +226,12 @@ pub fn string(value: &str) -> Expr<'_> {
 }
 
 /// Shortcut to create a call `Expr`.
-pub fn call<'ctx>(name: &'ctx str, stmts: impl IntoIterator<Item = Expr<'ctx>>) -> Expr<'ctx> {
+pub fn call<'ctx>(
+    name: impl Into<Namespaced<'ctx>>,
+    stmts: impl IntoIterator<Item = Expr<'ctx>>,
+) -> Expr<'ctx> {
     CallE {
-        name,
+        name: name.into(),
         args: stmts.into_iter().collect(),
     }
     .into()
@@ -312,9 +317,10 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                         PRATT_PARSER
                             .map_primary(|primary| Expr::parse(primary, ctx))
                             .map_infix(|lhs, op, rhs| {
+                                let op_span = Span::from(op.as_span());
                                 let span = rhs.span.merge(rhs.span);
                                 let kind = CallE {
-                                    name: op.as_str(),
+                                    name: Namespaced::name_with_span(op.as_str(), op_span),
                                     args: vec![lhs, rhs],
                                 };
                                 Expr { span, kind }
@@ -336,6 +342,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                         StructE { name, fields }
                     }
                     Rule::expr => Expr::parse(pair, ctx).kind,
+                    Rule::namespaced => NamespacedE(ctx.parse(pair)),
                     rule => panic!("parser internal error: expected expression, found {rule:?}"),
                 }
             }
@@ -358,7 +365,10 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                             Rule::call_postfix => {
                                 if let PlaceE(VarP(name)) = acc.kind {
                                     CallE {
-                                        name: name.into(),
+                                        name: Namespaced::name_with_span(
+                                            name.as_str(),
+                                            name.as_span(),
+                                        ),
                                         args: pair
                                             .into_inner()
                                             .map(|pair| ctx.parse(pair))
@@ -379,9 +389,8 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                     .kind
             }
             _ => panic!(
-                "Parser internal error: expected primitive or an expr, found {:?} for {}",
-                pair.as_rule(),
-                pair.as_str()
+                "Parser internal error: expected primitive or an expr, found {:?}",
+                pair.as_rule()
             ),
         };
         Self { kind, span }
@@ -474,7 +483,7 @@ mod tests {
     #[test]
     fn call_expression(expr: Expr) {
         let (call, args) = expr.as_call().unwrap();
-        assert!(call == "my_call");
+        assert!(call.name == "my_call");
         assert_eq!(
             args.iter()
                 .map(|arg| arg.as_var().unwrap().as_str().to_owned())
@@ -537,7 +546,7 @@ mod tests {
     fn binary_operations(expr: Expr) {
         let (name1, args) = expr.as_call().context("a + b * c should be a call")?;
         let (name2, _) = args[1].as_call().context("b * c should be a call")?;
-        assert_eq!(name1, "+");
-        assert_eq!(name2, "*");
+        assert_eq!(name1.name, "+");
+        assert_eq!(name2.name, "*");
     }
 }

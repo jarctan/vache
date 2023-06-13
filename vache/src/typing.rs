@@ -1,9 +1,8 @@
 //! Typing.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::default::default;
 
-use codespan_reporting::diagnostic::Label;
 use ExprKind::*;
 use PlaceKind::*;
 use Ty::*;
@@ -54,6 +53,17 @@ impl Default for Env<'_> {
     }
 }
 
+/// Kind of type name.
+///
+/// In the source code, we will find plenty of type names, that can stand for
+/// different things. Here we list all the different kinds of names we can have.
+pub enum TypeNameKind {
+    /// Name of a struct.
+    Struct,
+    /// Name of an enum.
+    Enum,
+}
+
 /// A typer that will type-check some program by
 /// visiting it.
 pub(crate) struct Typer<'t, 'ctx> {
@@ -61,11 +71,14 @@ pub(crate) struct Typer<'t, 'ctx> {
     ctx: &'t mut Context<'ctx>,
     /// Map between function names and their definitions.
     fun_env: HashMap<&'ctx str, ast::FunSig<'ctx>>,
-    /// Map between function names and their definitions.
+    /// Map between `struct` names and their definitions.
     struct_env: HashMap<&'ctx str, Struct<'ctx>>,
-    /// Set of valid type names. Initialized at the very beginning,
-    /// allows to have mutually-referencing structures.
-    valid_type_names: HashSet<&'ctx str>,
+    /// Map between `enum` names and their definitions.
+    enum_env: HashMap<&'ctx str, Enum<'ctx>>,
+    /// Map between valid type names and their kind (structure, variants, etc.).
+    /// Initialized at the very beginning, allows to have
+    /// mutually-referencing structures.
+    valid_type_names: HashMap<&'ctx str, TypeNameKind>,
     /// The typing environment stack.
     env: Vec<Env<'ctx>>,
 }
@@ -75,9 +88,10 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     pub fn new(ctx: &'t mut Context<'ctx>) -> Self {
         let mut typer = Self {
             ctx,
-            fun_env: HashMap::new(),
-            struct_env: HashMap::new(),
-            valid_type_names: HashSet::new(),
+            fun_env: default(),
+            struct_env: default(),
+            enum_env: default(),
+            valid_type_names: default(),
             env: vec![Env::default()],
         };
 
@@ -146,9 +160,15 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     }
 
     /// Declares a new structure in the context.
-    fn add_struct(&mut self, struct_def: impl Into<Struct<'ctx>>) {
-        let struct_def = struct_def.into();
-        self.struct_env.insert(struct_def.name, struct_def);
+    fn add_struct(&mut self, strukt: impl Into<Struct<'ctx>>) {
+        let strukt = strukt.into();
+        self.struct_env.insert(strukt.name, strukt);
+    }
+
+    /// Declares a new enum in the context.
+    fn add_enum(&mut self, enun: impl Into<Enum<'ctx>>) {
+        let enun = enun.into();
+        self.enum_env.insert(enun.name, enun);
     }
 
     /// Returns the current stratum/scope id.
@@ -159,21 +179,30 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     /// Checks that `ty` is well defined in the environment.
     ///
     /// In particular, unknown structure names will raise an error.
-    fn check_ty(&mut self, ty: ast::TyUse) {
-        match ty.kind {
+    ///
+    /// Can eventually refine the type given in argument (note: will change with
+    /// type inference).
+    fn check_ty(&mut self, ty: &mut ast::TyUse<'ctx>) {
+        match &mut ty.kind {
             UnitT | BoolT | IntT | StrT | HoleT => (),
-            ArrayT(item) => self.check_ty(item.with_span(ty.span)),
-            IterT(item) => self.check_ty(item.with_span(ty.span)),
-            StructT(name) => {
-                if !self.valid_type_names.contains(name) {
-                    self.ctx.emit(
-                        Diagnostic::error()
-                            .with_code(UNKNOWN_STRUCT_ERROR)
-                            .with_message(format!("Unknown struct `{name}`"))
-                            .with_labels(vec![ty.span.into()]),
-                    );
+            ArrayT(item) => self.check_ty(&mut item.with_span(ty.span)),
+            IterT(item) => self.check_ty(&mut item.with_span(ty.span)),
+            VarT(name) => match self.valid_type_names.get(name) {
+                Some(TypeNameKind::Struct) => {
+                    ty.kind = StructT(name);
                 }
-            }
+                Some(TypeNameKind::Enum) => {
+                    ty.kind = EnumT(name);
+                }
+                None => self.ctx.emit(
+                    Diagnostic::error()
+                        .with_code(UNKNOWN_TYPE_VAR)
+                        .with_message(format!("no type named `{name}` in context"))
+                        .with_labels(vec![ty.span.into()]),
+                ),
+            },
+            StructT(name) => unreachable!(),
+            EnumT(name) => unreachable!(),
         }
     }
 
@@ -268,6 +297,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     _ => {
                         self.ctx.emit(
                             Diagnostic::error()
+                                .with_code(FIELD_NOT_STRUCT_ERROR)
                                 .with_message(
                                     "Cannot get a field of something which is not a struct",
                                 )
@@ -280,6 +310,43 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         }
     }
 
+    /// Type-checks a namespace name.
+    ///
+    /// Currently, we only support `enum::variant`.
+    pub fn visit_namespaced(&mut self, namespaced: Namespaced<'ctx>) -> Expr<'ctx> {
+        let mut path = namespaced.path();
+        let root = path.next().unwrap(); // Namespaced necessarily starts with something
+
+        if let Some(enun) = self.enum_env.get(&root) && let Some(variant) = path.next()
+        && let Some(args) = enun.variants.get(variant) && path.next().is_none() {
+            if args.is_empty() {
+                Expr::new(VariantE { enun: root, variant, args: vec![] }, EnumT(root), self.current_stratum(), namespaced.span)
+            } else {
+                let len = args.len();
+                self.ctx.emit(
+                    Diagnostic::error()
+                        .with_code(ARG_NB_MISMATCH)
+                        .with_message(
+                        format!("Expected {} arguments, found 0", len))
+                        .with_labels(vec![namespaced.span.as_label()])
+                        .with_notes(vec![format!("constructor {root}::{variant} expect {} arguments", len)])
+                        .with_labels(vec![enun.span.as_secondary_label().with_message("variant is defined here")]),
+                );
+            Expr::hole(namespaced.span)
+            }
+        } else {
+            self.ctx.emit(
+                Diagnostic::error()
+                    .with_code(UNKNOWN_IDENT_ERROR)
+                    .with_message(
+                       format!("Unknown identifier {namespaced}"),
+                    )
+                    .with_labels(vec![namespaced.span.as_label()]),
+            );
+            Expr::hole(namespaced.span)
+        }
+    }
+
     /// Type-checks an expression.
     fn visit_expr(&mut self, e: ast::Expr<'ctx>) -> Expr<'ctx> {
         let span = e.span;
@@ -289,6 +356,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 Expr::new(IntegerE(i), IntT, self.current_stratum(), span)
             }
             ast::ExprKind::StringE(s) => Expr::new(StringE(s), StrT, self.current_stratum(), span),
+            crate::examples::ExprKind::NamespacedE(namespaced) => self.visit_namespaced(namespaced),
             ast::ExprKind::PlaceE(place) => match place {
                 ast::Place::VarP(v) => match self.get_var(v) {
                     Some((vardef, stm)) => Expr::new(
@@ -401,17 +469,25 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             },
             // Make a special case for `print` until we get generic functions so that we
             // can express `print` more elegantly with the other builtin functions.
-            ast::ExprKind::CallE { name, args } if name == "print" => {
+            ast::ExprKind::CallE { name, args } if name.name == "print" => {
                 let args: Vec<Expr> = args.into_iter().map(|arg| self.visit_expr(arg)).collect();
 
                 Expr::new(CallE { name, args }, UnitT, self.current_stratum(), span)
             }
             ast::ExprKind::CallE { name, args } => {
                 let args: Vec<Expr> = args.into_iter().map(|arg| self.visit_expr(arg)).collect();
-                let fun = self
-                    .fun_env
-                    .get(name)
-                    .unwrap_or_else(|| panic!("Function {name} does not exist in this scope"));
+                let fun = match self.fun_env.get(name.name) {
+                    Some(f) => f,
+                    None => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(NOT_CALLABLE_ERROR)
+                                .with_message(format!("{} is not callable", name.name))
+                                .with_labels(vec![name.span.as_label()]),
+                        );
+                        return Expr::hole(span);
+                    }
+                };
 
                 // Check the number of arguments.
                 assert_eq!(
@@ -639,12 +715,12 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     }
 
     /// Type-checks a function.
-    fn visit_fun(&mut self, f: ast::Fun<'ctx>) -> Fun<'ctx> {
+    fn visit_fun(&mut self, mut f: ast::Fun<'ctx>) -> Fun<'ctx> {
         let stm = self.current_stratum();
         // Introduce arguments in the typing context
-        for &arg in &f.params {
-            self.check_ty(arg.ty);
-            self.add_var(arg);
+        for arg in &mut f.params {
+            self.check_ty(&mut arg.ty);
+            self.add_var(*arg);
         }
 
         let body = self.visit_block(f.body);
@@ -677,15 +753,14 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         use Stmt::*;
         let res: Option<Stmt> = try {
             match s.kind {
-                ast::StmtKind::DeclareS(vardef, expr) => {
+                ast::StmtKind::DeclareS(mut vardef, expr) => {
                     let rhs_span = expr.span;
                     let stm = self.current_stratum();
-                    self.add_var(vardef);
                     let expr = self.visit_expr(expr);
                     let expr_ty = &expr.ty;
 
                     // Check type declaration.
-                    self.check_ty(vardef.ty);
+                    self.check_ty(&mut vardef.ty);
 
                     // Check the type
                     if &vardef.ty != expr_ty {
@@ -699,6 +774,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 ))]),
                         );
                     }
+
+                    self.add_var(vardef);
 
                     DeclareS(VarDef::with_stratum(vardef, stm), expr)
                 }
@@ -802,45 +879,80 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
     /// Type-checks a program.
     fn visit_program(&mut self, p: ast::Program<'ctx>) -> Program<'ctx> {
-        let ast::Program { funs, structs } = p;
+        let ast::Program {
+            funs,
+            structs,
+            enums,
+        } = p;
 
         // Add all function signatures to the context to allow for (mutual) recursion.
-        for (&name, f) in &funs {
-            assert_eq!(name, f.name);
+        for f in &funs {
             self.add_fun(f.signature());
         }
 
         // Add all valid type names in the context, so they may be referenced
         // everywhere.
-        for &name in structs.keys() {
-            if !self.valid_type_names.insert(name) {
+        for strukt in &structs {
+            let name = strukt.name;
+            // Insert and check for redefinition at the same time
+            if self
+                .valid_type_names
+                .insert(name, TypeNameKind::Struct)
+                .is_some()
+            {
                 self.ctx.emit(
                     Diagnostic::error()
+                        .with_code(ITEM_REDEFINED_ERROR)
                         .with_message(format!("{name} is defined several times"))
-                        .with_labels(vec![Label::primary((), 0..2).with_message("redefined here")]),
+                        .with_labels(vec![strukt.span.as_label().with_message("redefined here")]),
+                );
+            }
+        }
+
+        for enun in &enums {
+            let name = enun.name;
+            // Insert and check for redefinition at the same time
+            if self
+                .valid_type_names
+                .insert(name, TypeNameKind::Enum)
+                .is_some()
+            {
+                self.ctx.emit(
+                    Diagnostic::error()
+                        .with_code(ITEM_REDEFINED_ERROR)
+                        .with_message(format!("{name} is defined several times"))
+                        .with_labels(vec![enun.span.as_label().with_message("redefined here")]),
                 );
             }
         }
 
         // Note: order is important.
         // We must visit structures first.
+        let structs = structs
+            .into_iter()
+            .map(|s| (s.name, self.visit_struct(s)))
+            .collect();
+
+        let enums = enums
+            .into_iter()
+            .map(|e| (e.name, self.visit_enum(e)))
+            .collect();
+
         Program {
             arena: self.ctx.arena,
-            structs: structs
-                .into_iter()
-                .map(|(name, s)| (name, self.visit_struct(s)))
-                .collect(),
+            structs: self.ctx.alloc(structs),
+            enums: self.ctx.alloc(enums),
             funs: funs
                 .into_iter()
-                .map(|(name, f)| (name, self.visit_fun(f)))
+                .map(|f| (f.name, self.visit_fun(f)))
                 .collect(),
         }
     }
 
     /// Type-checks a structure.
-    fn visit_struct(&mut self, strukt: ast::Struct<'ctx>) -> Struct<'ctx> {
+    fn visit_struct(&mut self, mut strukt: ast::Struct<'ctx>) -> Struct<'ctx> {
         // Check that all types in the structure exist.
-        for &ty in strukt.fields.values() {
+        for ty in strukt.fields.values_mut() {
             self.check_ty(ty);
         }
 
@@ -851,6 +963,24 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         self.add_struct(strukt.clone());
 
         strukt
+    }
+
+    /// Type-checks a enumeration.
+    fn visit_enum(&mut self, mut enun: ast::Enum<'ctx>) -> Enum<'ctx> {
+        // Check that all types in the enum exist.
+        for args in enun.variants.values_mut() {
+            for arg in args {
+                self.check_ty(arg);
+            }
+        }
+
+        // TODO: do not return Struct in this function. Nor should we return
+        // Fun in `visit_fun`. We should just append them to the context and retrieve
+        // them all only at the end, in one go. This would avoid this
+        // disgraceful clone.
+        self.add_enum(enun.clone());
+
+        enun
     }
 }
 

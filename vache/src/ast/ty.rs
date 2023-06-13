@@ -52,10 +52,10 @@ pub fn intT<'ctx>() -> TyUse<'ctx> {
     IntT.into()
 }
 
-/// Shortcut for the `StructT` without any span context.
+/// Shortcut for the `VarT` without any span context.
 #[allow(non_snake_case)]
-pub fn structT(name: &str) -> TyUse<'_> {
-    StructT(name).into()
+pub fn varT(name: &str) -> TyUse<'_> {
+    VarT(name).into()
 }
 
 /// Shortcut for the `ArrayT` without any span context.
@@ -129,6 +129,12 @@ pub enum Ty<'ctx> {
     ///
     /// Structures are identified by their names.
     StructT(&'ctx str),
+    /// Enumerated types.
+    ///
+    /// Structures are identified by their names.
+    EnumT(&'ctx str),
+    /// Type variable.
+    VarT(&'ctx str),
     /// Arrays.
     ArrayT(&'ctx Ty<'ctx>),
     /// Iterator.
@@ -159,6 +165,16 @@ impl<'ctx> Ty<'ctx> {
         match self {
             IterT(inner) => Some(**inner),
             HoleT => Some(HoleT),
+            _ => None,
+        }
+    }
+
+    /// Does this type reduce to a type variable.
+    ///
+    /// If so, returns the variable name.
+    pub fn as_var(&self) -> Option<&'ctx str> {
+        match self {
+            VarT(inner) => Some(inner),
             _ => None,
         }
     }
@@ -197,6 +213,12 @@ impl<'ctx> PartialEq for Ty<'ctx> {
             (IterT(..), _) => false,
             (StructT(name1), StructT(name2)) => name1 == name2,
             (StructT(..), _) => false,
+            (EnumT(name1), EnumT(name2)) => name1 == name2,
+            (EnumT(..), _) => false,
+            (VarT(name1), VarT(name2)) => name1 == name2, /* Restrictive equality: two type */
+            // variables are equal if they have
+            // the same name.
+            (VarT(..), _) => false,
         }
     }
 }
@@ -226,7 +248,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for TyUse<'ctx> {
                 }
                 res
             }
-            Rule::ident => StructT(pair.as_str()),
+            Rule::ident => VarT(pair.as_str()),
             rule => panic!("parser internal error: expected type, found {rule:?}"),
         };
         Self { kind, span }
@@ -238,7 +260,8 @@ impl Ty<'_> {
     pub fn copyable(&self) -> bool {
         match self {
             UnitT | BoolT => true,
-            IntT | StrT | StructT(_) | ArrayT(_) | IterT(_) | HoleT => false,
+            IntT | StrT | StructT(_) | EnumT(_) | ArrayT(_) | IterT(_) | HoleT => false,
+            VarT(_) => panic!("We don't know!"),
         }
     }
 }
@@ -268,6 +291,8 @@ impl fmt::Display for Ty<'_> {
             IntT => write!(f, "int"),
             StrT => write!(f, "str"),
             StructT(s) => write!(f, "{s}"),
+            EnumT(e) => write!(f, "{e}"),
+            VarT(v) => write!(f, "{v}"),
             ArrayT(ty) => write!(f, "[{ty}]"),
             IterT(ty) => write!(f, "{ty}.."),
             HoleT => write!(f, "?"),
@@ -322,5 +347,11 @@ mod tests {
             .context("expected an iterator")?
             .as_iter()
             .context("expected an iterator")?;
+    }
+
+    #[parses("blah" as ty)]
+    #[test]
+    fn type_var(ty: TyUse) -> Result<()> {
+        ty.as_var().context("expected a type variable")?;
     }
 }

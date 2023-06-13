@@ -1,13 +1,12 @@
 //! What happens if we get the value of a field, and change that value? Should
 //! it propagate back into the original structure declaration? As it stands in
 //! the semantics of the language, the answer is no.
-#![allow(missing_docs)]
 
-use std::default::default;
+#![allow(missing_docs)]
 
 use super::*;
 
-pub fn get_field_and_mutate<'ctx>() -> impl Into<Program<'ctx>> {
+pub fn get_field_and_mutate<'ctx>() -> Program<'ctx> {
     Program::new(
         vec![Struct {
             name: "Person",
@@ -16,11 +15,12 @@ pub fn get_field_and_mutate<'ctx>() -> impl Into<Program<'ctx>> {
                 .collect(),
             ..default()
         }],
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![
                 declare(
-                    vardef("john", StructT("Person")),
+                    vardef("john", VarT("Person")),
                     structure(
                         "Person",
                         vec![

@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use super::{Fun, Struct};
+use super::{Enum, Fun, Struct};
 use crate::Arena;
 
 /// A program: a collection of:
@@ -15,5 +15,8 @@ pub struct Program<'ctx> {
     /// Collection of functions defined in the program, indexed by their names.
     pub funs: HashMap<&'ctx str, Fun<'ctx>>,
     /// Collection of structures defined in the program, indexed by their names.
-    pub structs: HashMap<&'ctx str, Struct<'ctx>>,
+    pub structs: &'ctx HashMap<&'ctx str, Struct<'ctx>>,
+    /// Collection of enumerations defined in the program, indexed by their
+    /// names.
+    pub enums: &'ctx HashMap<&'ctx str, Enum<'ctx>>,
 }

@@ -1,10 +1,14 @@
-program = { SOI ~ (fun | struct_def)* ~ &EOI }
+program = _{ SOI ~ (fun | struct_def | enum_def)* ~ &EOI }
 
 fun = { "fn" ~ ident ~ params ~ ("->" ~ ty)? ~ block }
 
 params = {"(" ~ (vardef ~ ("," ~ vardef)*)? ~ ")"}
 
-struct_def = { "struct" ~ ident ~ "{" ~ (vardef ~ "," )* ~ "}" }
+struct_def = { "struct" ~ ident ~ "{" ~ (vardef ~ ("," ~ vardef)* ~ ","?)? ~ "}" }
+
+enum_def = { "enum" ~ ident ~ "{" ~ (variant_def ~ ("," ~ variant_def)* ~ ","?)? ~ "}" }
+
+variant_def = { ident  ~ ("(" ~ ty ~ ("," ~ ty)* ~ ")")? }
 
 block = { "{" ~ stmt* ~ (expr)? ~ "}" }
 
@@ -26,7 +30,9 @@ binop = { with_postfix ~ (infix ~ with_postfix)+ }
 
 with_postfix = { primitive ~ (field_postfix | index_postfix | call_postfix | range_postfix)* }
 
-primitive = { struct_instance | array | unit | integer | string | ident | "(" ~ expr ~ ")" }
+primitive = { struct_instance | array | unit | integer | string | namespaced | ident | "(" ~ expr ~ ")" }
+
+namespaced = { ident ~ ("::" ~ ident)+ }
 
 field_postfix = { "." ~ ident }
 

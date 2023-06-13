@@ -1,6 +1,6 @@
 //! Defining statements.
 
-use super::{Block, Pointer, Reference, VarDef};
+use super::{Block, Namespaced, Pointer, Reference, VarDef};
 use crate::mir::RValue;
 
 /// A statement.
@@ -15,7 +15,7 @@ pub enum Stmt<'ctx> {
     /// A function call.
     Call {
         /// Name of the function to call.
-        name: &'ctx str,
+        name: Namespaced<'ctx>,
         /// Arguments to that function.
         args: Vec<Reference<'ctx>>,
         /// Destination variable to hold the result.

@@ -201,6 +201,7 @@ impl<'ctx> MIRer<'ctx> {
         let anf::Program {
             funs,
             structs,
+            enums,
             arena,
         } = p;
 
@@ -212,7 +213,8 @@ impl<'ctx> MIRer<'ctx> {
                 .map(|(name, f)| (name, self.visit_fun(f)))
                 .collect(),
             arena,
-            structs: structs.clone(),
+            structs,
+            enums,
         }
     }
 }

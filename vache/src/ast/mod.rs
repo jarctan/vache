@@ -3,8 +3,10 @@
 //! Each node in the tree = one file.
 
 pub mod block;
+pub mod enumeration;
 pub mod expr;
 pub mod fun;
+pub mod namespaced;
 pub mod place;
 pub mod primitives;
 pub mod program;
@@ -18,12 +20,14 @@ pub mod var;
 pub use anyhow::Context as AnyhowContext;
 pub use anyhow::Result;
 pub use block::Block;
+pub use enumeration::Enum;
 pub use expr::{if_e, Expr, ExprKind};
 pub use fun::{Fun, FunSig};
 use itertools::Itertools;
+pub use namespaced::Namespaced;
 use pest::error::ErrorVariant;
 use pest::error::InputLocation;
-use pest::iterators::Pair;
+use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 pub use place::{idx_place, Place};
 pub use program::Program;
@@ -31,7 +35,7 @@ use reporting::pretty_print_rule;
 pub use span::Span;
 pub use stmt::{Stmt, StmtKind};
 pub use structure::Struct;
-pub use ty::{arrayT, boolT, intT, strT, structT, unitT, Ty, TyUse};
+pub use ty::{arrayT, boolT, intT, strT, unitT, varT, Ty, TyUse};
 pub use var::{VarDef, VarUse, Varname};
 
 use crate::codes::*;
@@ -53,15 +57,12 @@ impl<'ctx> Context<'ctx> {
     }
 }
 
-/// Parses some source code into a parsable element `T`, using rule `rule`.
+/// Parses some source code into some `pairs`.
 ///
 /// The source code is in the `config` of the context `ctx`.
-pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
-    ctx: &mut Context<'ctx>,
-    rule: Rule,
-) -> Result<T> {
-    let mut pairs = match Grammar::parse(rule, ctx.config.input) {
-        Ok(pairs) => pairs,
+fn parse_pairs<'ctx>(ctx: &mut Context<'ctx>, rule: Rule) -> Result<Pairs<'ctx, Rule>> {
+    match Grammar::parse(rule, ctx.config.input) {
+        Ok(pairs) => Ok(pairs),
         Err(err) => {
             let msg = match &err.variant {
                 ErrorVariant::ParsingError { .. } => "Unexpected token",
@@ -74,26 +75,38 @@ pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
                 } => {
                     let mut notes = vec![];
                     if !positives.is_empty() {
-                        notes.push(format!(
-                            "Expected either {}",
-                            positives
-                                .iter()
-                                .map(pretty_print_rule)
-                                .unique()
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        ));
+                        let positives = positives
+                            .iter()
+                            .map(pretty_print_rule)
+                            .unique()
+                            .collect::<Vec<_>>();
+                        let len = positives.len();
+                        if len > 1 {
+                            notes.push(format!(
+                                "Expected either {}, or {}",
+                                positives[..len - 1].join(", "),
+                                positives[len - 1]
+                            ));
+                        } else {
+                            notes.push(format!("Expected {}", positives[0]));
+                        }
                     }
                     if !negatives.is_empty() {
-                        notes.push(format!(
-                            "Are not allowed: {}",
-                            negatives
-                                .iter()
-                                .map(pretty_print_rule)
-                                .unique()
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        ));
+                        let negatives = negatives
+                            .iter()
+                            .map(pretty_print_rule)
+                            .unique()
+                            .collect::<Vec<_>>();
+                        let len = negatives.len();
+                        if len > 1 {
+                            notes.push(format!(
+                                "Expected either {}, or {}",
+                                negatives[..len - 1].join(", "),
+                                negatives[len - 1]
+                            ));
+                        } else {
+                            notes.push(format!("Expected {}", negatives[0]));
+                        }
                     }
                     notes
                 }
@@ -118,7 +131,35 @@ pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
             reports.display()?;
             bail!("Parsing errors found.");
         }
-    };
+    }
+}
+
+/// Parses some source code into a parsable element `T`, using rule `rule`.
+///
+/// This is the version for `Parsable` from `Pairs` (with an s).
+///
+/// The source code is in the `config` of the context `ctx`.
+pub fn parse_rules<'ctx, T: Parsable<'ctx, Pairs<'ctx, Rule>>>(
+    ctx: &mut Context<'ctx>,
+    rule: Rule,
+) -> Result<T> {
+    let pairs = parse_pairs(ctx, rule)?;
+
+    let res: T = ctx.parse(pairs);
+
+    Ok(res)
+}
+
+/// Parses some source code into a parsable element `T`, using rule `rule`.
+///
+/// This is the version for `Parsable` from `Pair` (without s).
+///
+/// The source code is in the `config` of the context `ctx`.
+pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
+    ctx: &mut Context<'ctx>,
+    rule: Rule,
+) -> Result<T> {
+    let mut pairs = parse_pairs(ctx, rule)?;
 
     let res: T = ctx.parse(pairs.next().context("Parser grammar error")?);
 
@@ -129,5 +170,5 @@ pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
 ///
 /// The source code is in the `config` of the context `ctx`.
 pub fn parse_file<'ctx>(ctx: &mut Context<'ctx>) -> Result<Program<'ctx>> {
-    parse_rule(ctx, Rule::program)
+    parse_rules(ctx, Rule::program)
 }

@@ -71,7 +71,7 @@ pub enum InstrKind<'ctx> {
     /// `destination`.
     Call {
         /// Name of the function to call.
-        name: &'ctx str,
+        name: Namespaced<'ctx>,
         /// Arguments to that function.
         args: Vec<Reference<'ctx>>,
         /// Destination variable to hold the result.
@@ -141,6 +141,21 @@ impl<'cfg> InstrKind<'cfg> {
                 for field in fields.values_mut() {
                     if &field.place() == to_find {
                         *field.mode_mut() = Mode::Cloned;
+                    }
+                }
+            }
+            InstrKind::Assign(
+                _,
+                RValue::Variant {
+                    enun: _,
+                    variant: _,
+                    args,
+                    ..
+                },
+            ) => {
+                for arg in args {
+                    if &arg.place() == to_find {
+                        *arg.mode_mut() = Mode::Cloned;
                     }
                 }
             }

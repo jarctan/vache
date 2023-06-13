@@ -141,12 +141,24 @@ impl<'ctx> Normalizer<'ctx> {
                 stmts.push(Stmt::Declare(vardef));
 
                 stmts.push(Stmt::Call {
-                    name,
+                    name: *name,
                     args: arg_vars,
                     destination: Some(destination),
                 });
 
                 Reference::new_moved(destination)
+            }
+            tast::ExprKind::VariantE { enun, variant, args } => {
+                let args = args
+                    .iter_mut()
+                    .map(|arg| self.visit_expr(stmts, arg, default(), structs))
+                    .collect();
+
+                let vardef = self.fresh_vardef(e.ty);
+                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
+                stmts.push(Stmt::Declare(vardef));
+                stmts.push(Stmt::Assign(ptr, RValue::Variant { enun, variant, args }));
+                Reference::new_moved(ptr)
             }
             tast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
                 // The switch variable
@@ -295,7 +307,7 @@ impl<'ctx> Normalizer<'ctx> {
                     body,
                 });
             }
-            tast::Stmt::ForS { item, iter, body } => {
+            tast::Stmt::ForS { .. } => {
                 /*
                 HUGE TODO TODO TODO TODO TODO TODO
                 we are skipping loan analysis here!!!
@@ -342,6 +354,7 @@ impl<'ctx> Normalizer<'ctx> {
         let tast::Program {
             funs,
             structs,
+            enums,
             arena,
         } = p;
 
@@ -353,7 +366,8 @@ impl<'ctx> Normalizer<'ctx> {
                 .map(|(name, f)| (*name, self.visit_fun(f, structs)))
                 .collect(),
             arena,
-            structs: structs.clone(),
+            structs,
+            enums,
         }
     }
 }

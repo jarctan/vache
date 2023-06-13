@@ -2,8 +2,6 @@
 
 /// Unknown variable name.
 pub const UNKNOWN_VAR_ERROR: &str = "E0001";
-/// Unknown structure name.
-pub const UNKNOWN_STRUCT_ERROR: &str = "E0001";
 /// Heterogeneous lists error.
 pub const HETEROGENEOUS_LISTS_ERROR: &str = "E0002";
 /// Type mismatch between expected and found.
@@ -14,5 +12,17 @@ pub const FIELD_ACCESS_ERROR: &str = "E0004";
 pub const STRUCT_INSTANCE_ERROR: &str = "E0005";
 /// Parser error.
 pub const PARSER_ERROR: &str = "E0006";
+/// Error for items defined several times.
+pub const ITEM_REDEFINED_ERROR: &str = "E0007";
+/// Unknown identifier.
+pub const UNKNOWN_IDENT_ERROR: &str = "E0008";
+/// Argument number mismatch.
+pub const ARG_NB_MISMATCH: &str = "E0009";
+/// Cannot be called.
+pub const NOT_CALLABLE_ERROR: &str = "E0010";
+/// Unknown type variable.
+pub const UNKNOWN_TYPE_VAR: &str = "E0011";
+/// Access the field of something that is not a struct.
+pub const FIELD_NOT_STRUCT_ERROR: &str = "E0012";
 /// Temporary: empty list error.
 pub const EMPTY_LIST_ERROR: &str = "E0100";

@@ -15,7 +15,7 @@ fn person_struct<'ctx>() -> Struct<'ctx> {
 }
 
 #[test]
-#[should_fail(UNKNOWN_STRUCT_ERROR)]
+#[should_fail(UNKNOWN_TYPE_VAR)]
 fn unknown_struct_in_field() -> Program {
     Program::new(
         vec![Struct {
@@ -23,24 +23,26 @@ fn unknown_struct_in_field() -> Program {
             fields: vec![
                 ("name", strT()),
                 ("age", intT()),
-                ("house", structT("UnknownStruct")), // should fail
+                ("house", varT("UnknownStruct")), // should fail
             ]
             .into_iter()
             .collect(),
             ..default()
         }],
-        vec![],
+        default(),
+        default(),
     )
 }
 
 #[test]
-#[should_fail(UNKNOWN_STRUCT_ERROR)]
+#[should_fail(UNKNOWN_TYPE_VAR)]
 fn unknown_struct_in_params() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         vec![Fun {
             name: "test",
-            params: vec![vardef("a", StructT("UnknownStruct"))], // should fail
+            params: vec![vardef("a", VarT("UnknownStruct"))], // should fail
             body: expr(UnitE),
             ..default()
         }],
@@ -48,14 +50,15 @@ fn unknown_struct_in_params() -> Program {
 }
 
 #[test]
-#[should_fail(UNKNOWN_STRUCT_ERROR, TYPE_MISMATCH_ERROR)]
+#[should_fail(UNKNOWN_TYPE_VAR, TYPE_MISMATCH_ERROR)]
 fn unknown_struct_in_declare() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         vec![Fun {
             name: "test",
             body: stmts(vec![declare(
-                vardef("john", StructT("UnknownStruct")), // should fail
+                vardef("john", VarT("UnknownStruct")), // should fail
                 structure(
                     "Person",
                     vec![
