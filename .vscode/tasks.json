@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Gulp watch: YAML -> JSON",
+      "type": "gulp",
+      "task": "watch-yaml",
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "clear": false,
+        "echo": true,
+        "focus": false,
+        "panel": "shared",
+        "reveal": "silent",
+        "showReuseMessage": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/vache-vscode-extension",
+      }
+    }
+  ]
+}
