@@ -3,8 +3,6 @@
 use std::collections::HashMap;
 use std::default::default;
 
-use Ty::*;
-
 use crate::anf::*;
 use crate::tast;
 use crate::Arena;

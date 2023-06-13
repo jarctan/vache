@@ -331,11 +331,7 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                 let end = self.get_ptr(end);
                 self.add_value(RangeV(start, end), stratum)
             }
-            RValue::Variant {
-                enun,
-                variant,
-                args,
-            } => {
+            RValue::Variant { .. } => {
                 todo!()
             }
         }

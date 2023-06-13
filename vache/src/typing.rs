@@ -201,8 +201,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         .with_labels(vec![ty.span.into()]),
                 ),
             },
-            StructT(name) => unreachable!(),
-            EnumT(name) => unreachable!(),
+            StructT(_) => unreachable!(),
+            EnumT(_) => unreachable!(),
         }
     }
 
@@ -310,38 +310,120 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         }
     }
 
-    /// Type-checks a namespace name.
+    /// Type-checks a call on a callable object.
     ///
-    /// Currently, we only support `enum::variant`.
-    pub fn visit_namespaced(&mut self, namespaced: Namespaced<'ctx>) -> Expr<'ctx> {
+    /// * `namespaced`: element being called
+    /// * `args`: arguments to the call
+    /// * `span`: span of the entire call location
+    pub fn visit_call(
+        &mut self,
+        namespaced: Namespaced<'ctx>,
+        args: Vec<Expr<'ctx>>,
+        span: Span,
+    ) -> Expr<'ctx> {
         let mut path = namespaced.path();
         let root = path.next().unwrap(); // Namespaced necessarily starts with something
 
         if let Some(enun) = self.enum_env.get(&root) && let Some(variant) = path.next()
-        && let Some(args) = enun.variants.get(variant) && path.next().is_none() {
-            if args.is_empty() {
-                Expr::new(VariantE { enun: root, variant, args: vec![] }, EnumT(root), self.current_stratum(), namespaced.span)
-            } else {
-                let len = args.len();
+        && let Some(params) = enun.variants.get(variant) && path.next().is_none() {
+            if args.len() != params.len() {
                 self.ctx.emit(
                     Diagnostic::error()
                         .with_code(ARG_NB_MISMATCH)
                         .with_message(
-                        format!("Expected {} arguments, found 0", len))
+                        format!("Expected {} argument(s), found {}", params.len(), args.len()))
                         .with_labels(vec![namespaced.span.as_label()])
-                        .with_notes(vec![format!("constructor {root}::{variant} expect {} arguments", len)])
+                        .with_notes(vec![format!("constructor {root}::{variant} expects {} argument(s)", params.len())])
                         .with_labels(vec![enun.span.as_secondary_label().with_message("variant is defined here")]),
                 );
-            Expr::hole(namespaced.span)
+                return Expr::hole(namespaced.span);
             }
+            
+            // Check type of arguments.
+            for (
+                i,
+                (
+                    Expr {
+                        ty: arg_ty, span, ..
+                    },
+                    ast::TyUse { kind: param_ty, .. },
+                ),
+            ) in args.iter().zip(params.iter()).enumerate()
+            {
+                if arg_ty != param_ty {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(TYPE_MISMATCH_ERROR)
+                            .with_message(format!(
+                                "expected type {param_ty}, found type {arg_ty}"
+                            ))
+                            .with_labels(vec![span.as_label()])
+                            .with_notes(vec![format!(
+                                "{param_ty} is the expected type for argument #{} of `{}`",
+                                i + 1,
+                                root
+                            )]),
+                    );
+                }
+            }
+
+            Expr::new(VariantE { enun: root, variant, args }, EnumT(root), self.current_stratum(), span)
+        } else if let Some(fun) = self.fun_env.get(root) {
+            let name = root;
+            // Check the number of arguments.
+            if args.len() != fun.params.len() {
+                self.ctx.emit(
+                    Diagnostic::error()
+                        .with_code(ARG_NB_MISMATCH)
+                        .with_message(
+                        format!("Expected {} arguments, found {}", fun.params.len(), args.len()))
+                        .with_labels(vec![namespaced.span.as_label()])
+                        .with_notes(vec![format!("{root} expects {} argument(s)", fun.params.len())]),
+                );
+                return Expr::hole(namespaced.span);
+            }
+
+            // Check type of arguments.
+            for (
+                i,
+                (
+                    Expr {
+                        ty: arg_ty, span, ..
+                    },
+                    ast::VarDef { ty: param_ty, .. },
+                ),
+            ) in args.iter().zip(fun.params.iter()).enumerate()
+            {
+                if arg_ty != param_ty {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(TYPE_MISMATCH_ERROR)
+                            .with_message(format!(
+                                "expected type {param_ty}, found type {arg_ty}"
+                            ))
+                            .with_labels(vec![span.as_label()])
+                            .with_notes(vec![format!(
+                                "{param_ty} is the expected type for argument #{} of `{}`",
+                                i + 1,
+                                name
+                            )]),
+                    );
+                }
+            }
+
+            Expr::new(
+                CallE { name: namespaced, args },
+                fun.ret_ty,
+                self.current_stratum(),
+                span,
+            )
         } else {
             self.ctx.emit(
                 Diagnostic::error()
-                    .with_code(UNKNOWN_IDENT_ERROR)
+                    .with_code(NOT_CALLABLE_ERROR)
                     .with_message(
-                       format!("Unknown identifier {namespaced}"),
-                    )
-                    .with_labels(vec![namespaced.span.as_label()]),
+                        format!("{} is not a callable identifier", root))
+                    .with_labels(vec![namespaced.span.as_label()])
             );
             Expr::hole(namespaced.span)
         }
@@ -356,7 +438,9 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 Expr::new(IntegerE(i), IntT, self.current_stratum(), span)
             }
             ast::ExprKind::StringE(s) => Expr::new(StringE(s), StrT, self.current_stratum(), span),
-            crate::examples::ExprKind::NamespacedE(namespaced) => self.visit_namespaced(namespaced),
+            crate::examples::ExprKind::NamespacedE(namespaced) => {
+                self.visit_call(namespaced, vec![], span)
+            }
             ast::ExprKind::PlaceE(place) => match place {
                 ast::Place::VarP(v) => match self.get_var(v) {
                     Some((vardef, stm)) => Expr::new(
@@ -476,62 +560,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             }
             ast::ExprKind::CallE { name, args } => {
                 let args: Vec<Expr> = args.into_iter().map(|arg| self.visit_expr(arg)).collect();
-                let fun = match self.fun_env.get(name.name) {
-                    Some(f) => f,
-                    None => {
-                        self.ctx.emit(
-                            Diagnostic::error()
-                                .with_code(NOT_CALLABLE_ERROR)
-                                .with_message(format!("{} is not callable", name.name))
-                                .with_labels(vec![name.span.as_label()]),
-                        );
-                        return Expr::hole(span);
-                    }
-                };
-
-                // Check the number of arguments.
-                assert_eq!(
-                    args.len(),
-                    fun.params.len(),
-                    "Expected {} arguments to function {name}, found {}",
-                    fun.params.len(),
-                    args.len()
-                );
-
-                // Check type of arguments.
-                for (
-                    i,
-                    (
-                        Expr {
-                            ty: arg_ty, span, ..
-                        },
-                        ast::VarDef { ty: param_ty, .. },
-                    ),
-                ) in args.iter().zip(fun.params.iter()).enumerate()
-                {
-                    if arg_ty != param_ty {
-                        self.ctx.emit(
-                            Diagnostic::error()
-                                .with_code(TYPE_MISMATCH_ERROR)
-                                .with_message(format!(
-                                    "expected type {param_ty}, found type {arg_ty}"
-                                ))
-                                .with_labels(vec![span.as_label()])
-                                .with_notes(vec![format!(
-                                    "{param_ty} is the expected type for argument #{} of `{}`",
-                                    i + 1,
-                                    name
-                                )]),
-                        );
-                    }
-                }
-
-                Expr::new(
-                    CallE { name, args },
-                    fun.ret_ty,
-                    self.current_stratum(),
-                    span,
-                )
+                self.visit_call(name, args, span)
             }
             ast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
                 let cond = self.visit_expr(cond);

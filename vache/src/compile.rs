@@ -197,10 +197,34 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             })
             .collect();
+
+        let variants_display: Vec<_> = enun
+            .variants
+            .iter()
+            .map(|(&variant, args)| {
+                let variant_str = variant;
+                let variant_ident = format_ident!("{}", variant);
+                let args_lhs = (0..args.len()).map(|i| format_ident!("__arg{i}"));
+                if !args.is_empty() {
+                    quote!(#name::#variant_ident(#(#args_lhs),*) => write!(f, #variant_str),)
+                } else {
+                    quote!(#name::#variant_ident => write!(f, #variant_str),)
+                }
+            })
+            .collect();
+
         quote!(
             #[derive(Debug, Clone)]
             pub enum #name<'a> {
                 #variants
+            }
+
+            impl<'a> ::std::fmt::Display for #name<'a> {
+                fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    match self {
+                        #(#variants_display)*
+                    }
+                }
             }
         )
     }

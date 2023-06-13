@@ -65,12 +65,16 @@ impl<'ctx> fmt::Debug for RValue<'ctx> {
                 args,
             } => {
                 write!(f, "{enun}::{variant}")?;
+
+                // If there are some, display the parameters
                 if !args.is_empty() {
+                    write!(f, "(")?;
                     let mut iter = args.iter();
                     write!(f, "{:?}", iter.next().unwrap())?; // `args` is not empty so unwrap is ok
                     for arg in iter {
                         write!(f, ", {:?}", arg)?;
                     }
+                    write!(f, ")")?;
                 }
                 Ok(())
             }

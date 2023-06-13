@@ -362,22 +362,17 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                 boxed(acc),
                                 boxed(ctx.parse(pair.into_inner().next().unwrap())),
                             )),
-                            Rule::call_postfix => {
-                                if let PlaceE(VarP(name)) = acc.kind {
-                                    CallE {
-                                        name: Namespaced::name_with_span(
-                                            name.as_str(),
-                                            name.as_span(),
-                                        ),
-                                        args: pair
-                                            .into_inner()
-                                            .map(|pair| ctx.parse(pair))
-                                            .collect(),
-                                    }
-                                } else {
-                                    panic!("Expected a function name")
-                                }
-                            }
+                            Rule::call_postfix => match acc.kind {
+                                PlaceE(VarP(name)) => CallE {
+                                    name: Namespaced::name_with_span(name.as_str(), name.as_span()),
+                                    args: pair.into_inner().map(|pair| ctx.parse(pair)).collect(),
+                                },
+                                NamespacedE(name) => CallE {
+                                    name,
+                                    args: pair.into_inner().map(|pair| ctx.parse(pair)).collect(),
+                                },
+                                _ => panic!("Expected a callable expression"),
+                            },
                             Rule::range_postfix => RangeE(
                                 boxed(acc),
                                 boxed(ctx.parse(pair.into_inner().next().unwrap())),
