@@ -2,6 +2,7 @@
 
 use std::default::default;
 
+use itertools::Itertools;
 use num_traits::ToPrimitive;
 use proc_macro2::TokenStream;
 use string_builder::Builder as StringBuilder;
@@ -204,9 +205,11 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             .map(|(&variant, args)| {
                 let variant_str = variant;
                 let variant_ident = format_ident!("{}", variant);
-                let args_lhs = (0..args.len()).map(|i| format_ident!("__arg{i}"));
                 if !args.is_empty() {
-                    quote!(#name::#variant_ident(#(#args_lhs),*) => write!(f, #variant_str),)
+                    let args_lhs1 = (0..args.len()).map(|i| format_ident!("__arg{i}"));
+                    let args_lhs2 = args_lhs1.clone();
+                    let variant_str = format!("{variant_str}({})", (0..args.len()).map(|_| "{}").join(", "));
+                    quote!(#name::#variant_ident(#(#args_lhs1),*) => write!(f, #variant_str, #(#args_lhs2),*),)
                 } else {
                     quote!(#name::#variant_ident => write!(f, #variant_str),)
                 }
