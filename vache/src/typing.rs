@@ -338,7 +338,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 );
                 return Expr::hole(namespaced.span);
             }
-            
+
             // Check type of arguments.
             for (
                 i,
