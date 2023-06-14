@@ -5,7 +5,7 @@ use super::flow::Flow;
 use super::tree::LocTree;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
-use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Place, RValue, Reference};
+use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Place, RValue};
 
 /// Variable liveness analysis.
 ///
@@ -132,7 +132,8 @@ fn loan_liveness<'ctx>(
                 InstrKind::Assign(lhs, RValue::Place(rhs)) => {
                     let mut ledger = ins.clone();
                     if var_flow[&label].outs.contains(lhs.loc()) {
-                        ledger.set_borrows(lhs.place(), ins.borrow(rhs, label));
+                        let borrows = ledger.borrow(lhs.place(), rhs, label);
+                        ledger.set_borrows(lhs.place(), borrows);
                     } else {
                         ledger.flush_place(lhs.place());
                     }
@@ -141,13 +142,11 @@ fn loan_liveness<'ctx>(
                 InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
                     let mut ledger = ins.clone();
                     if var_flow[&label].outs.contains(lhs.loc()) {
-                        ledger.set_borrows(
-                            lhs.place(),
-                            fields
-                                .values()
-                                .map(|field| ins.borrow(field, label))
-                                .sum::<Borrows>(),
-                        );
+                        let borrows = fields
+                            .values()
+                            .map(|field| ledger.borrow(lhs.place(), field, label))
+                            .sum::<Borrows>();
+                        ledger.set_borrows(lhs.place(), borrows);
                     } else {
                         ledger.flush_place(lhs.place());
                     }
@@ -163,12 +162,11 @@ fn loan_liveness<'ctx>(
                 ) => {
                     let mut ledger = ins.clone();
                     if var_flow[&label].outs.contains(lhs.loc()) {
-                        ledger.set_borrows(
-                            lhs.place(),
-                            args.iter()
-                                .map(|arg| ins.borrow(arg, label))
-                                .sum::<Borrows>(),
-                        );
+                        let borrows = args
+                            .iter()
+                            .map(|arg| ledger.borrow(lhs.place(), arg, label))
+                            .sum::<Borrows>();
+                        ledger.set_borrows(lhs.place(), borrows);
                     } else {
                         ledger.flush_place(lhs.place());
                     }
@@ -177,13 +175,11 @@ fn loan_liveness<'ctx>(
                 InstrKind::Assign(lhs, RValue::Array(array)) => {
                     let mut ledger = ins.clone();
                     if var_flow[&label].outs.contains(lhs.loc()) {
-                        ledger.set_borrows(
-                            lhs.place(),
-                            array
-                                .iter()
-                                .map(|item| ins.borrow(item, label))
-                                .sum::<Borrows>(),
-                        );
+                        let borrows = array
+                            .iter()
+                            .map(|item| ledger.borrow(lhs.place(), item, label))
+                            .sum::<Borrows>();
+                        ledger.set_borrows(lhs.place(), borrows);
                     } else {
                         ledger.flush_place(lhs.place());
                     }
@@ -192,10 +188,9 @@ fn loan_liveness<'ctx>(
                 InstrKind::Assign(lhs, RValue::Range(start, end)) => {
                     let mut ledger = ins.clone();
                     if var_flow[&label].outs.contains(lhs.loc()) {
-                        ledger.set_borrows(
-                            lhs.place(),
-                            ins.borrow(start, label) + ins.borrow(end, label),
-                        );
+                        let borrows = ledger.borrow(lhs.place(), start, label)
+                            + ledger.borrow(lhs.place(), end, label);
+                        ledger.set_borrows(lhs.place(), borrows);
                     } else {
                         ledger.flush_place(lhs.place());
                     }
@@ -206,17 +201,15 @@ fn loan_liveness<'ctx>(
                     args,
                     destination: Some(destination),
                 } => {
-                    let mut res = ins.clone() - destination.place();
+                    let mut ledger = ins.clone() - destination.place();
                     if var_flow[&label].outs.contains(destination.loc()) {
-                        res = res
-                            + (
-                                destination.place(),
-                                args.iter()
-                                    .map(|arg| ins.borrow(arg, label))
-                                    .sum::<Borrows>(),
-                            );
+                        let borrows = args
+                            .iter()
+                            .map(|arg| ledger.borrow(destination.place(), arg, label))
+                            .sum::<Borrows>();
+                        ledger = ledger + (destination.place(), borrows);
                     }
-                    res
+                    ledger
                 }
                 InstrKind::Branch(_)
                 | InstrKind::Return(_)
@@ -236,32 +229,6 @@ fn loan_liveness<'ctx>(
     loan_flow
 }
 
-/// Check for the last-variable-use optimization on the use of `varmode`.
-///
-/// Inputs:
-/// * `varmode` to optimize
-/// * `outs`: set of variables that are alive at the end of the instruction that
-///   uses that `varmode`.
-///
-/// Mutates in place `varmode` to switch its mode to `Moved` if it's the last
-/// use of the variable.
-fn optimize_last_use<'ctx>(place: &mut Reference<'ctx>, outs: &LocTree<'ctx, ()>) {
-    match place.mode() {
-        Mode::Cloned => {
-            if !outs.contains(place.loc()) {
-                *place.mode_mut() = Mode::Moved;
-            }
-        }
-        Mode::Borrowed | Mode::MutBorrowed | Mode::SBorrowed => {
-            if !outs.contains(place.loc()) {
-                *place.mode_mut() = Mode::Moved;
-            }
-        }
-        Mode::Moved => (),
-        Mode::Assigning => (),
-    }
-}
-
 /// Liveness analysis.
 ///
 /// Takes as arguments:
@@ -272,10 +239,12 @@ fn optimize_last_use<'ctx>(place: &mut Reference<'ctx>, outs: &LocTree<'ctx, ()>
 pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) -> CfgI<'ctx> {
     // Compute the two analyses
     let var_flow = var_liveness(&cfg, entry_l);
+    let loan_flow = loan_liveness(&cfg, entry_l, &var_flow);
 
     // Checking last variable use and replace with a move
     for (label, instr) in cfg.bfs_mut(entry_l, false) {
         let outs = &var_flow[&label].outs;
+        let ledger = &loan_flow[&label].ins;
         match &mut instr.kind {
             InstrKind::Noop
             | InstrKind::Declare(_)
@@ -285,26 +254,37 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
             InstrKind::Assign(lhs, _) if !outs.contains(lhs.loc()) => {
                 instr.kind = InstrKind::Noop;
             }
-            InstrKind::Assign(_, RValue::Place(place)) => {
-                optimize_last_use(place, outs);
-            }
+            InstrKind::Assign(_, RValue::Place(place)) => match place.mode() {
+                Mode::Cloned => {
+                    if !outs.contains(place.loc()) && !ledger.has_loans(place.place()) {
+                        *place.mode_mut() = Mode::Moved;
+                    }
+                }
+                Mode::Borrowed | Mode::MutBorrowed | Mode::SBorrowed => {
+                    if !outs.contains(place.loc()) && !ledger.has_loans(place.place()) {
+                        *place.mode_mut() = Mode::Moved;
+                    }
+                }
+                Mode::Moved => (),
+                Mode::Assigning => (),
+            },
             InstrKind::Assign(_, RValue::Array(items)) => {
                 for item in items {
-                    if !outs.contains(item.loc()) {
+                    if !outs.contains(item.loc()) && !ledger.has_loans(item.place()) {
                         item.make_moved();
                     }
                 }
             }
             InstrKind::Assign(_, RValue::Range(start, end)) => {
                 for item in [start, end] {
-                    if !outs.contains(item.loc()) {
+                    if !outs.contains(item.loc()) && !ledger.has_loans(item.place()) {
                         item.make_moved();
                     }
                 }
             }
             InstrKind::Assign(_, RValue::Struct { name: _, fields }) => {
                 for field in fields.values_mut() {
-                    if !outs.contains(field.loc()) {
+                    if !outs.contains(field.loc()) && !ledger.has_loans(field.place()) {
                         field.make_moved();
                     }
                 }
@@ -318,7 +298,7 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
                 },
             ) => {
                 for arg in args {
-                    if !outs.contains(arg.loc()) {
+                    if !outs.contains(arg.loc()) && !ledger.has_loans(arg.place()) {
                         arg.make_moved();
                     }
                 }
@@ -329,7 +309,7 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
                 destination: _,
             } => {
                 for arg in args {
-                    if !outs.contains(arg.loc()) {
+                    if !outs.contains(arg.loc()) && !ledger.has_loans(arg.place()) {
                         arg.make_moved();
                     }
                 }
@@ -350,12 +330,12 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
         }
     }
 
-    for Borrow { label, place } in loan_flow[&exit_l].outs.invalidations() {
+    for Borrow { label, place, .. } in loan_flow[&exit_l].outs.invalidations() {
         cfg[&label].force_clone(&place);
     }
 
     // Transform all invalidated borrows into clones
-    for Borrow { label, place } in invalidated {
+    for Borrow { label, place, .. } in invalidated {
         cfg[&label].force_clone(&place);
     }
 
@@ -642,7 +622,8 @@ mod tests {
                     RValue::Place(ref rhs)
                 ) if rhs.mode() == Mode::Moved,
             ),
-            "y should be cloned here"
+            "y should be moved here (instead it is {:?})",
+            cfg[&l[3]].kind
         );
     }
 }

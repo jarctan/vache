@@ -9,6 +9,7 @@ use std::ops::{Add, BitOr, Sub};
 
 use super::borrow::{Borrow, Borrows};
 use super::LocTree;
+use crate::mir::Mode;
 use crate::mir::Reference;
 use crate::mir::{CfgLabel, Loc, Place};
 use crate::utils::boxed;
@@ -31,15 +32,41 @@ pub struct Ledger<'ctx> {
 impl<'ctx> Ledger<'ctx> {
     /// Returns the complete (deep, nested) list of all borrows resulting from
     /// the borrow of `reference` at CFG label `label`.
-    pub fn borrow(&self, reference: &Reference<'ctx>, label: CfgLabel) -> Borrows<'ctx> {
-        if reference.mode().is_borrowing() {
-            self.borrows(reference.place()).collect::<Borrows>()
-                + Borrow {
-                    place: reference.place(),
-                    label,
-                }
-        } else {
-            Borrows::new()
+    pub fn borrow(
+        &mut self,
+        borrower: Place<'ctx>,
+        reference: &Reference<'ctx>,
+        label: CfgLabel,
+    ) -> Borrows<'ctx> {
+        match reference.mode() {
+            Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed => {
+                // You clone their loans + the loan into the borrowed pointer
+                self.borrows(reference.place())
+                    .map(|borrow| Borrow {
+                        label: borrow.label,
+                        borrower, // Note that we update the borrower. That's re-borrowing in action
+                        place: borrow.place,
+                    })
+                    .collect::<Borrows>()
+                    + Borrow {
+                        place: reference.place(),
+                        borrower,
+                        label,
+                    }
+            }
+            Mode::Moved => {
+                // You take their entire place, so you take their entire loans!
+                // We remove the loans from that place, and
+                self.borrows(reference.place())
+                    .map(|borrow| Borrow {
+                        label: borrow.label,
+                        borrower, // Note that we update the borrower. That's re-borrowing in action
+                        place: borrow.place,
+                    })
+                    .collect::<Borrows>()
+            }
+            Mode::Cloned => Borrows::new(),
+            Mode::Assigning => panic!("Cannot borrow a variable in an assigning mode"),
         }
     }
 
@@ -48,13 +75,33 @@ impl<'ctx> Ledger<'ctx> {
     /// Is a no-op if the place is not a location, but only part of it.
     pub fn flush_place(&mut self, place: impl Into<Place<'ctx>>) {
         let place = place.into();
-        if let Ok(loc) = place.try_into() {
+        if let Ok(loc) = Loc::try_from(place) {
             self.flush_loc(loc);
         }
     }
 
     /// Removes a location from the tracked locations in the ledger.
-    pub fn flush_loc(&mut self, loc: Loc<'ctx>) {
+    ///
+    /// Returns the borrows that have been invalidated.
+    pub fn flush_loc(&mut self, loc: impl Into<Loc<'ctx>>) -> Borrows<'ctx> {
+        let loc = loc.into();
+
+        let borrows: Borrows = self
+            .borrows
+            .remove(loc)
+            .map_or(default(), |node| node.into());
+
+        for borrow in borrows.iter().copied() {
+            // If the borrow is invalidated, remove it from the loans.
+            if !self.invalidations.contains(&borrow) {
+                let loc = borrow.place.root();
+                self.loans
+                    .get_mut(&loc)
+                    .unwrap_or_else(|| panic!("Ledger error: want to free a non-invalidated borrow {borrow:?} but loaner is not alive anymore!"))
+                    .remove(&borrow);
+            }
+        }
+
         let removed_loans = self.loans.remove(&loc);
         let loans: Vec<Borrow> = removed_loans
             .as_ref()
@@ -62,23 +109,7 @@ impl<'ctx> Ledger<'ctx> {
             .unwrap_or_default();
         self.invalidations.extend(loans);
 
-        let borrows: Borrows = self
-            .borrows
-            .remove(loc)
-            .map_or(default(), |node| node.into());
-
-        for borrow in borrows {
-            // If the borrow is invalidated, remove it from the loans.
-            if !self.invalidations.contains(&borrow) {
-                let loc = borrow.place.root();
-                self.loans
-                    .get_mut(&loc)
-                    .expect(
-                        "Ledger error: freeing a non-invalidated borrow whose loaner is not alive anymore!",
-                    )
-                    .remove(&borrow);
-            }
-        }
+        borrows
     }
 
     /// Sets the new `borrows` of `place`.
@@ -89,6 +120,8 @@ impl<'ctx> Ledger<'ctx> {
     ) {
         let place = place.into();
         let borrows = borrows.into();
+        // First, flush the place.
+        self.flush_place(place);
 
         // Register on the loaner side
         for &borrow in &borrows {
@@ -141,6 +174,15 @@ impl<'ctx> Ledger<'ctx> {
     /// Returns the list of invalidations.
     pub fn invalidations<'a>(&'a self) -> impl Iterator<Item = Borrow<'ctx>> + 'a {
         self.invalidations.iter().copied()
+    }
+
+    /// Has this place conceded any loan that is still active?
+    pub fn has_loans(&self, place: Place<'ctx>) -> bool {
+        if let Some(loans) = self.loans.get(&place.root()) {
+            !loans.is_empty()
+        } else {
+            false
+        }
     }
 }
 

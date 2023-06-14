@@ -12,6 +12,8 @@ use crate::utils::set::Set;
 pub struct Borrow<'ctx> {
     /// Label in which the borrow was made.
     pub label: CfgLabel,
+    /// Stakeholder of the borrow.
+    pub borrower: Place<'ctx>,
     /// Borrowed place. NOT the borrower.
     pub place: Place<'ctx>,
 }

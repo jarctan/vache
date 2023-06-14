@@ -116,7 +116,10 @@ impl<'cfg> InstrKind<'cfg> {
     pub fn force_clone(&mut self, to_find: &Place) {
         match self {
             InstrKind::Assign(_, RValue::Place(reference)) => {
-                assert!(to_find == &reference.place());
+                debug_assert!(
+                    to_find == &reference.place(),
+                    "Could not find {to_find:?} to clone in {self:?}"
+                );
                 *reference.mode_mut() = Mode::Cloned;
             }
             InstrKind::Call {
