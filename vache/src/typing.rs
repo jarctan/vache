@@ -566,14 +566,34 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 let cond = self.visit_expr(cond);
                 let iftrue = self.visit_block(iftrue);
                 let iffalse = self.visit_block(iffalse);
-                assert_eq!(
-                    cond.ty, BoolT,
-                    "condition {cond:?} should compute to a boolean value"
-                );
-                assert_eq!(
-                    iftrue.ret.ty, iffalse.ret.ty,
-                    "if and else branches should have the same type"
-                );
+
+                // Condition must be a bool
+                if !cond.ty.is_bool() {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(TYPE_MISMATCH_ERROR)
+                            .with_message(format!("expected bool, found {}", cond.ty))
+                            .with_labels(vec![cond.span.as_label()])
+                            .with_notes(vec!["if condition must be of type bool".to_string()]),
+                    );
+                }
+
+                // If and else branches must be of the same type
+                if iftrue.ret.ty != iffalse.ret.ty {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(TYPE_MISMATCH_ERROR)
+                            .with_message("if and else branches must have the same type")
+                            .with_labels(vec![iftrue
+                                .span
+                                .as_label()
+                                .with_message(format!("has type {}", iftrue.ret.ty))])
+                            .with_labels(vec![iffalse
+                                .span
+                                .as_label()
+                                .with_message(format!("has type {}", iffalse.ret.ty))]),
+                    );
+                }
 
                 let iftrue_stm = iftrue.ret.stm;
                 let iffalse_stm = iffalse.ret.stm;

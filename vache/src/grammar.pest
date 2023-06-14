@@ -12,7 +12,9 @@ variant_def = { ident  ~ ("(" ~ ty ~ ("," ~ ty)* ~ ")")? }
 
 block = { "{" ~ stmt* ~ (expr)? ~ "}" }
 
-stmt = { while_loop | for_loop | declare | assign | (expr ~ ";") }
+// Note: put expressions that can be used as statements without a ";"\
+// AFTER the  (expr ~ ";") because of greediness
+stmt = { while_loop | for_loop | declare | assign | (expr ~ ";") | if_then }
 
 while_loop = { "while" ~ expr ~ block }
 
@@ -86,7 +88,7 @@ neq = { "!=" }
 
 ident = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
-if_then = { "if" ~ expr ~ block ~ ("else" ~ block) }
+if_then = { "if" ~ expr ~ block ~ ("else" ~ block)? }
 
 array = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
 

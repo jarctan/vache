@@ -20,6 +20,12 @@ impl Span {
         Self(codespan::Span::initial())
     }
 
+    /// Creates a span at a specific position.
+    pub fn at(pos: usize) -> Self {
+        let pos: u32 = pos.try_into().expect("Code position is out of bounds");
+        Self(codespan::Span::new(pos, pos))
+    }
+
     /// Returns the `codespan_reporting` label for this span.
     pub fn as_label(&self) -> Label<()> {
         Label::primary((), self.0.start().to_usize()..self.0.end().to_usize())
@@ -47,6 +53,16 @@ impl Span {
     ) -> (usize, usize) {
         let location = files.location((), self.0.start().to_usize()).unwrap();
         (location.line_number, location.column_number)
+    }
+
+    /// Start position of the span.
+    pub fn start(&self) -> usize {
+        self.0.start().to_usize()
+    }
+
+    /// End position of the span.
+    pub fn end(&self) -> usize {
+        self.0.end().to_usize()
     }
 }
 

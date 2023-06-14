@@ -319,7 +319,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let iffalse = self.visit_block(iffalse);
 
                 quote! {
-                    if #cond #iftrue #iffalse
+                    if #cond #iftrue else #iffalse
                 }
             }
             BlockE(box block) => self.visit_block(block),

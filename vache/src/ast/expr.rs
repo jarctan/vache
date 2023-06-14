@@ -292,6 +292,29 @@ impl<'ctx> From<VarUse<'ctx>> for Expr<'ctx> {
     }
 }
 
+/// Parse a if-then. Common to both statement and expression parsing, so we
+/// factor it out here.
+///
+/// # Panics
+/// Panics if the pair is _not_ an if-then-else rule.
+pub(super) fn parse_if_then_else<'ctx>(
+    ctx: &mut Context<'ctx>,
+    pair: Pair<'ctx, Rule>,
+) -> Expr<'ctx> {
+    let span = Span::from(pair.as_span());
+    let mut pairs = pair.into_inner();
+    let cond = ctx.parse(pairs.next().unwrap());
+    let if_block: Block = ctx.parse(pairs.next().unwrap());
+    let else_block = pairs.next().map(|pair| ctx.parse(pair)).unwrap_or(Block {
+        span: Span::at(if_block.span.end()),
+        ..default()
+    });
+    Expr {
+        kind: IfE(boxed(cond), boxed(if_block), boxed(else_block)),
+        span,
+    }
+}
+
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
     fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
         let span = Span::from(pair.as_span());
@@ -305,14 +328,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                     Rule::ident => PlaceE(VarP(ctx.parse(pair))),
                     Rule::array => ArrayE(pair.into_inner().map(|pair| ctx.parse(pair)).collect()),
                     Rule::with_postfix => Expr::parse(pair, ctx).kind,
-                    Rule::if_then => {
-                        let mut pairs = pair.into_inner();
-                        let cond = ctx.parse(pairs.next().unwrap());
-                        let if_block = ctx.parse(pairs.next().unwrap());
-                        let else_block =
-                            pairs.next().map(|pair| ctx.parse(pair)).unwrap_or_default();
-                        IfE(boxed(cond), boxed(if_block), boxed(else_block))
-                    }
+                    Rule::if_then => parse_if_then_else(ctx, pair).kind,
                     Rule::binop => {
                         PRATT_PARSER
                             .map_primary(|primary| Expr::parse(primary, ctx))

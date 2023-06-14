@@ -5,6 +5,7 @@ use std::default::default;
 use pest::iterators::Pair;
 use ExprKind::*;
 
+use super::expr::parse_if_then_else;
 use super::{Block, Expr, ExprKind, Place, Span, VarDef, VarUse};
 use super::{Context, Parsable};
 use crate::grammar::*;
@@ -168,6 +169,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
                 let body = ctx.parse(pairs.next().unwrap());
                 ForS { item, iter, body }
             }
+            Rule::if_then => ExprS(parse_if_then_else(ctx, pair)),
             rule => panic!("parser internal error: expected statement, found {rule:?}"),
         };
         Stmt { span, kind }

@@ -191,6 +191,11 @@ impl<'ctx> Ty<'ctx> {
             span: span.into(),
         }
     }
+
+    /// Does this type reduce to a bool type.
+    pub fn is_bool(&self) -> bool {
+        matches!(self, BoolT | HoleT)
+    }
 }
 
 impl<'ctx> PartialEq for Ty<'ctx> {
