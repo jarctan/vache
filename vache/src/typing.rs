@@ -828,11 +828,21 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         if body_ty != &f.ret_ty {
             self.ctx.emit(
                 Diagnostic::error()
-                    .with_message("Mismatched type")
-                    .with_labels(vec![f.span.as_label().with_message(format!(
-                        "the body should return a value of type {}, got {body_ty} instead",
-                        f.ret_ty,
-                    ))]),
+                    .with_code(TYPE_MISMATCH_ERROR)
+                    .with_message(format!(
+                        "expected type {:?}, found type {:?}",
+                        f.ret_ty, body_ty
+                    ))
+                    .with_labels(vec![
+                        body.ret
+                            .span
+                            .as_label()
+                            .with_message(format!("body returns a value of type {}", body_ty)),
+                        f.ret_ty
+                            .span
+                            .as_secondary_label()
+                            .with_message(format!("function declared to return {:?}", f.ret_ty)),
+                    ]),
             );
         }
 

@@ -110,7 +110,9 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Fun<'ctx> {
         let ret_ty: TyUse = if consume_opt!(pairs, Rule::arw) {
             ctx.parse(consume!(pairs, Rule::ty))
         } else {
-            UnitT.with_span(params_span)
+            // Otherwise, arbitrarily place the span of the nonexistent type return at the
+            // end of the span of the function parameters
+            UnitT.with_span(Span::at(params_span.end()))
         };
 
         let body = ctx.parse(consume!(pairs));
