@@ -1091,7 +1091,11 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ast::ExprKind::StringE(s) => Some(Pat::new(StringM(s), IntT, span)),
             ast::ExprKind::PlaceE(place) => {
                 if let ast::Place::VarP(v) = place {
-                    Some(Pat::new(IdentM(VarDef::with_stratum(v.with_type(todo!()), todo!())), IntT, span))
+                    Some(Pat::new(
+                        IdentM(VarDef::with_stratum(v.with_type(todo!()), todo!())),
+                        IntT,
+                        span,
+                    ))
                 } else {
                     self.ctx.emit(
                         Diagnostic::error()
@@ -1119,14 +1123,14 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             }
             ast::ExprKind::CallE { name, args } => {
                 // Compute the pattern for the args
-                let (mut args, old_args): (Vec<_>,_) = (default(), args);
+                let (mut args, old_args): (Vec<_>, _) = (default(), args);
                 for arg in old_args {
                     args.push(self.visit_pattern(arg)?);
                 }
 
                 let mut path = name.path();
                 let root = path.next().unwrap(); // Namespaced necessarily starts with something
-                
+
                 if let Some(enun) = self.enum_env.get(&root) && let Some(variant) = path.next()
                 && let Some(params) = enun.variants.get(variant) && path.next().is_none() {
                     if args.len() != params.len() {
@@ -1141,7 +1145,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         );
                         return None;
                     }
-        
+
                     // Check type of arguments.
                     for (
                         i,
@@ -1169,7 +1173,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             );
                         }
                     }
-        
+
                     Some(Pat::new(VariantM { enun: root, variant, args }, EnumT(enun.name), span))
                 } else {
                     self.ctx.emit(
@@ -1181,7 +1185,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     );
                     None
                 }
-            },
+            }
             ast::ExprKind::NamespacedE(_) => todo!(),
         }
     }
