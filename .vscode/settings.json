@@ -7,9 +7,11 @@
         "binop",
         "bumpalo",
         "cfgs",
+        "clncln",
         "decr",
         "Deque",
         "enun",
+        "farw",
         "fibo",
         "fixpoint",
         "Flowable",
@@ -34,6 +36,7 @@
         "selfvisitor",
         "struct",
         "strukt",
+        "subexpr",
         "tast",
         "termcolor",
         "thiserror",
@@ -43,7 +46,7 @@
         "unparse",
         "vache",
         "vardef",
-        "varmode",
+        "varmode"
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }

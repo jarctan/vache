@@ -24,5 +24,7 @@ pub const NOT_CALLABLE_ERROR: &str = "E0010";
 pub const UNKNOWN_TYPE_VAR: &str = "E0011";
 /// Access the field of something that is not a struct.
 pub const FIELD_NOT_STRUCT_ERROR: &str = "E0012";
+/// Not a valid pattern.
+pub const INVALID_PATTERN: &str = "E0013";
 /// Temporary: empty list error.
 pub const EMPTY_LIST_ERROR: &str = "E0100";

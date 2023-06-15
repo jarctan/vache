@@ -142,14 +142,17 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
         let kind = match pair.as_rule() {
             Rule::declare => {
                 let mut pairs = pair.into_inner();
-                let vardef = ctx.parse(pairs.next().unwrap());
-                let rhs = ctx.parse(pairs.next().unwrap());
+                consume!(pairs, Rule::var_kw);
+                let vardef = ctx.parse(consume!(pairs));
+                consume!(pairs, Rule::eq);
+                let rhs = ctx.parse(consume!(pairs));
                 DeclareS(vardef, rhs)
             }
             Rule::assign => {
                 let mut pairs = pair.into_inner();
-                let lhs = ctx.parse(pairs.next().unwrap());
-                let rhs = ctx.parse(pairs.next().unwrap());
+                let lhs = ctx.parse(consume!(pairs));
+                consume!(pairs, Rule::eq);
+                let rhs = ctx.parse(consume!(pairs));
                 AssignS(lhs, rhs)
             }
             Rule::expr => {
@@ -158,15 +161,18 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
             }
             Rule::while_loop => {
                 let mut pairs = pair.into_inner();
-                let cond = ctx.parse(pairs.next().unwrap());
-                let body = ctx.parse(pairs.next().unwrap());
+                consume!(pairs, Rule::while_kw);
+                let cond = ctx.parse(consume!(pairs));
+                let body = ctx.parse(consume!(pairs));
                 WhileS { cond, body }
             }
             Rule::for_loop => {
                 let mut pairs = pair.into_inner();
-                let item = ctx.parse(pairs.next().unwrap());
-                let iter = ctx.parse(pairs.next().unwrap());
-                let body = ctx.parse(pairs.next().unwrap());
+                consume!(pairs, Rule::for_kw);
+                let item = ctx.parse(consume!(pairs));
+                consume!(pairs, Rule::in_kw);
+                let iter = ctx.parse(consume!(pairs));
+                let body = ctx.parse(consume!(pairs));
                 ForS { item, iter, body }
             }
             Rule::if_then => ExprS(parse_if_then_else(ctx, pair)),

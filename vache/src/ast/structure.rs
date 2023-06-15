@@ -48,9 +48,12 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Struct<'ctx> {
         debug_assert!(matches!(pair.as_rule(), Rule::struct_def));
 
         let span = Span::from(pair.as_span());
-        let mut pairs = pair.into_inner();
-        let name = pairs.next().unwrap().as_str();
+        let mut pairs = pair.into_inner().peekable();
+        consume!(pairs, Rule::struct_kw);
+        let name = consume!(pairs).as_str();
+        consume!(pairs, Rule::lcb);
         let fields = pairs
+            .filter(|field| !matches!(field.as_rule(), Rule::cma | Rule::rcb))
             .map(|field| {
                 let vardef: VarDef = ctx.parse(field);
                 (vardef.var.as_str(), vardef.ty)

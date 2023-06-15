@@ -53,7 +53,12 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Block<'ctx> {
         let span = Span::from(pair.as_span());
         let mut stmts = vec![];
         let mut ret = None;
-        for pair in pair.into_inner() {
+        let mut pairs = pair.into_inner();
+        consume!(pairs, Rule::lcb);
+        for pair in pairs {
+            if matches!(pair.as_rule(), Rule::rcb) {
+                break;
+            }
             match pair.as_rule() {
                 Rule::stmt => stmts.push(ctx.parse(pair)),
                 Rule::expr => {

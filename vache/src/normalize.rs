@@ -189,7 +189,7 @@ impl<'ctx> Normalizer<'ctx> {
                 fields,
             } => {
                 // Destination
-                let dest_def = self.fresh_vardef(Ty::StructT(s_name));
+                let dest_def = self.fresh_vardef(e.ty);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
                 stmts.push(Stmt::Declare(dest_def));
 

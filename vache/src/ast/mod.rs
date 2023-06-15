@@ -2,6 +2,75 @@
 //!
 //! Each node in the tree = one file.
 
+/// Consumes and returns one pair from the `pairs`.
+///
+/// Usage:
+/// * `consume!(pairs)` consumes and returns the next pair.
+/// * `consume!(pairs, Rule::my_rule)` consumes and returns the next pair. On
+///   debug targets, it will check that the consumed pair is of rule `my_rule`.
+///
+/// In both cases, `pairs` must a mutable, peekable
+/// iterator over pairs, and `Rule::my_rule` a valid pest rule variant.
+macro_rules! consume {
+    ($pairs: expr, $rule: pat) => {{
+        let pair = $pairs.next().unwrap();
+        debug_assert!(
+            matches!(pair.as_rule(), $rule),
+            "expected {}, found rule {:?} for `{}`",
+            stringify!($rule),
+            pair.as_rule(),
+            pair.as_str(),
+        );
+        pair
+    }};
+    ($pairs: expr) => {
+        $pairs.next().unwrap()
+    };
+}
+
+/// Consumes and returns one pair starting from the **end** of `pairs`.
+///
+/// Usage:
+/// * `consume!(pairs)` consumes and returns the next pair from the `end`.
+/// * `consume!(pairs, Rule::my_rule)` consumes and returns the next pair
+///   starting from the`end. On debug targets, it will check that the consumed
+///   pair is of rule `my_rule`.
+///
+/// In both cases, `pairs` must a mutable, peekable
+/// iterator over pairs, and `Rule::my_rule` a valid pest rule variant.
+macro_rules! consume_back {
+    ($pairs: expr, $rule: pat) => {{
+        let pair = $pairs.next_back().unwrap();
+        debug_assert!(
+            matches!(pair.as_rule(), $rule),
+            "expected {}, found rule {:?} for `{}`",
+            stringify!($rule),
+            pair.as_rule(),
+            pair.as_str(),
+        );
+        pair
+    }};
+    ($pairs: expr) => {
+        $pairs.next_back().unwrap()
+    };
+}
+
+/// Checks if the next pair of `pairs` is of rule `rule`, if so, consumes and
+/// returns that pair.
+///
+/// `consume_opt(pairs, Rule::my_rule)` where `pairs` is a mutable, peekable
+/// iterator over pairs, and `Rule::my_rule` a valid pest rule variant.
+macro_rules! consume_opt {
+    ($pairs: expr, $rule: pat) => {{
+        if let Some(pair) = $pairs.peek() && matches!(pair.as_rule(), $rule) {
+                                                                    $pairs.next().unwrap();
+                                                                    true
+                                                                } else {
+                                                                    false
+                                                                }
+    }};
+}
+
 pub mod block;
 pub mod enumeration;
 pub mod expr;
@@ -16,6 +85,9 @@ pub mod stmt;
 pub mod structure;
 pub mod ty;
 pub mod var;
+
+use std::io::Write;
+use std::time::Instant;
 
 pub use anyhow::Context as AnyhowContext;
 pub use anyhow::Result;
@@ -170,5 +242,10 @@ pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
 ///
 /// The source code is in the `config` of the context `ctx`.
 pub fn parse_file<'ctx>(ctx: &mut Context<'ctx>) -> Result<Program<'ctx>> {
-    parse_rules(ctx, Rule::program)
+    print!("Parsing...");
+    std::io::stdout().flush()?;
+    let start = Instant::now();
+    let res = parse_rules(ctx, Rule::program);
+    println!("\rParsed file [{:?}]", start.elapsed());
+    res
 }

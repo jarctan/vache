@@ -92,23 +92,28 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Fun<'ctx> {
 
         let mut pairs = pair.into_inner().peekable();
 
-        let name = pairs.next().unwrap().as_str();
+        consume!(pairs, Rule::fn_kw);
 
-        let params_pair = pairs.next().unwrap();
+        let name = consume!(pairs).as_str();
+
+        let params_pair = consume!(pairs, Rule::params);
         let params_span = params_pair.as_span();
-        debug_assert!(matches!(params_pair.as_rule(), Rule::params));
-        let params = params_pair
-            .into_inner()
+        let mut params_pairs = params_pair.into_inner();
+        consume!(params_pairs, Rule::lp);
+        consume_back!(params_pairs, Rule::rp);
+
+        let params = params_pairs
+            .filter(|pair| !matches!(pair.as_rule(), Rule::cma))
             .map(|param| ctx.parse(param))
             .collect();
 
-        let ret_ty: TyUse = if pairs.peek().unwrap().as_rule() == Rule::ty {
-            ctx.parse(pairs.next().unwrap())
+        let ret_ty: TyUse = if consume_opt!(pairs, Rule::arw) {
+            ctx.parse(consume!(pairs, Rule::ty))
         } else {
             UnitT.with_span(params_span)
         };
 
-        let body = ctx.parse(pairs.next().unwrap());
+        let body = ctx.parse(consume!(pairs));
 
         Fun {
             name,

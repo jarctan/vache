@@ -99,14 +99,6 @@ impl<'ctx, T> LocTree<'ctx, T> {
         }
     }
 
-    /// Gets the node _value_ at a given location.
-    pub fn get(&self, loc: impl Into<Loc<'ctx>>) -> Option<&T> {
-        match self.get_node(loc)?.kind {
-            AtomL(ref value) => Some(value),
-            _ => None,
-        }
-    }
-
     /// Mutably gets the node at a given location.
     pub fn get_node_mut<'a>(
         &'a mut self,
@@ -140,14 +132,6 @@ impl<'ctx, T> LocTree<'ctx, T> {
                     hash_map::Entry::Vacant(_) => None,
                 },
             },
-        }
-    }
-
-    /// Mutably gets the node _value_ at a given location.
-    pub fn get_mut(&mut self, loc: impl Into<Loc<'ctx>>) -> Option<&mut T> {
-        match self.get_node_mut(loc)?.kind {
-            AtomL(ref mut value) => Some(value),
-            _ => None,
         }
     }
 

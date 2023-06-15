@@ -142,11 +142,13 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Namespaced<'ctx> {
         // data structure.
         let mut pairs = pair.into_inner().rev();
 
-        let name = pairs.next().unwrap().as_str();
+        let name = consume!(pairs).as_str();
 
-        let namespace = pairs.fold(Namespace::RelativeN, |acc, pair| {
-            Namespace::ChildN(ctx.alloc(acc), pair.as_str())
-        });
+        let namespace = pairs
+            .array_chunks::<2>()
+            .fold(Namespace::RelativeN, |acc, [_clncln, pair]| {
+                Namespace::ChildN(ctx.alloc(acc), pair.as_str())
+            });
 
         Namespaced {
             namespace,

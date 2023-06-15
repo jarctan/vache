@@ -276,8 +276,9 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for VarDef<'ctx> {
         let span = Span::from(pair.as_span());
         let mut pairs = pair.into_inner();
 
-        let var = ctx.parse(pairs.next().unwrap());
-        let ty = ctx.parse(pairs.next().unwrap());
+        let var = ctx.parse(consume!(pairs));
+        consume!(pairs, Rule::cln);
+        let ty = ctx.parse(consume!(pairs));
 
         VarDef { var, ty, span }
     }

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::default::default;
 
 use ExprKind::*;
+use PatKind::*;
 use PlaceKind::*;
 use Ty::*;
 
@@ -70,11 +71,11 @@ pub(crate) struct Typer<'t, 'ctx> {
     /// Compilation context.
     ctx: &'t mut Context<'ctx>,
     /// Map between function names and their definitions.
-    fun_env: HashMap<&'ctx str, ast::FunSig<'ctx>>,
+    fun_env: HashMap<&'ctx str, &'ctx ast::FunSig<'ctx>>,
     /// Map between `struct` names and their definitions.
-    struct_env: HashMap<&'ctx str, Struct<'ctx>>,
+    struct_env: HashMap<&'ctx str, &'ctx Struct<'ctx>>,
     /// Map between `enum` names and their definitions.
-    enum_env: HashMap<&'ctx str, Enum<'ctx>>,
+    enum_env: HashMap<&'ctx str, &'ctx Enum<'ctx>>,
     /// Map between valid type names and their kind (structure, variants, etc.).
     /// Initialized at the very beginning, allows to have
     /// mutually-referencing structures.
@@ -156,19 +157,19 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     /// Declares a new function in the context.
     fn add_fun(&mut self, fun_def: impl Into<ast::FunSig<'ctx>>) {
         let fun_def = fun_def.into();
-        self.fun_env.insert(fun_def.name, fun_def);
+        self.fun_env.insert(fun_def.name, self.ctx.alloc(fun_def));
     }
 
     /// Declares a new structure in the context.
     fn add_struct(&mut self, strukt: impl Into<Struct<'ctx>>) {
         let strukt = strukt.into();
-        self.struct_env.insert(strukt.name, strukt);
+        self.struct_env.insert(strukt.name, self.ctx.alloc(strukt));
     }
 
     /// Declares a new enum in the context.
     fn add_enum(&mut self, enun: impl Into<Enum<'ctx>>) {
         let enun = enun.into();
-        self.enum_env.insert(enun.name, enun);
+        self.enum_env.insert(enun.name, self.ctx.alloc(enun));
     }
 
     /// Returns the current stratum/scope id.
@@ -262,9 +263,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ast::Place::FieldP(box s, field) => {
                 let s = self.visit_expr(s);
                 match s.ty {
-                    StructT(name) => {
-                        let strukt = self.struct_env.get(name).unwrap();
-
+                    StructT(strukt) => {
+                        let strukt = self.struct_env[strukt];
                         // Check that the field we want to access exists
                         let ty = match strukt.get_field(field) {
                             Some(ty) => ty,
@@ -367,7 +367,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
             }
 
-            Expr::new(VariantE { enun: root, variant, args }, EnumT(root), self.current_stratum(), span)
+            Expr::new(VariantE { enun: root, variant, args }, EnumT(enun.name), self.current_stratum(), span)
         } else if let Some(fun) = self.fun_env.get(root) {
             let name = root;
             // Check the number of arguments.
@@ -438,9 +438,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 Expr::new(IntegerE(i), IntT, self.current_stratum(), span)
             }
             ast::ExprKind::StringE(s) => Expr::new(StringE(s), StrT, self.current_stratum(), span),
-            crate::examples::ExprKind::NamespacedE(namespaced) => {
-                self.visit_call(namespaced, vec![], span)
-            }
+            ast::ExprKind::NamespacedE(namespaced) => self.visit_call(namespaced, vec![], span),
             ast::ExprKind::PlaceE(place) => match place {
                 ast::Place::VarP(v) => match self.get_var(v) {
                     Some((vardef, stm)) => Expr::new(
@@ -461,8 +459,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 },
                 ast::Place::FieldP(box s, field) => {
                     let s = self.visit_expr(s);
-                    if let StructT(name) = &s.ty {
-                        let strukt = self.struct_env.get(name).unwrap();
+                    if let StructT(strukt) = &s.ty {
+                        let strukt = self.struct_env[strukt];
                         // Check that the field we want to access exists
                         let ty = match strukt.get_field(field) {
                             Some(ty) => ty,
@@ -624,7 +622,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     .map(|(name, expr)| (name, self.visit_expr(expr)))
                     .collect();
 
-                let strukt = self.struct_env.get(s_name).unwrap();
+                let strukt = &self.struct_env[s_name];
 
                 // Check that the instance has the same field names as the declaration
                 if !keys_match(&strukt.fields, fields.iter().map(|(field, _)| field)) {
@@ -675,7 +673,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         name: s_name,
                         fields,
                     },
-                    StructT(s_name),
+                    StructT(strukt.name),
                     common_stm,
                     span,
                 )
@@ -749,6 +747,59 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     std::cmp::max(start_stm, end_stm),
                     span,
                 )
+            }
+            ast::expr::ExprKind::MatchE(box matched, branches) => {
+                let matched = self.visit_expr(matched);
+                let enun = match matched.ty {
+                    EnumT(enun) => enun,
+                    _ => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message(format!(
+                                    "expected a enumerated type, found type {}",
+                                    matched.ty
+                                ))
+                                .with_labels(vec![matched.span.as_label()])
+                                .with_notes(vec![
+                                    "you can only match on an enumerated type".to_string()
+                                ]),
+                        );
+                        return Expr::hole(span);
+                    }
+                };
+
+                let mut new_branches: Vec<(Pat, Expr)> = vec![];
+                for (box pat, box expr) in branches {
+                    let pat = match self.visit_pattern(pat) {
+                        Some(pat) => pat,
+                        None => return Expr::hole(span),
+                    };
+                    if pat.ty != matched.ty {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message(format!(
+                                    "Expected type {:?}, found type {:?}",
+                                    pat.ty, matched.ty
+                                ))
+                                .with_labels(vec![
+                                    pat.span
+                                        .as_label()
+                                        .with_message(format!("pattern is of type {:?}", pat.ty)),
+                                    matched.span.as_secondary_label().with_message(format!(
+                                        "matched element is of type {:?}",
+                                        matched.ty
+                                    )),
+                                ]),
+                        );
+                    };
+                    self.push_scope();
+                    let expr = self.visit_expr(expr);
+                    self.pop_scope().unwrap();
+                    new_branches.push((pat, expr));
+                }
+                return Expr::hole(span);
             }
         }
     }
@@ -1030,6 +1081,109 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         self.add_enum(enun.clone());
 
         enun
+    }
+
+    /// Visits a pattern.
+    fn visit_pattern(&mut self, pat: ast::Expr<'ctx>) -> Option<Pat<'ctx>> {
+        let span = pat.span;
+        match pat.kind {
+            ast::ExprKind::IntegerE(i) => Some(Pat::new(IntegerM(i), IntT, span)),
+            ast::ExprKind::StringE(s) => Some(Pat::new(StringM(s), IntT, span)),
+            ast::ExprKind::PlaceE(place) => {
+                if let ast::Place::VarP(v) = place {
+                    Some(Pat::new(IdentM(VarDef::with_stratum(v.with_type(todo!()), todo!())), IntT, span))
+                } else {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(INVALID_PATTERN)
+                            .with_message("Not a valid pattern")
+                            .with_labels(vec![pat.span.as_label()]),
+                    );
+                    None
+                }
+            }
+            ast::ExprKind::RangeE(..)
+            | ast::ExprKind::StructE { .. }
+            | ast::ExprKind::ArrayE(_)
+            | ast::ExprKind::MatchE(..)
+            | ast::ExprKind::IfE(..)
+            | ast::ExprKind::BlockE(..)
+            | ast::ExprKind::UnitE => {
+                self.ctx.emit(
+                    Diagnostic::error()
+                        .with_code(INVALID_PATTERN)
+                        .with_message("Not a valid pattern")
+                        .with_labels(vec![pat.span.as_label()]),
+                );
+                None
+            }
+            ast::ExprKind::CallE { name, args } => {
+                // Compute the pattern for the args
+                let (mut args, old_args): (Vec<_>,_) = (default(), args);
+                for arg in old_args {
+                    args.push(self.visit_pattern(arg)?);
+                }
+
+                let mut path = name.path();
+                let root = path.next().unwrap(); // Namespaced necessarily starts with something
+                
+                if let Some(enun) = self.enum_env.get(&root) && let Some(variant) = path.next()
+                && let Some(params) = enun.variants.get(variant) && path.next().is_none() {
+                    if args.len() != params.len() {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(ARG_NB_MISMATCH)
+                                .with_message(
+                                format!("Expected {} argument(s), found {}", params.len(), args.len()))
+                                .with_labels(vec![name.span.as_label()])
+                                .with_notes(vec![format!("constructor {root}::{variant} expects {} argument(s)", params.len())])
+                                .with_labels(vec![enun.span.as_secondary_label().with_message("variant is defined here")]),
+                        );
+                        return None;
+                    }
+        
+                    // Check type of arguments.
+                    for (
+                        i,
+                        (
+                            Pat {
+                                ty: arg_ty, span, ..
+                            },
+                            ast::TyUse { kind: param_ty, .. },
+                        ),
+                    ) in args.iter().zip(params.iter()).enumerate()
+                    {
+                        if arg_ty != param_ty {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(TYPE_MISMATCH_ERROR)
+                                    .with_message(format!(
+                                        "expected type {param_ty}, found type {arg_ty}"
+                                    ))
+                                    .with_labels(vec![span.as_label()])
+                                    .with_notes(vec![format!(
+                                        "{param_ty} is the expected type for argument #{} of `{}`",
+                                        i + 1,
+                                        root
+                                    )]),
+                            );
+                        }
+                    }
+        
+                    Some(Pat::new(VariantM { enun: root, variant, args }, EnumT(enun.name), span))
+                } else {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(NOT_CALLABLE_ERROR)
+                            .with_message(
+                                format!("{} is not a callable identifier", root))
+                            .with_labels(vec![name.span.as_label()])
+                    );
+                    None
+                }
+            },
+            ast::ExprKind::NamespacedE(_) => todo!(),
+        }
     }
 }
 

@@ -48,14 +48,20 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Enum<'ctx> {
         debug_assert!(matches!(pair.as_rule(), Rule::enum_def));
 
         let span = Span::from(pair.as_span());
-        let mut pairs = pair.into_inner();
-        let name = pairs.next().unwrap().as_str();
+        let mut pairs = pair.into_inner().peekable();
+        consume!(pairs, Rule::enum_kw);
+        let name = consume!(pairs).as_str();
+        consume!(pairs, Rule::lcb);
         let variants = pairs
+            .filter(|arg| !matches!(arg.as_rule(), Rule::cma | Rule::rcb))
             .map(|variant| {
                 debug_assert!(matches!(variant.as_rule(), Rule::variant_def));
                 let mut pairs = variant.into_inner();
-                let name = pairs.next().unwrap().as_str();
-                let args: Vec<_> = pairs.map(|arg| ctx.parse(arg)).collect();
+                let name = consume!(pairs).as_str();
+                let args: Vec<_> = pairs
+                    .filter(|arg| !matches!(arg.as_rule(), Rule::lp | Rule::rp | Rule::cma))
+                    .map(|arg| ctx.parse(arg))
+                    .collect();
                 (name, args)
             })
             .collect();

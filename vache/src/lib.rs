@@ -11,6 +11,11 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
+use std::time::Instant;
+
+/// Trigger verbose mode.
+pub const VERBOSE: bool = true;
+
 mod anf;
 pub mod ast;
 mod borrowing;
@@ -64,8 +69,8 @@ pub fn compile<'ctx>(
 ) -> Result<()> {
     match check(ctx, p)? {
         Ok(mut checked) => {
-            borrow_check(mir(&mut checked));
-            steps::cargo(steps::compile(ctx, checked), name.as_ref(), dest_dir).unwrap();
+            borrow_check(mir(&mut checked)?)?;
+            steps::cargo(steps::compile(ctx, checked)?, name.as_ref(), dest_dir).unwrap();
             Ok(())
         }
         Err(diagnostics) => {
@@ -84,7 +89,7 @@ pub fn execute<'ctx>(
 ) -> Result<String> {
     match check(ctx, p)? {
         Ok(mut checked) => {
-            borrow_check(mir(&mut checked));
+            borrow_check(mir(&mut checked)?)?;
             let res = steps::run(ctx, checked, name, dest_dir)?;
             Ok(res)
         }
@@ -127,13 +132,19 @@ mod steps {
         ctx: &mut Context<'ctx>,
         p: impl Into<ast::Program<'ctx>>,
     ) -> Result<Result<tast::Program<'ctx>, Diagnostics<'ctx>>> {
+        print!("Type-checking...");
+        std::io::stdout().flush()?;
+        let start = Instant::now();
+
         let mut typer = Typer::new(ctx);
         let res = typer.check(p.into());
-        if ctx.reporter.has_errors() {
+        let res = if ctx.reporter.has_errors() {
             Ok(Err(ctx.reporter.flush()))
         } else {
             Ok(Ok(res))
-        }
+        };
+        println!("\rType-checked [{:?}]", start.elapsed());
+        res
     }
 
     /// Borrow-checks a given program.
@@ -144,29 +155,48 @@ mod steps {
     ///
     /// Under the hood, this function is in charge of allocating a new
     /// `BorrowChecker` and launching it on your program.
-    pub fn borrow_check<'ctx>(p: impl Into<mir::Program<'ctx>>) -> mir::Program<'ctx> {
+    pub fn borrow_check<'ctx>(p: impl Into<mir::Program<'ctx>>) -> Result<mir::Program<'ctx>> {
+        print!("Borrow-checking...");
+        std::io::stdout().flush()?;
+        let start = Instant::now();
         let mut borrow_checker = BorrowChecker::new();
-        borrow_checker.check(p.into())
+        let res = borrow_checker.check(p.into());
+        println!("\rBorrow-checked [{:?}]", start.elapsed());
+        Ok(res)
     }
 
     /// Computes the MIR output of a given program.
     ///
     /// Under the hood, in charge of allocating a new `MIRer` and launching it
     /// on your program.
-    pub fn mir<'mir>(p: &'mir mut tast::Program<'_>) -> mir::Program<'mir> {
+    pub fn mir<'mir>(p: &'mir mut tast::Program<'_>) -> Result<mir::Program<'mir>> {
+        print!("Miring...");
+        std::io::stdout().flush()?;
+        let start = Instant::now();
         let mut normalizer = Normalizer::new(p.arena);
         let normalized = normalizer.normalize(p);
         let mut mirer = MIRer::new();
-        mirer.gen_mir(normalized)
+        let res = mirer.gen_mir(normalized);
+        println!("\rMIR-ed [{:?}]", start.elapsed());
+        Ok(res)
     }
 
     /// Compiles a given program.
     ///
     /// Under the hood, in charge of allocating a new `Compiler` and launching
     /// it on your program.
-    pub fn compile<'ctx>(ctx: &mut Context<'ctx>, p: impl Into<tast::Program<'ctx>>) -> String {
+    pub fn compile<'ctx>(
+        ctx: &mut Context<'ctx>,
+        p: impl Into<tast::Program<'ctx>>,
+    ) -> Result<String> {
+        print!("Translating into Rust code...");
+        std::io::stdout().flush()?;
+        let start = Instant::now();
+
         let mut compiler = Compiler::new(ctx);
-        compiler.compile(p.into())
+        let res = compiler.compile(p.into());
+        println!("\rTranslated into Rust code [{:?}]", start.elapsed());
+        Ok(res)
     }
 
     /// Interprets a given program.
@@ -174,8 +204,8 @@ mod steps {
     /// Under the hood, it will allocate a new `Interpreter` and launch it on
     /// your program. It will call the function `main` within your program
     /// and return the standard output of your program.
-    pub fn interpret<'ctx>(p: impl Into<mir::Program<'ctx>>) -> String {
-        interpret::interpret(p.into())
+    pub fn interpret<'ctx>(p: impl Into<mir::Program<'ctx>>) -> Result<String> {
+        Ok(interpret::interpret(p.into()))
     }
 
     /// Runs a given MIR program.
@@ -186,8 +216,9 @@ mod steps {
         dest_dir: &Path,
     ) -> Result<String> {
         let name = name.as_ref();
-        cargo(compile(ctx, p), name, dest_dir)?;
+        cargo(compile(ctx, p)?, name, dest_dir)?;
 
+        println!("--------------------------------");
         // Cargo run on the file
         let run_cmd = Command::new(format!("./{name}"))
             .current_dir(dest_dir)
@@ -203,6 +234,11 @@ mod steps {
 
     /// Final stage: compiles the Rust source code down to machine code.
     pub fn cargo(source_code: String, name: &str, dest_dir: &Path) -> Result<()> {
+        print!("Compiling the Rust code...");
+        std::io::stdout().flush()?;
+        std::thread::sleep(std::time::Duration::from_millis(2000));
+        let start = Instant::now();
+
         let target_dir = Path::new("vache_target");
         let binary_name = "binary";
         let dest_file = dest_dir.join(name);
@@ -299,6 +335,7 @@ mod steps {
         fs::create_dir_all(dest_dir)?;
         fs::copy(source_file, dest_file)?;
 
+        println!("\rCompiled the Rust code [{:?}]", start.elapsed());
         Ok(())
     }
 }

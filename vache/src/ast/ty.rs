@@ -233,22 +233,26 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for TyUse<'ctx> {
         assert!(matches!(pair.as_rule(), Rule::ty | Rule::non_iter_ty));
         let span = Span::from(pair.as_span());
         let mut pairs = pair.into_inner();
-        let pair = pairs.next().unwrap();
+        let pair = consume!(pairs);
         let kind = match pair.as_rule() {
             Rule::unit => UnitT,
             Rule::bool_ty => BoolT,
             Rule::int_ty => IntT,
             Rule::str_ty => StrT,
             Rule::array_ty => {
-                let inner: TyUse = ctx.parse(pair.into_inner().next().unwrap());
+                let mut pairs = pair.into_inner();
+                consume!(pairs, Rule::lb);
+                let inner: TyUse = ctx.parse(consume!(pairs));
+                consume!(pairs, Rule::rb);
                 ArrayT(ctx.alloc(inner.kind))
             }
             Rule::iter_ty => {
                 let mut pairs = pair.into_inner();
-                let inner: TyUse = ctx.parse(pairs.next().unwrap());
+                let inner: TyUse = ctx.parse(consume!(pairs));
                 let mut res = inner.kind;
                 // For each `..`, add a layer of indirection
-                for _ in pairs {
+                for pair in pairs {
+                    debug_assert!(matches!(pair.as_rule(), Rule::rg));
                     res = IterT(ctx.alloc(res));
                 }
                 res

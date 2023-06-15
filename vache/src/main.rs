@@ -65,7 +65,7 @@ fn main() -> anyhow::Result<()> {
             let program = parse_file(&mut context).context("Compilation failed")?;
             match check(&mut context, program)? {
                 Ok(mut checked) => {
-                    let mir = borrow_check(mir(&mut checked));
+                    let mir = borrow_check(mir(&mut checked)?)?;
                     println!("{:#?}", mir);
                     Ok(())
                 }

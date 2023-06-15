@@ -212,7 +212,7 @@ impl<'ctx> Add for Ledger<'ctx> {
 impl<'ctx> BitOr for Ledger<'ctx> {
     type Output = Self;
 
-    fn bitor(mut self, rhs: Self) -> Self {
+    fn bitor(self, _rhs: Self) -> Self {
         todo!()
     }
 }
@@ -220,7 +220,7 @@ impl<'ctx> BitOr for Ledger<'ctx> {
 impl<'ctx, 'a> Sub<&'a Ledger<'ctx>> for Ledger<'ctx> {
     type Output = Self;
 
-    fn sub(mut self, rhs: &Self) -> Self {
+    fn sub(self, _rhs: &Self) -> Self {
         todo!()
     }
 }
