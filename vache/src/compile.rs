@@ -409,7 +409,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let name = format_ident!("{}", param.name().as_str());
                 let ty = Self::translate_type(&param.ty, true);
                 quote! {
-                    #name: #ty
+                    mut #name: #ty
                 }
             })
             .collect();

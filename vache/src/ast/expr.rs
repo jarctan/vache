@@ -14,7 +14,7 @@ use crate::utils::boxed;
 
 lazy_static! {
     static ref PRATT_PARSER: PrattParser<Rule> = PrattParser::new()
-        .op(Op::infix(Rule::eq, Assoc::Left) | Op::infix(Rule::neq, Assoc::Left))
+        .op(Op::infix(Rule::eqq, Assoc::Left) | Op::infix(Rule::neq, Assoc::Left))
         .op(Op::infix(Rule::le, Assoc::Left)
             | Op::infix(Rule::lt, Assoc::Left)
             | Op::infix(Rule::ge, Assoc::Left)
