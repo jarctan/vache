@@ -146,8 +146,12 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
 
     /// Collects modes in a place.
     fn visit_place(&mut self, place: &Place<'ctx>) {
+        // Add the place to the farm
+        // If there is already an entry for the same position, keep it and discard ours,
+        // so that we keep the one that matches the biggest (topmost) element.
         self.farm
-            .insert(place.span.line_col(self.context.files), place.mode);
+            .entry(place.span.line_col(self.context.files))
+            .or_insert(place.mode);
         match &place.kind {
             VarP(_) => (),
             IndexP(box a, box i) => {

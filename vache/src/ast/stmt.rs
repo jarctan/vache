@@ -175,6 +175,13 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
                 let body = ctx.parse(consume!(pairs));
                 ForS { item, iter, body }
             }
+            Rule::block => {
+                let block = ctx.parse(pair);
+                ExprS(Expr {
+                    kind: BlockE(boxed(block)),
+                    span,
+                })
+            }
             Rule::if_then => ExprS(parse_if_then_else(ctx, pair)),
             rule => panic!("parser internal error: expected statement, found {rule:?}"),
         };

@@ -13,8 +13,8 @@ variant_def = { ident ~ (lp ~ ty ~ (cma ~ ty)* ~ rp)? }
 block = { lcb ~ (!(expr ~ rcb) ~ stmt)* ~ expr? ~ rcb }
 
 // Note: put expressions that can be used as statements without a ";"
-// AFTER the  (expr ~ sc) because of greediness
-stmt = { while_loop | for_loop | declare | assign | (expr ~ sc) | if_then | match_expr }
+// AFTER the (expr ~ sc) because of greediness
+stmt = { while_loop | for_loop | declare | assign | (expr ~ sc) | if_then | match_expr | block }
 
 while_loop = { while_kw ~ expr ~ block }
 

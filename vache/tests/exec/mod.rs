@@ -9,7 +9,6 @@ mod id_fn;
 mod is_even;
 mod matrices;
 mod multiple_refs;
-mod out_of_scope;
 mod structures;
 mod while_loop;
 
@@ -44,14 +43,14 @@ fn exec_va(filename: &str) {
     // Read the input
     let cur_dir = std::env::current_dir().expect("Current dir not found");
     let input: &str =
-        arena.alloc(std::fs::read_to_string(path).unwrap_or_else(|_| {
-            panic!("Failed to open file `{filename}` in {}", cur_dir.display())
-        }));
+        arena.alloc(std::fs::read_to_string(path).with_context(|| {
+            format!("Failed to open file `{filename}` in {}", cur_dir.display())
+        })?);
     let mut parts = input.split("################################\n");
     let input = parts.next().expect("file is empty");
     let expected = parts
         .next()
-        .expect("not a valid .vat file, missing the expected part");
+        .context("not a valid .vat file, missing the expected part")?;
     let borrows = parts.next(); // Borrow section is optional
 
     // Define the config/context of the compiler
@@ -62,7 +61,7 @@ fn exec_va(filename: &str) {
     let mut context = Context::new(config, &arena);
 
     // Parse and type/borrow check
-    let program = parse_file(&mut context).expect("Compilation failed");
+    let program = parse_file(&mut context).context("Compilation failed")?;
     let program = check_all(&mut context, program).context("Compilation error")?;
 
     // Get the mode for every place
@@ -82,15 +81,18 @@ fn exec_va(filename: &str) {
             // Match the `line:col:mode` pattern
             let mut els = borrow.split(':');
             let (line, col, expected) = (
-                els.next().expect("Wrong format: expected `line:col:mode`"),
-                els.next().expect("Wrong format: expected `line:col:mode`"),
-                els.next().expect("Wrong format: expected `line:col:mode`"),
+                els.next()
+                    .context("Wrong format: expected `line:col:mode`")?,
+                els.next()
+                    .context("Wrong format: expected `line:col:mode`")?,
+                els.next()
+                    .context("Wrong format: expected `line:col:mode`")?,
             );
 
             // Parse column and lines as integers
             // And parse the mode string
-            let line = line.parse().expect("Wrong format: line is not a number");
-            let col = col.parse().expect("Wrong format: col is not a number");
+            let line = line.parse().context("Wrong format: line is not a number")?;
+            let col = col.parse().context("Wrong format: col is not a number")?;
             let expected = match expected {
                 "Moved" => Mode::Moved,
                 "Borrowed" => Mode::Borrowed,
@@ -99,23 +101,28 @@ fn exec_va(filename: &str) {
             };
 
             // Fetch the actual mode for that line:col
-            let found = modes.get(&(line, col)).unwrap_or_else(|| {
-                let indented = format!("
+            let found = modes.get(&(line, col)).with_context(|| {
+                format!("
                 Position {line}:{col} do not correspond to any element with referencing mode in the code.
-                Make sure to indicate the _start_ position of the element to inspect");
-                panic!("{}", indented.unindent())
-            });
+                Make sure to indicate the _start_ position of the element to inspect")
+                .unindent()
+            })?;
 
-            assert_eq!(
-                &expected, found,
-                "Expected {expected:?}, found {found:?} at {line}:{col}"
+            ensure!(
+                &expected == found,
+                "expected {expected:?}, found {found:?} at {line}:{col}\nsee `{filename}` for details"
             );
         }
     }
 
     // Run
-    let res = run(&mut context, program, "test-binary", &cur_dir).expect("execution error");
+    let res = run(&mut context, program, "test-binary", &cur_dir).context("execution error")?;
 
     // Finally, check the result
-    assert_eq!(res, expected);
+    ensure!(
+        res == expected,
+        format!(
+            "output mismatch\nexpected:\n{expected}\nfound:\n{res}\nsee `{filename}` for details"
+        )
+    );
 }

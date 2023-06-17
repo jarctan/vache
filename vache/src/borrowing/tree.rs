@@ -142,7 +142,7 @@ impl<'ctx, T> LocTree<'ctx, T> {
             FieldL(strukt, field) => {
                 let mut entry = self.hashmap_entry(*strukt)?;
                 let node = entry.get_mut();
-                let res = node.remove_field(field);
+                let res = node.remove_field(field)?;
 
                 // Clean up the entry if it's empty
                 match node.kind {
@@ -216,10 +216,10 @@ impl<'ctx, T> LocTreeNode<'ctx, T> {
     ///
     /// # Panics
     /// Panics if `self` is a leaf node of if the field/child does not exist.
-    fn remove_field(&mut self, field: &'ctx str) -> LocTreeNode<'ctx, T> {
+    fn remove_field(&mut self, field: &'ctx str) -> Option<LocTreeNode<'ctx, T>> {
         match self.kind {
             AtomL(..) => panic!("Cannot remove field from AtomL"),
-            CompoundL(ref mut map) => map.remove(field).unwrap(),
+            CompoundL(ref mut map) => map.remove(field),
         }
     }
 
