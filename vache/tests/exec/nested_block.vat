@@ -1,0 +1,22 @@
+enum User {
+    Test(int),
+    Toto(int),
+}
+
+enum User2 {
+    Test,
+    Toto(int),
+}
+
+fn main() {
+    var a: int = {
+        var x: int = 5;
+        x
+    };
+    print(a);
+}
+################################
+5
+################################
+14:9:Moved // escape subblock
+16:11:Moved // print
