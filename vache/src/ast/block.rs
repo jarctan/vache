@@ -2,6 +2,7 @@
 
 use std::default::default;
 
+use double_ended_peekable::DoubleEndedPeekableExt;
 use pest::iterators::Pair;
 use ExprKind::*;
 
@@ -49,30 +50,36 @@ pub fn stmts<'ctx>(stmts: impl IntoIterator<Item = Stmt<'ctx>>) -> Block<'ctx> {
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Block<'ctx> {
     fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
-        debug_assert!(matches!(pair.as_rule(), Rule::block | Rule::primitive));
+        debug_assert!(matches!(pair.as_rule(), Rule::block));
         let span = Span::from(pair.as_span());
-        let mut stmts = vec![];
-        let mut ret = None;
-        let mut pairs = pair.into_inner();
+
+        let mut pairs = pair.into_inner().double_ended_peekable();
         consume!(pairs, Rule::lcb);
-        for pair in pairs {
-            if matches!(pair.as_rule(), Rule::rcb) {
-                break;
-            }
-            match pair.as_rule() {
-                Rule::stmt => stmts.push(ctx.parse(pair)),
-                Rule::expr => {
-                    debug_assert!(ret.is_none());
-                    ret = Some(ctx.parse(pair));
+        consume_back!(pairs, Rule::rcb);
+        let ret = if matches!(pairs.peek_back().map(Pair::as_rule), Some(Rule::expr)) {
+            Some(ctx.parse(consume_back!(pairs, Rule::expr)))
+        } else {
+            None
+        };
+
+        let stmts: Vec<Stmt> = pairs.map(|pair| ctx.parse(pair)).collect();
+
+        // Generating dummy ret expr with the best span for it
+        let ret = ret.unwrap_or_else(|| {
+            if let Some(stmt) = stmts.last() {
+                Expr {
+                    span: Span::at(stmt.span.end()),
+                    ..default()
                 }
-                rule => panic!("parser internal error: unexpected rule {:?}", rule),
+            } else {
+                Expr {
+                    span: Span::at(span.end()),
+                    ..default()
+                }
             }
-        }
-        Block {
-            stmts,
-            ret: ret.unwrap_or_default(),
-            span,
-        }
+        });
+
+        Block { stmts, ret, span }
     }
 }
 

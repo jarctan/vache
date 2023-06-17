@@ -817,6 +817,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     /// Type-checks a function.
     fn visit_fun(&mut self, mut f: ast::Fun<'ctx>) -> Fun<'ctx> {
         let stm = self.current_stratum();
+
+        self.push_scope();
         // Introduce arguments in the typing context
         for arg in &mut f.params {
             self.check_ty(&mut arg.ty);
@@ -845,6 +847,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     ]),
             );
         }
+
+        self.pop_scope();
 
         Fun {
             name: f.name,

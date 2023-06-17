@@ -206,6 +206,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "double-ended-peekable"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1e950c24c20b71152941bebea30a688db346d5eb97581a5e6dad52a0a808ac8"
+
+[[package]]
 name = "either"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -752,6 +758,7 @@ dependencies = [
  "clap",
  "codespan",
  "codespan-reporting",
+ "double-ended-peekable",
  "itertools",
  "lazy_static",
  "num-bigint",

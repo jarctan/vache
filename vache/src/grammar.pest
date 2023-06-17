@@ -2,15 +2,15 @@ program = _{ SOI ~ (fun | struct_def | enum_def)* ~ &EOI }
 
 fun = { fn_kw ~ ident ~ params ~ (arw ~ ty)? ~ block }
 
-params = {lp ~ (vardef ~ (cma ~ vardef)*)? ~ rp}
+params = { lp ~ (vardef ~ (cma ~ vardef)*)? ~ rp }
 
 struct_def = { struct_kw ~ ident ~ lcb ~ (vardef ~ (cma ~ vardef)* ~ cma?)? ~ rcb }
 
 enum_def = { enum_kw ~ ident ~ lcb ~ (variant_def ~ (cma ~ variant_def)* ~ cma?)? ~ rcb }
 
-variant_def = { ident  ~ (lp ~ ty ~ (cma ~ ty)* ~ rp)? }
+variant_def = { ident ~ (lp ~ ty ~ (cma ~ ty)* ~ rp)? }
 
-block = { lcb ~ stmt* ~ (expr)? ~ rcb }
+block = { lcb ~ (!(expr ~ rcb) ~ stmt)* ~ expr? ~ rcb }
 
 // Note: put expressions that can be used as statements without a ";"
 // AFTER the  (expr ~ sc) because of greediness
@@ -24,21 +24,21 @@ assign = { expr ~ eq ~ expr ~ sc }
 
 declare = { var_kw ~ vardef ~ eq ~ expr ~ sc }
 
-vardef = {ident ~ cln ~ ty}
+vardef = { ident ~ cln ~ ty }
 
 expr = { if_then | match_expr | binop | with_postfix | primitive | block }
 
 // Special parsing for matched expr that forbids struct instances (which would not be matchable in any case).
 // Need to remove them now, because of parser greediness that causes some bugs with `match ident {}` which is parsed
 // as being a match on the struct instance `ident {}`
-matched_expr = { if_then | match_expr | binop | with_postfix | matched_primitive | block  }
+matched_expr      = { if_then | match_expr | binop | with_postfix | matched_primitive | block }
 matched_primitive = { primitive_wo_struct }
 
 binop = { (with_postfix | primitive) ~ (infix ~ (with_postfix | primitive))+ }
 
 with_postfix = { primitive ~ (field_postfix | index_postfix | call_postfix | range_postfix)+ }
 
-primitive = { struct_instance | primitive_wo_struct }
+primitive           =  { struct_instance | primitive_wo_struct }
 primitive_wo_struct = _{ array | unit | integer | string | namespaced | subexpr | ident }
 
 subexpr = { lp ~ expr ~ rp }
@@ -51,7 +51,7 @@ index_postfix = { lb ~ primitive ~ rb }
 
 call_postfix = { lp ~ (expr ~ (cma ~ expr)*)? ~ rp }
 
-range_postfix =  { rg ~ expr }
+range_postfix = { rg ~ expr }
 
 struct_instance = { ident ~ lcb ~ (ident ~ cln ~ expr ~ cma)* ~ rcb }
 
@@ -95,20 +95,20 @@ COMMENT = _{ ("//" ~ (!"\n" ~ ANY)* ~ "\n") | ("/*" ~ (!"*/" ~ ANY)* ~ "*/") }
 // TOKENS
 lcb = { "{" }
 rcb = { "}" }
-lp = { "(" }
-rp = { ")" }
-lb = { "[" }
-rb = { "]" }
+lp  = { "(" }
+rp  = { ")" }
+lb  = { "[" }
+rb  = { "]" }
 
-sc = { ";" }
-eq = { "=" }
-cln = { ":" }
-cma = { "," }
-dt = { "." }
+sc     = { ";" }
+eq     = { "=" }
+cln    = { ":" }
+cma    = { "," }
+dt     = { "." }
 clncln = { "::" }
-arw = { "->" }
-farw = { "=>" }
-pipe = { "|"}
+arw    = { "->" }
+farw   = { "=>" }
+pipe   = { "|" }
 
 add = { "+" }
 sub = { "-" }
@@ -116,23 +116,23 @@ mul = { "*" }
 div = { "/" }
 rem = { "%" }
 pow = { "^" }
-le = { "<=" }
-lt = { "<" }
-ge = { ">=" }
-gt = { ">" }
-eqq =  { "==" }
+le  = { "<=" }
+lt  = { "<" }
+ge  = { ">=" }
+gt  = { ">" }
+eqq = { "==" }
 neq = { "!=" }
 
-while_kw = { "while" }
-for_kw = { "for" }
-in_kw = { "in" }
-if_kw = { "if" }
-else_kw = { "else" }
-match_kw = { "match" }
-var_kw = { "var" }
+while_kw  = { "while" }
+for_kw    = { "for" }
+in_kw     = { "in" }
+if_kw     = { "if" }
+else_kw   = { "else" }
+match_kw  = { "match" }
+var_kw    = { "var" }
 struct_kw = { "struct" }
-enum_kw = { "enum" }
-rg = { ".." }
-fn_kw = { "fn" }
+enum_kw   = { "enum" }
+rg        = { ".." }
+fn_kw     = { "fn" }
 
 unit = { "()" }
