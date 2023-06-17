@@ -13,7 +13,8 @@ mod out_of_scope;
 mod structures;
 mod while_loop;
 
-use vache_lib::{config::Config, execute, Arena, Context};
+use unindent::Unindent;
+use vache_lib::{check_all, config::Config, farm_modes, mir::Mode, run, Arena, Context};
 
 /// Automatically detects and runs `.vat` (Vache bundled test) files.
 ///
@@ -46,9 +47,12 @@ fn exec_va(filename: &str) {
         arena.alloc(std::fs::read_to_string(path).unwrap_or_else(|_| {
             panic!("Failed to open file `{filename}` in {}", cur_dir.display())
         }));
-    let (input, expected) = input
-        .rsplit_once("################################\n")
-        .expect("not a valid .vat file, missing the ################################\\n delimiter");
+    let mut parts = input.split("################################\n");
+    let input = parts.next().expect("file is empty");
+    let expected = parts
+        .next()
+        .expect("not a valid .vat file, missing the expected part");
+    let borrows = parts.next(); // Borrow section is optional
 
     // Define the config/context of the compiler
     let config = Config {
@@ -57,9 +61,60 @@ fn exec_va(filename: &str) {
     };
     let mut context = Context::new(config, &arena);
 
-    // Compile and run the program.
+    // Parse and type/borrow check
     let program = parse_file(&mut context).expect("Compilation failed");
-    let res = execute(&mut context, program, "test-binary", &cur_dir).expect("execution error");
+    let program = check_all(&mut context, program).context("Compilation error")?;
+
+    // Get the mode for every place
+    let modes = farm_modes(&mut context, &program);
+
+    // If we specified a borrow-testing section
+    if let Some(borrows) = borrows {
+        // One borrow per line, so split lines
+        for borrow in borrows.split('\n') {
+            // Discard comments at the end
+            let borrow = borrow
+                .split_once("//")
+                .map(|(borrow, _comments)| borrow)
+                .unwrap_or(borrow)
+                .trim(); // <- Trim any whitespace
+
+            // Match the `line:col:mode` pattern
+            let mut els = borrow.split(':');
+            let (line, col, expected) = (
+                els.next().expect("Wrong format: expected `line:col:mode`"),
+                els.next().expect("Wrong format: expected `line:col:mode`"),
+                els.next().expect("Wrong format: expected `line:col:mode`"),
+            );
+
+            // Parse column and lines as integers
+            // And parse the mode string
+            let line = line.parse().expect("Wrong format: line is not a number");
+            let col = col.parse().expect("Wrong format: col is not a number");
+            let expected = match expected {
+                "Moved" => Mode::Moved,
+                "Borrowed" => Mode::Borrowed,
+                "Cloned" => Mode::Cloned,
+                _ => panic!("Wrong format: expected Moved, Borrowed or Cloned, found {expected}"),
+            };
+
+            // Fetch the actual mode for that line:col
+            let found = modes.get(&(line, col)).unwrap_or_else(|| {
+                let indented = format!("
+                Position {line}:{col} do not correspond to any element with referencing mode in the code.
+                Make sure to indicate the _start_ position of the element to inspect");
+                panic!("{}", indented.unindent())
+            });
+
+            assert_eq!(
+                &expected, found,
+                "Expected {expected:?}, found {found:?} at {line}:{col}"
+            );
+        }
+    }
+
+    // Run
+    let res = run(&mut context, program, "test-binary", &cur_dir).expect("execution error");
 
     // Finally, check the result
     assert_eq!(res, expected);

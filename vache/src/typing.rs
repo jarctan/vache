@@ -210,10 +210,10 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
     /// Type-checks a place (lhs expression).
     fn visit_place(&mut self, place: ast::Place<'ctx>, mode: Mode) -> Option<Place<'ctx>> {
-        match place {
-            ast::Place::VarP(var) => {
+        match place.kind {
+            ast::PlaceKind::VarP(var) => {
                 if let Some((vardef, stm)) = self.get_var(var) {
-                    Some(Place::var(var, vardef.ty, stm, mode))
+                    Some(Place::var(var, vardef.ty, stm, mode, place.span))
                 } else {
                     self.ctx.emit(
                         Diagnostic::error()
@@ -224,7 +224,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     None
                 }
             }
-            ast::Place::IndexP(box e, box ix) => {
+            ast::PlaceKind::IndexP(box e, box ix) => {
                 let e = self.visit_expr(e);
                 let ix = self.visit_expr(ix);
                 match (e.ty.as_array(), ix.ty.is_int()) {
@@ -235,6 +235,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             ty,
                             stm: e_stm,
                             mode,
+                            span: place.span,
                         })
                     }
                     (None, true) => {
@@ -261,7 +262,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     }
                 }
             }
-            ast::Place::FieldP(box s, field) => {
+            ast::PlaceKind::FieldP(box s, field) => {
                 let s = self.visit_expr(s);
                 match s.ty {
                     StructT(strukt) => {
@@ -296,6 +297,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             kind: FieldP(boxed(s), field),
                             mode,
                             ty,
+                            span: place.span,
                         })
                     }
                     HoleT => Some(Place {
@@ -303,6 +305,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         kind: FieldP(boxed(s), field),
                         mode,
                         ty: HoleT,
+                        span: place.span,
                     }),
                     _ => {
                         self.ctx.emit(
@@ -449,10 +452,16 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             }
             ast::ExprKind::StringE(s) => Expr::new(StringE(s), StrT, self.current_stratum(), span),
             ast::ExprKind::NamespacedE(namespaced) => self.visit_call(namespaced, vec![], span),
-            ast::ExprKind::PlaceE(place) => match place {
-                ast::Place::VarP(v) => match self.get_var(v) {
+            ast::ExprKind::PlaceE(place) => match place.kind {
+                ast::PlaceKind::VarP(v) => match self.get_var(v) {
                     Some((vardef, stm)) => Expr::new(
-                        PlaceE(Place::var(vardef.var, vardef.ty, stm, default())),
+                        PlaceE(Place::var(
+                            vardef.var,
+                            vardef.ty,
+                            stm,
+                            default(),
+                            place.span,
+                        )),
                         vardef.ty,
                         stm,
                         span,
@@ -467,7 +476,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         Expr::hole(span)
                     }
                 },
-                ast::Place::FieldP(box s, field) => {
+                ast::PlaceKind::FieldP(box s, field) => {
                     let s = self.visit_expr(s);
                     if let StructT(strukt) = &s.ty {
                         let strukt = self.struct_env[strukt];
@@ -502,6 +511,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 mode: default(),
                                 ty,
                                 stm,
+                                span: place.span,
                             }),
                             ty,
                             stm,
@@ -519,7 +529,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     }
                 }
 
-                ast::Place::IndexP(box e, box ix) => {
+                ast::PlaceKind::IndexP(box e, box ix) => {
                     let e = self.visit_expr(e);
                     let ix = self.visit_expr(ix);
                     match (e.ty.as_array(), ix.ty.is_int()) {
@@ -531,6 +541,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                     mode: default(),
                                     ty,
                                     stm: e_stm,
+                                    span: place.span,
                                 }),
                                 ty,
                                 e_stm,
@@ -1123,7 +1134,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ast::ExprKind::IntegerE(i) => Some(Pat::new(IntegerM(i), IntT, span)),
             ast::ExprKind::StringE(s) => Some(Pat::new(StringM(s), IntT, span)),
             ast::ExprKind::PlaceE(place) => {
-                if let ast::Place::VarP(v) = place {
+                if let ast::PlaceKind::VarP(v) = place.kind {
                     Some(Pat::new(
                         IdentM(VarDef::with_stratum(v.with_type(todo!()), todo!())),
                         IntT,

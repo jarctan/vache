@@ -27,3 +27,7 @@ fn main() {
 1
 2
 144
+################################
+11:18:Moved // reassign n2
+12:18:Cloned // move n2
+12:23:Moved // reassign n1

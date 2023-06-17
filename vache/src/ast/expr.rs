@@ -7,9 +7,9 @@ use itertools::Itertools;
 use num_bigint::BigInt;
 use pest::iterators::Pair;
 use pest::pratt_parser::*;
-use Place::*;
+use PlaceKind::*;
 
-use super::{Block, Context, Namespaced, Parsable, Place, Span, VarUse};
+use super::{Block, Context, Namespaced, Parsable, Place, PlaceKind, Span, VarUse};
 use crate::grammar::*;
 use crate::utils::boxed;
 
@@ -115,7 +115,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not a field.
     pub fn as_field(&self) -> Option<(&Expr<'ctx>, &'ctx str)> {
-        if let PlaceE(FieldP(box strukt, field)) = &self.kind {
+        if let PlaceE(place) = &self.kind && let FieldP(box strukt, field) = &place.kind {
             Some((strukt, field))
         } else {
             None
@@ -129,7 +129,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not a index.
     pub fn as_index(&self) -> Option<(&Expr<'ctx>, &Expr<'ctx>)> {
-        if let PlaceE(IndexP(box array, box index)) = &self.kind {
+        if let PlaceE(place) = &self.kind && let IndexP(box array, box index) = &place.kind {
             Some((array, index))
         } else {
             None
@@ -179,7 +179,7 @@ impl<'ctx> Expr<'ctx> {
     /// # Errors
     /// Returns `None` if the expression is not a variable.
     pub fn as_var(&self) -> Option<VarUse<'ctx>> {
-        if let PlaceE(VarP(var)) = &self.kind {
+        if let PlaceE(place) = &self.kind && let VarP(var) = &place.kind {
             Some(*var)
         } else {
             None
@@ -215,7 +215,7 @@ impl<'ctx> Expr<'ctx> {
 
 /// Shortcut to create an `Expr` which is just a variable, based on its name.
 pub fn var(v: &str) -> Expr<'_> {
-    PlaceE(VarP(v.into())).into()
+    PlaceE(Place::from(VarP(v.into()))).into()
 }
 
 /// Shortcut to create a constant integer `Expr` based on some integer value.
@@ -242,7 +242,7 @@ pub fn call<'ctx>(
 
 /// Shortcut to create a `s.field` expression.
 pub fn field<'ctx>(e: Expr<'ctx>, member: &'ctx str) -> Expr<'ctx> {
-    PlaceE(FieldP(boxed(e), member)).into()
+    PlaceE(Place::from(FieldP(boxed(e), member))).into()
 }
 
 /// Shortcut to create an if expression.
@@ -256,7 +256,7 @@ pub fn if_e<'ctx>(
 
 /// Shortcut to create a `x[y]` expression.
 pub fn index<'ctx>(e1: Expr<'ctx>, ix: Expr<'ctx>) -> Expr<'ctx> {
-    PlaceE(IndexP(boxed(e1), boxed(ix))).into()
+    PlaceE(Place::from(IndexP(boxed(e1), boxed(ix)))).into()
 }
 
 /// Shortcut to create a `MyStruct { (field: value)* }` expression.
@@ -290,7 +290,7 @@ impl<'ctx> From<VarUse<'ctx>> for Expr<'ctx> {
     fn from(v: VarUse<'ctx>) -> Self {
         Expr {
             span: v.as_span(),
-            kind: PlaceE(VarP(v)),
+            kind: PlaceE(Place::from(VarP(v))),
         }
     }
 }
@@ -390,7 +390,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                     Rule::unit => UnitE,
                     Rule::integer => IntegerE(ctx.parse(pair)),
                     Rule::string => StringE(ctx.parse(pair)),
-                    Rule::ident => PlaceE(VarP(ctx.parse(pair))),
+                    Rule::ident => PlaceE(Place::new(VarP(ctx.parse(pair)), span)),
                     Rule::array => {
                         let mut pairs = pair.into_inner();
                         consume!(pairs, Rule::lb);
@@ -492,13 +492,15 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                 let mut pairs = pair.into_inner();
                                 consume!(pairs, Rule::dt);
                                 let field: VarUse = ctx.parse(consume!(pairs));
-                                PlaceE(FieldP(boxed(acc), field.into()))
+                                PlaceE(Place::new(FieldP(boxed(acc), field.into()), span))
                             }
                             Rule::index_postfix => {
                                 let mut pairs = pair.into_inner();
                                 consume!(pairs, Rule::lb);
-                                let expr =
-                                    PlaceE(IndexP(boxed(acc), boxed(ctx.parse(consume!(pairs)))));
+                                let expr = PlaceE(Place::new(
+                                    IndexP(boxed(acc), boxed(ctx.parse(consume!(pairs)))),
+                                    span,
+                                ));
                                 consume!(pairs, Rule::rb);
                                 expr
                             }
@@ -509,7 +511,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                 let pairs =
                                     pairs.filter(|pair| !matches!(pair.as_rule(), Rule::cma));
                                 match acc.kind {
-                                    PlaceE(VarP(name)) => CallE {
+                                    PlaceE(place) if let VarP(name) = place.kind => CallE {
                                         name: Namespaced::name_with_span(
                                             name.as_str(),
                                             name.as_span(),

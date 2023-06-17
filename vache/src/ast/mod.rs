@@ -101,7 +101,7 @@ use pest::error::ErrorVariant;
 use pest::error::InputLocation;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
-pub use place::{idx_place, Place};
+pub use place::{idx_place, Place, PlaceKind};
 pub use program::Program;
 use reporting::pretty_print_rule;
 pub use span::Span;

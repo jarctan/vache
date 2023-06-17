@@ -51,7 +51,7 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let arena = ::vache_lib::Arena::new();
                 let config = ::vache_lib::config::Config { input: "", ..::std::default::Default::default() };
                 let mut context = ::vache_lib::Context::new(config, &arena);
-                match ::vache_lib::check(&mut context, p)? {
+                match ::vache_lib::typecheck(&mut context, p)? {
                     Ok(mut checked) => {
                         let mir = ::vache_lib::borrow_check(::vache_lib::mir(&mut checked)?)?;
                         let cur_dir = ::std::env::current_dir().context("Could not get current directory")?;
@@ -78,7 +78,7 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let arena = ::vache_lib::Arena::new();
                 let config = ::vache_lib::config::Config { input: "", ..::std::default::Default::default() };
                 let mut context = ::vache_lib::Context::new(config, &arena);
-                match ::vache_lib::check(&mut context, p)? {
+                match ::vache_lib::typecheck(&mut context, p)? {
                     Ok(mut checked) => {
                         let mir = ::vache_lib::borrow_check(::vache_lib::mir(&mut checked)?)?;
                         eprintln!("MIR: {:#?}", mir);

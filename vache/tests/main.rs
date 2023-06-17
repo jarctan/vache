@@ -5,8 +5,6 @@
 
 #[macro_use]
 extern crate vache_tests_proc;
-#[macro_use]
-extern crate anyhow;
 
 pub(crate) mod exec;
 pub(crate) mod typing;

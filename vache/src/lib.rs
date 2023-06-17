@@ -8,6 +8,7 @@
 #![feature(default_free_fn)]
 #![feature(iter_array_chunks)]
 #![feature(try_blocks)]
+#![feature(if_let_guard)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
@@ -25,6 +26,7 @@ mod grammar;
 mod interpret;
 pub mod mir;
 mod miring;
+mod mode_farmer;
 mod normalize;
 mod prelude;
 pub mod reporter;
@@ -53,8 +55,9 @@ use std::path::Path;
 
 use anyhow::Result;
 pub use context::Context;
+pub use mode_farmer::farm_modes;
 use prelude::prelude;
-pub use steps::{borrow_check, check, interpret, mir, run};
+pub use steps::{borrow_check, interpret, mir, run, typecheck};
 pub use utils::arena::Arena;
 
 /// Compiles `p` and puts the output program named `name` in `dest_dir`.
@@ -64,11 +67,28 @@ pub fn compile<'ctx>(
     name: impl AsRef<str>,
     dest_dir: &Path,
 ) -> Result<()> {
-    match check(ctx, p)? {
+    match typecheck(ctx, p)? {
         Ok(mut checked) => {
             borrow_check(mir(&mut checked)?)?;
             steps::cargo(steps::compile(ctx, checked)?, name.as_ref(), dest_dir).unwrap();
             Ok(())
+        }
+        Err(diagnostics) => {
+            diagnostics.display()?;
+            bail!("Compile errors found");
+        }
+    }
+}
+
+/// Type and borrow-checks `p`, returning the final typed AST.
+pub fn check_all<'ctx>(
+    ctx: &mut Context<'ctx>,
+    p: impl Into<ast::Program<'ctx>>,
+) -> Result<tast::Program<'ctx>> {
+    match typecheck(ctx, p)? {
+        Ok(mut checked) => {
+            borrow_check(mir(&mut checked)?)?;
+            Ok(checked)
         }
         Err(diagnostics) => {
             diagnostics.display()?;
@@ -84,7 +104,7 @@ pub fn execute<'ctx>(
     name: impl AsRef<str>,
     dest_dir: &Path,
 ) -> Result<String> {
-    match check(ctx, p)? {
+    match typecheck(ctx, p)? {
         Ok(mut checked) => {
             borrow_check(mir(&mut checked)?)?;
             let res = steps::run(ctx, checked, name, dest_dir)?;
@@ -125,7 +145,7 @@ mod steps {
     ///
     /// Under the hood, this function is in charge of allocating a new `Typer`
     /// and launching it on your program.
-    pub fn check<'ctx>(
+    pub fn typecheck<'ctx>(
         ctx: &mut Context<'ctx>,
         p: impl Into<ast::Program<'ctx>>,
     ) -> Result<Result<tast::Program<'ctx>, Diagnostics<'ctx>>> {

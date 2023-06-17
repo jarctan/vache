@@ -19,3 +19,6 @@ fn main() {
 1
 2
 144
+################################
+7:14:Cloned // we need i for the second call to fibo
+7:28:Moved

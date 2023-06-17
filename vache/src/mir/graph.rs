@@ -675,7 +675,7 @@ mod tests {
         let arena = Arena::new();
         let config = default();
         let mut ctx = Context::new(config, &arena);
-        let mut checked = match check(&mut ctx, crate::examples::while_loop())? {
+        let mut checked = match typecheck(&mut ctx, crate::examples::while_loop())? {
             Ok(checked) => checked,
             Err(e) => {
                 e.display()?;
@@ -715,7 +715,7 @@ mod tests {
         let arena = Arena::new();
         let config = default();
         let mut ctx = Context::new(config, &arena);
-        let mut checked = match check(&mut ctx, crate::examples::simple_if())? {
+        let mut checked = match typecheck(&mut ctx, crate::examples::simple_if())? {
             Ok(checked) => checked,
             Err(e) => {
                 e.display()?;
@@ -746,7 +746,7 @@ mod tests {
         let arena = Arena::new();
         let config = default();
         let mut ctx = Context::new(config, &arena);
-        let mut checked = match check(&mut ctx, crate::examples::simple_if())? {
+        let mut checked = match typecheck(&mut ctx, crate::examples::simple_if())? {
             Ok(checked) => checked,
             Err(e) => {
                 e.display()?;
