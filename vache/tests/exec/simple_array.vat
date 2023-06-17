@@ -1,0 +1,8 @@
+
+fn main() {
+    var list2: [str] = ["tomato", "lettuce", "zucchini", "avocado"];
+    var item: str = list2[1];
+    print(item);
+}
+################################
+lettuce

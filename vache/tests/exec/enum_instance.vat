@@ -1,0 +1,31 @@
+enum User {
+    Test(int),
+    Toto(int),
+}
+
+enum User2 {
+    Test,
+    Toto(int),
+}
+
+fn main() {
+    var range: int.. = 1..5;
+    var a: int = 0;
+    var user: User = User::Test(a);
+    print("a before:", a);
+    a = 5;
+    print("a after:", a);
+    print(user);
+    var x: User = User::Test(a);
+    a = a + 1;
+    print(x);
+    var y: User = User::Test(a);
+    var a: int = a + 1;
+    print(a, y);
+}
+################################
+a before: 0
+a after: 5
+Test(0)
+Test(5)
+7 Test(6)

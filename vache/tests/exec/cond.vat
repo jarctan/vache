@@ -1,0 +1,16 @@
+enum User {
+    Test(int),
+    Toto(int),
+}
+
+fn main() {
+    var x: int = 12;
+    if x > 0 {
+        x = x + 1;
+    } else {
+        print(x);
+    }
+    print(x);
+}
+################################
+13

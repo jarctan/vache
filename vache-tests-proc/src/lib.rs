@@ -11,12 +11,14 @@
 //! macro is applied.
 
 #![warn(missing_docs)]
+#![feature(path_file_prefix)]
 
 #[macro_use]
 extern crate quote;
 
 extern crate proc_macro;
 
+mod by_resources;
 mod parses;
 mod should_fail;
 mod vache_test;
@@ -102,4 +104,33 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn should_fail(attr: TokenStream, item: TokenStream) -> TokenStream {
     should_fail::should_fail(attr, item)
+}
+/// Generate clones of the `item` per file in the system that matches the given
+/// string pattern in `attr`.
+///
+/// Format of the macro: `#[parses(pattern)]` where:
+/// * `pattern` is a literal string for the pattern of files to match (must be a
+///   glob-recognizable pattern)
+///
+/// The macro must be applied to some function that takes only one argument,
+/// whose type is a `From<&str>`. Typically a `&str` or a `Path`.
+///
+/// Example:
+/// ```rust,ignore
+/// #[by_resources("()" as ty)]
+/// #[test]
+/// fn unit_ty(ty: TyUse) {
+///     assert_eq!(ty, UnitT);
+/// }
+/// ```
+///
+/// Inspired by (the test generator crate)[https://github.com/frehberg/test-generator/tree/master].
+/// At the beginning, this custom version of it was created to have serial
+/// tests, but it seems that there is no such need for a duplicate. We will keep
+/// this one in case we need customization later on. If there are
+/// complicated-to-implement features required later, we can also switch to the
+/// `test-generator` crate.
+#[proc_macro_attribute]
+pub fn by_resources(attr: TokenStream, item: TokenStream) -> TokenStream {
+    by_resources::by_resources(attr, item)
 }

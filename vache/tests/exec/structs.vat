@@ -1,0 +1,18 @@
+struct Pos {
+    x: int,
+    y: str,
+}
+
+fn main() {
+    var p: Pos = Pos {
+        x: 2,
+        y: "3",
+    };
+    print(p.x);
+    var z: int = p.x;
+    var y: str = p.y;
+    print(z, y);
+}
+################################
+2
+2 3

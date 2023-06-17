@@ -2,7 +2,8 @@
     "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
     "name": "Vache",
     "fileTypes": [
-        "va"
+        "va",
+        "vat"
     ],
     "scopeName": "source.vache",
     "patterns": [

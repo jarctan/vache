@@ -30,7 +30,8 @@
                     "vache"
                 ],
                 "extensions": [
-                    ".va"
+                    ".va",
+                    ".vat"
                 ],
                 "configuration": "./language-configuration.json"
             }

@@ -55,7 +55,7 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                     Ok(mut checked) => {
                         let mir = ::vache_lib::borrow_check(::vache_lib::mir(&mut checked)?)?;
                         let cur_dir = ::std::env::current_dir().context("Could not get current directory")?;
-                        let binary_name = "test";
+                        let binary_name = "test-binary";
                         assert_eq!(
                             ::vache_lib::run(&mut context, checked, binary_name, &cur_dir).context("Could not run program")?,
                             #expected_output,

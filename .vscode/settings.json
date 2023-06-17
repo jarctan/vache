@@ -30,6 +30,7 @@
         "preneighbors",
         "prettyplease",
         "repr",
+        "rsplit",
         "rustfmt",
         "rval",
         "rvalue",

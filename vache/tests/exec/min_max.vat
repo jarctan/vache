@@ -1,0 +1,25 @@
+fn max(a: int, b: int) -> int {
+    if a > b {
+        a
+    } else {
+        b - 5
+    }
+}
+
+fn min(a: int, b: int) -> int {
+    if a < b {
+        a
+    } else {
+        b
+    }
+}
+
+fn main() {
+    var a: int = 830198309123808;
+    var b: int = 830198309123809;
+    print(max(a, b));
+    print(min(a, b));
+}
+################################
+830198309123804
+830198309123808
