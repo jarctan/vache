@@ -250,10 +250,6 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
             | InstrKind::Declare(_)
             | InstrKind::Branch(_)
             | InstrKind::Return(_) => (),
-            // Optimize assignments for variables that are not live afterwards.
-            InstrKind::Assign(lhs, _) if !outs.contains(lhs.loc()) => {
-                instr.kind = InstrKind::Noop;
-            }
             InstrKind::Assign(_, RValue::Place(place)) => match place.mode() {
                 Mode::Cloned => {
                     if !outs.contains(place.loc()) && !ledger.has_loans(place.place()) {
