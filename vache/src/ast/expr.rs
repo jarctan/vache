@@ -3,6 +3,7 @@
 use std::default::default;
 use std::ops::{Deref, DerefMut};
 
+use itertools::Itertools;
 use num_bigint::BigInt;
 use pest::iterators::Pair;
 use pest::pratt_parser::*;
@@ -309,18 +310,73 @@ pub(super) fn parse_if_then_else<'ctx>(
     consume!(pairs, Rule::if_kw);
     let cond = ctx.parse(consume!(pairs));
     let if_block: Block = ctx.parse(consume!(pairs));
-    let else_block = if consume_opt!(pairs, Rule::else_kw) {
-        ctx.parse(consume!(pairs))
+    let mut pairs = pairs.rev().peekable();
+
+    // Check if we have at least one else branch
+    if pairs.peek().is_some() {
+        // Parse the final else { }
+        let mut else_block: Block = ctx.parse(consume!(pairs));
+        consume!(pairs, Rule::else_kw);
+
+        // Split the iterator with the `else` keyword. Awkward way to do it but could
+        // not find better.
+        let pairs = pairs.group_by(|pair| matches!(pair.as_rule(), Rule::else_kw));
+        let pairs = pairs.into_iter();
+
+        // Then we now have a group of [`else`] followed by a group of [block,if], i.e.
+        // our iterator is `([block,expr,if][else])*`. (remember that we reversed the
+        // iterator). We array chunk by 2, discard the second chunk (which is the group
+        // [else]) and concentrate on the remaining iterator, which should have
+        // only 3 elements. First one is the block, second one is the expr, third is the
+        // if token.
+        //
+        // By proceeding in reverse order, and updating the `else_block` in a nested
+        // way, we effectively reconstruct the if-then-else were meant to be
+        // understood.
+        for mut pairs in pairs
+            .array_chunks::<2>()
+            .map(|[(_, blk), (_, _else_kw)]| blk)
+        {
+            // Parse the block
+            let pair = consume!(pairs);
+            let span1 = Span::from(pair.as_span());
+            let block = ctx.parse(pair);
+
+            // Parse the expr
+            let pair = consume!(pairs, Rule::expr);
+            let span2 = Span::from(pair.as_span());
+            let cond = ctx.parse(pair);
+
+            // Parse the final if keyword
+            consume!(pairs, Rule::if_kw);
+
+            // Update the else block in a nested way
+            else_block = Block {
+                ret: Expr {
+                    span: span2.merge(span1).merge(else_block.span),
+                    kind: IfE(boxed(cond), boxed(block), boxed(else_block)),
+                },
+                span: span1.merge(span2),
+                ..default()
+            };
+        }
+        Expr {
+            kind: IfE(boxed(cond), boxed(if_block), boxed(else_block)),
+            span,
+        }
     } else {
-        Block {
-            span: Span::at(if_block.span.end()), /* Put the position of the dummy else block at
+        // In case we have no else branch
+        // Generate a dummy else block
+        let else_block = Block {
+            span: Span::at(if_block.span.end()), /* Put the position of the dummy else block
+                                                  * at
                                                   * the end of the if block */
             ..default()
+        };
+        Expr {
+            kind: IfE(boxed(cond), boxed(if_block), boxed(else_block)),
+            span,
         }
-    };
-    Expr {
-        kind: IfE(boxed(cond), boxed(if_block), boxed(else_block)),
-        span,
     }
 }
 

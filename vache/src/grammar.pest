@@ -80,7 +80,7 @@ infix = { add | sub | mul | div | rem | pow | le | lt | ge | gt | eqq | neq }
 
 ident = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
-if_then = { if_kw ~ expr ~ block ~ (else_kw ~ block)? }
+if_then = { if_kw ~ expr ~ block ~ (else_kw ~ if_kw ~ expr ~ block)* ~ (else_kw ~ block)? }
 
 match_expr = { match_kw ~ matched_expr ~ match_block }
 
