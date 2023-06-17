@@ -201,7 +201,7 @@ fn parse_pairs<'ctx>(ctx: &mut Context<'ctx>, rule: Rule) -> Result<Pairs<'ctx, 
             );
             let reports = ctx.reporter.flush();
             reports.display()?;
-            bail!("Parsing errors found.");
+            bail!("Parsing errors found");
         }
     }
 }
@@ -245,7 +245,7 @@ pub fn parse_file<'ctx>(ctx: &mut Context<'ctx>) -> Result<Program<'ctx>> {
     print!("Parsing...");
     std::io::stdout().flush()?;
     let start = Instant::now();
-    let res = parse_rules(ctx, Rule::program);
+    let res = parse_rules(ctx, Rule::program)?;
     println!("\rParsed file [{:?}]", start.elapsed());
-    res
+    Ok(res)
 }

@@ -1,6 +1,7 @@
 //! User-facing error reporting facility.
 
 use std::default::default;
+use std::io::Write;
 
 use codespan_reporting::diagnostic::Severity;
 use codespan_reporting::files::SimpleFile;
@@ -34,8 +35,10 @@ impl<'ctx> Diagnostics<'ctx> {
     /// Displays all the diagnostics with nice colors and formatting to the
     /// standard output.
     pub fn display(&self) -> anyhow::Result<()> {
+        let mut writer = self.writer.lock();
+        write!(&mut writer, "\r")?; // Flush anything on our line, in particular loading indicators
         for diagnostic in &self.diagnostics {
-            term::emit(&mut self.writer.lock(), self.config, self.files, diagnostic)?;
+            term::emit(&mut writer, self.config, self.files, diagnostic)?;
         }
         Ok(())
     }

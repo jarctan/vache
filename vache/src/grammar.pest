@@ -78,7 +78,9 @@ keyword = { var_kw | struct_kw | if_kw | else_kw | while_kw | for_kw | in_kw | b
 
 infix = { add | sub | mul | div | rem | pow | le | lt | ge | gt | eqq | neq }
 
-ident = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+// second case is a hack to also match identifiers that start with a keyword
+// https://stackoverflow.com/questions/61619285/peg-grammar-to-parse-identifier-name-which-is-not-a-keyword
+ident = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* | keyword ~ (ASCII_ALPHANUMERIC | "_")* }
 
 if_then = { if_kw ~ expr ~ block ~ (else_kw ~ if_kw ~ expr ~ block)* ~ (else_kw ~ block)? }
 
