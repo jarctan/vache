@@ -43,8 +43,8 @@ impl<'ctx> Place<'ctx> {
     /// variable need not to exist beforehand.
     pub fn uses_as_lhs(&self) -> Set<Loc<'ctx>> {
         match self {
-            VarP(_) => [].into_iter().collect(),
-            FieldP(..) | IndexP(..) => self.uses_as_rhs(),
+            VarP(_) | FieldP(_, _) => [].into_iter().collect(),
+            IndexP(..) => self.uses_as_rhs(),
         }
     }
 

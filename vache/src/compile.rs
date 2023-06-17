@@ -156,7 +156,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     Mode::MutBorrowed => quote!(__borrow_mut((#strukt).#field.as_mut())),
                     Mode::Cloned => quote!((#strukt).#field.clone().take()),
                     Mode::Moved => quote!((#strukt).#field.take()),
-                    Mode::Assigning => quote!(*(#strukt).#field.as_mut()),
+                    Mode::Assigning => quote!((#strukt).#field),
                 }
             }
         }
@@ -347,10 +347,21 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             }
             Stmt::AssignS(lhs, rhs) => {
                 assert!(matches!(lhs.mode, Mode::Assigning));
+                // Different output if we have a field at lhs
+                let is_field = matches!(lhs.kind, FieldP(..));
+
                 let lhs = self.visit_place(lhs);
                 let rhs = self.visit_expr(rhs);
-                quote! {
-                    #lhs = #rhs;
+
+                // For fields, add a `Field` wrapper
+                if is_field {
+                    quote! {
+                        #lhs = Field::new(#rhs);
+                    }
+                } else {
+                    quote! {
+                        #lhs = #rhs;
+                    }
                 }
             }
             Stmt::ExprS(expr) => {
