@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::default::default;
 
+use itertools::Itertools;
 use ExprKind::*;
 use PatKind::*;
 use PlaceKind::*;
@@ -273,8 +274,17 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                     Diagnostic::error()
                                         .with_code(FIELD_ACCESS_ERROR)
                                         .with_message(format!("No such field `{field}`"))
-                                        .with_labels(vec![s.span.as_label().with_message(
-                                            format!("has no field named `{field}`"),
+                                        .with_labels(vec![s
+                                            .span
+                                            .as_label()
+                                            .with_message(format!("has no field named `{field}`"))])
+                                        .with_notes(vec![format!(
+                                            "possible fields are {}",
+                                            strukt
+                                                .fields
+                                                .keys()
+                                                .map(|x| format!("`{x}`"))
+                                                .join(", ")
                                         )]),
                                 );
                                 return None;
@@ -469,8 +479,17 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                     Diagnostic::error()
                                         .with_code(FIELD_ACCESS_ERROR)
                                         .with_message(format!("No such field `{field}`"))
-                                        .with_labels(vec![s.span.as_label().with_message(
-                                            format!("has no field named `{field}`"),
+                                        .with_labels(vec![s
+                                            .span
+                                            .as_label()
+                                            .with_message(format!("has no field named `{field}`"))])
+                                        .with_notes(vec![format!(
+                                            "possible fields are {}",
+                                            strukt
+                                                .fields
+                                                .keys()
+                                                .map(|x| format!("`{x}`"))
+                                                .join(", ")
                                         )]),
                                 );
                                 HoleT

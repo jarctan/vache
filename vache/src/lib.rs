@@ -13,9 +13,6 @@
 
 use std::time::Instant;
 
-/// Trigger verbose mode.
-pub const VERBOSE: bool = true;
-
 mod anf;
 pub mod ast;
 mod borrowing;
@@ -236,7 +233,6 @@ mod steps {
     pub fn cargo(source_code: String, name: &str, dest_dir: &Path) -> Result<()> {
         print!("Compiling the Rust code...");
         std::io::stdout().flush()?;
-        std::thread::sleep(std::time::Duration::from_millis(2000));
         let start = Instant::now();
 
         let target_dir = Path::new("vache_target");
