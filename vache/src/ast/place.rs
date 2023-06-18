@@ -63,7 +63,7 @@ impl<'ctx> From<&'ctx str> for Place<'ctx> {
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Place<'ctx> {
-    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         assert_eq!(pair.as_rule(), Rule::expr);
 
         let expr: Expr = ctx.parse(pair);

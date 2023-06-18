@@ -7,7 +7,7 @@ use super::{Context, Parsable};
 use crate::grammar::*;
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for &'ctx str {
-    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         debug_assert!(pair.as_rule() == Rule::string);
 
         // Takes care of escaped newlines and tabs
@@ -18,7 +18,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for &'ctx str {
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'_, Rule>> for BigInt {
-    fn parse(pair: Pair<Rule>, _ctx: &mut Context) -> Self {
+    fn parse(pair: Pair<Rule>, _ctx: &Context) -> Self {
         debug_assert!(pair.as_rule() == Rule::integer);
 
         let value = pair.as_str().replace('_', "");

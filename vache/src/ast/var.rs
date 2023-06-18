@@ -209,14 +209,14 @@ impl fmt::Display for Varname<'_> {
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Varname<'ctx> {
-    fn parse(pair: Pair<'ctx, Rule>, _ctx: &mut Context) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, _ctx: &Context<'ctx>) -> Self {
         assert!(pair.as_rule() == Rule::ident);
         Self(pair.as_str())
     }
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for VarUse<'ctx> {
-    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         let span = Span::from(pair.as_span());
         VarUse {
             name: ctx.parse(pair),
@@ -271,7 +271,7 @@ impl<'ctx> From<VarDef<'ctx>> for VarUse<'ctx> {
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for VarDef<'ctx> {
-    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         assert!(pair.as_rule() == Rule::vardef);
         let span = Span::from(pair.as_span());
         let mut pairs = pair.into_inner();

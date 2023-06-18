@@ -31,10 +31,10 @@ expr = { if_then | match_expr | binop | with_postfix | primitive | block }
 // Special parsing for matched expr that forbids struct instances (which would not be matchable in any case).
 // Need to remove them now, because of parser greediness that causes some bugs with `match ident {}` which is parsed
 // as being a match on the struct instance `ident {}`
-matched_expr      = { if_then | match_expr | binop | with_postfix | matched_primitive | block }
+matched_expr      = { if_then | match_expr | binop | matched_primitive | block }
 matched_primitive = { primitive_wo_struct }
 
-binop = { (with_postfix | primitive) ~ (infix ~ (with_postfix | primitive))+ }
+binop = { prefix* ~ (with_postfix | primitive) ~ (infix ~ prefix* ~ (with_postfix | primitive))* }
 
 with_postfix = { primitive ~ (field_postfix | index_postfix | call_postfix | range_postfix)+ }
 
@@ -76,7 +76,8 @@ int_ty = { "int" }
 
 keyword = { var_kw | struct_kw | if_kw | else_kw | while_kw | for_kw | in_kw | bool_ty | str_ty | int_ty | fn_kw | match_kw }
 
-infix = { add | sub | mul | div | rem | pow | le | lt | ge | gt | eqq | neq }
+prefix = { bang | as_mut }
+infix  = { add | sub | mul | div | rem | pow | le | lt | ge | gt | eqq | neq | and | or | not_in }
 
 // second case is a hack to also match identifiers that start with a keyword
 // https://stackoverflow.com/questions/61619285/peg-grammar-to-parse-identifier-name-which-is-not-a-keyword
@@ -124,6 +125,13 @@ ge  = { ">=" }
 gt  = { ">" }
 eqq = { "==" }
 neq = { "!=" }
+and = { "&&" }
+or  = { "||" }
+
+bang   = { "!" }
+not_in = { "not in" }
+not    = { "not" }
+as_mut = { "@" }
 
 while_kw  = { "while" }
 for_kw    = { "for" }

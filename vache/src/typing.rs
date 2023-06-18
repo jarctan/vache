@@ -9,7 +9,7 @@ use PatKind::*;
 use PlaceKind::*;
 use Ty::*;
 
-use crate::ast::fun::binop_int_sig;
+use crate::ast::fun::{binop_bool_sig, binop_int_sig};
 use crate::codes::*;
 use crate::reporter::Diagnostic;
 use crate::tast::*;
@@ -109,6 +109,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         typer.add_fun(binop_int_sig(">=", BoolT));
         typer.add_fun(binop_int_sig(">", BoolT));
         typer.add_fun(binop_int_sig("!=", BoolT));
+        typer.add_fun(binop_bool_sig("&&", BoolT));
+        typer.add_fun(binop_bool_sig("||", BoolT));
 
         typer
     }

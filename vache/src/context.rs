@@ -38,8 +38,13 @@ impl<'ctx> Context<'ctx> {
         self.arena.alloc(t)
     }
 
+    /// Allocates an element in the compiler arena.
+    pub fn alloc_mut<T>(&self, t: T) -> &'ctx mut T {
+        self.arena.alloc_mut(t)
+    }
+
     /// Create a new error diagnostic.
-    pub fn emit(&mut self, diagnostic: Diagnostic) {
+    pub fn emit(&self, diagnostic: Diagnostic) {
         self.reporter.emit(diagnostic);
     }
 

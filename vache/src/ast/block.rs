@@ -49,7 +49,7 @@ pub fn stmts<'ctx>(stmts: impl IntoIterator<Item = Stmt<'ctx>>) -> Block<'ctx> {
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Block<'ctx> {
-    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         debug_assert!(matches!(pair.as_rule(), Rule::block));
         let span = Span::from(pair.as_span());
 

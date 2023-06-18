@@ -74,7 +74,7 @@ impl<'ctx> From<Fun<'ctx>> for FunSig<'ctx> {
     }
 }
 
-/// Shortcut to create function signatures for binary operators.
+/// Shortcut to create function signatures for integer binary operators.
 ///
 /// Typically those you can find for builtin functions.
 pub fn binop_int_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
@@ -85,8 +85,19 @@ pub fn binop_int_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
     }
 }
 
+/// Shortcut to create function signatures for bool binary operators.
+///
+/// Typically those you can find for builtin functions.
+pub fn binop_bool_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
+    FunSig {
+        name: op,
+        params: vec![vardef("b1", BoolT), vardef("b2", BoolT)],
+        ret_ty,
+    }
+}
+
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Fun<'ctx> {
-    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         debug_assert!(matches!(pair.as_rule(), Rule::fun));
         let span = Span::from(pair.as_span());
 

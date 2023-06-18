@@ -291,6 +291,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         ">=" => "__ge".to_string(),
                         "==" => "__eq".to_string(),
                         "!=" => "__neq".to_string(),
+                        "&&" => "__and".to_string(),
+                        "||" => "__or".to_string(),
                         _ => name.name.to_string(),
                     };
                     let name = format_ident!("{name}");

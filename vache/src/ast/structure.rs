@@ -44,7 +44,7 @@ impl<'ctx> Struct<'ctx> {
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Struct<'ctx> {
-    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         debug_assert!(matches!(pair.as_rule(), Rule::struct_def));
 
         let span = Span::from(pair.as_span());

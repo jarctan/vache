@@ -229,7 +229,7 @@ impl<'ctx> PartialEq for Ty<'ctx> {
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for TyUse<'ctx> {
-    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         assert!(matches!(pair.as_rule(), Rule::ty | Rule::non_iter_ty));
         let span = Span::from(pair.as_span());
         let mut pairs = pair.into_inner();

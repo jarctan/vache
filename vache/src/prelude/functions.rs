@@ -80,5 +80,15 @@ pub fn functions() -> TokenStream {
         ) -> __Result<Cow<'a, B>> {
             Ok(Cow::Owned(x.into_owned() % y.into_owned()))
         }
+
+        /// Prelude function.
+        pub(crate) fn __or(x: bool, y: bool) -> __Result<bool> {
+            Ok(x || y)
+        }
+
+        /// Prelude function.
+        pub(crate) fn __and(x: bool, y: bool) -> __Result<bool> {
+            Ok(x && y)
+        }
     )
 }

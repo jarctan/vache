@@ -26,5 +26,7 @@ pub const UNKNOWN_TYPE_VAR: &str = "E0011";
 pub const FIELD_NOT_STRUCT_ERROR: &str = "E0012";
 /// Not a valid pattern.
 pub const INVALID_PATTERN: &str = "E0013";
+/// Error when something that is not a place is borrowed mutably.
+pub const AS_MUT_NOT_PLACE_ERROR: &str = "E0014";
 /// Temporary: empty list error.
 pub const EMPTY_LIST_ERROR: &str = "E0100";

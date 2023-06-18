@@ -2,11 +2,13 @@
 
 use std::default::default;
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use codespan_reporting::diagnostic::Severity;
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+use crossbeam_queue::SegQueue;
 
 use crate::Arena;
 
@@ -26,48 +28,46 @@ pub struct Diagnostics<'ctx> {
     /// Needed to display the diagnostics to the stdout.
     files: &'ctx SimpleFile<&'ctx str, &'ctx str>,
     /// The actual list of diagnostics.
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: SegQueue<Diagnostic>,
     /// True iff `self.diagnostics` contains at least one error diagnostic.
-    is_error: bool,
+    is_error: AtomicBool,
 }
 
 impl<'ctx> Diagnostics<'ctx> {
     /// Displays all the diagnostics with nice colors and formatting to the
     /// standard output.
+    ///
+    /// # Warning
+    /// WILL FLUSH/TRASH the diagnostics that are displayed.
     pub fn display(&self) -> anyhow::Result<()> {
         let mut writer = self.writer.lock();
         write!(&mut writer, "\r")?; // Flush anything on our line, in particular loading indicators
-        for diagnostic in &self.diagnostics {
-            term::emit(&mut writer, self.config, self.files, diagnostic)?;
+        while let Some(diagnostic) = self.diagnostics.pop() {
+            term::emit(&mut writer, self.config, self.files, &diagnostic)?;
         }
         Ok(())
     }
 
     /// Pushes a new diagnostic to the list.
-    pub fn push(&mut self, diagnostic: Diagnostic) {
-        self.is_error |= matches!(diagnostic.severity, Severity::Error | Severity::Bug);
+    pub fn push(&self, diagnostic: Diagnostic) {
+        self.is_error.fetch_or(
+            matches!(diagnostic.severity, Severity::Error | Severity::Bug),
+            Ordering::Relaxed,
+        );
         self.diagnostics.push(diagnostic);
     }
 
-    /// Flushes all diagnostics and returns them.
+    /// Flushes all diagnostics and returns them, leaving self's own diagnostic
+    /// list empty and ready to receive messages.
     fn flush(&mut self) -> Diagnostics<'ctx> {
-        let flushed = Diagnostics {
+        Diagnostics {
             writer: self.writer,
             config: self.config,
             files: self.files,
-            diagnostics: std::mem::take(self.diagnostics.as_mut()),
-            is_error: self.is_error,
-        };
-
-        // Revert all flags.
-        self.is_error = false;
-
-        flushed
-    }
-
-    /// Returns an iterator over the diagnostics.
-    pub fn iter(&self) -> impl Iterator<Item = &Diagnostic> {
-        self.diagnostics.iter()
+            diagnostics: std::mem::take(&mut self.diagnostics),
+            // Revert error flag and get it back
+            is_error: AtomicBool::new(self.is_error.swap(false, Ordering::SeqCst)),
+        }
     }
 }
 
@@ -76,7 +76,11 @@ impl<'ctx> IntoIterator for Diagnostics<'ctx> {
     type Item = Diagnostic;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.diagnostics.into_iter()
+        let mut res = vec![];
+        while let Some(diagnostic) = self.diagnostics.pop() {
+            res.push(diagnostic);
+        }
+        res.into_iter()
     }
 }
 
@@ -99,13 +103,13 @@ impl<'ctx> Reporter<'ctx> {
                 config,
                 files,
                 diagnostics: default(),
-                is_error: false,
+                is_error: AtomicBool::new(false),
             },
         }
     }
 
     /// Create a new error diagnostic.
-    pub fn emit(&mut self, diagnostic: Diagnostic) {
+    pub fn emit(&self, diagnostic: Diagnostic) {
         self.diagnostics.push(diagnostic);
     }
 
@@ -116,6 +120,6 @@ impl<'ctx> Reporter<'ctx> {
 
     /// Was there any errors so far?
     pub fn has_errors(&self) -> bool {
-        self.diagnostics.is_error
+        self.diagnostics.is_error.load(Ordering::SeqCst)
     }
 }

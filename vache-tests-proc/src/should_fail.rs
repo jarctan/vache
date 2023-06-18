@@ -57,9 +57,9 @@ pub fn should_fail(attr: TokenStream, item: TokenStream) -> TokenStream {
             let mut context = ::vache_lib::Context::new(config, &arena);
             match ::vache_lib::typecheck(&mut context, p)? {
                 Err(diagnostics) => {
-                    let codes = diagnostics.iter().flat_map(|diag| &diag.code).map(|code| &**code).collect::<HashSet<_>>();
-                    let expected = [#expected_errors].into_iter().collect::<HashSet<_>>();
-                    if codes == expected {
+                    let codes = diagnostics.into_iter().flat_map(|diag| diag.code).collect::<HashSet<String>>();
+                    let expected = [#expected_errors].into_iter().collect::<HashSet<&str>>();
+                    if codes.iter().zip(expected.iter()).all(|(s1, s2)| *s1 == *s2) {
                         Ok(())
                     } else {
                         ::anyhow::bail!("Error codes mismatch. Expected {expected:?}, got {codes:?}");

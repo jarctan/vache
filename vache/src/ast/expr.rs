@@ -3,6 +3,7 @@
 use std::default::default;
 use std::ops::{Deref, DerefMut};
 
+use codespan_reporting::diagnostic::Diagnostic;
 use itertools::Itertools;
 use num_bigint::BigInt;
 use pest::iterators::Pair;
@@ -10,21 +11,25 @@ use pest::pratt_parser::*;
 use PlaceKind::*;
 
 use super::{Block, Context, Namespaced, Parsable, Place, PlaceKind, Span, VarUse};
+use crate::codes::*;
 use crate::grammar::*;
 use crate::utils::boxed;
 
 lazy_static! {
+    /// Precedences, from less binding to most binding.
     static ref PRATT_PARSER: PrattParser<Rule> = PrattParser::new()
-        .op(Op::infix(Rule::eqq, Assoc::Left) | Op::infix(Rule::neq, Assoc::Left))
-        .op(Op::infix(Rule::le, Assoc::Left)
+        .op(Op::infix(Rule::and, Assoc::Left) | Op::infix(Rule::or, Assoc::Left))
+        .op(Op::infix(Rule::eqq, Assoc::Left) | Op::infix(Rule::neq, Assoc::Left)) // 7
+        .op(Op::infix(Rule::le, Assoc::Left) // 6
             | Op::infix(Rule::lt, Assoc::Left)
             | Op::infix(Rule::ge, Assoc::Left)
             | Op::infix(Rule::gt, Assoc::Left))
-        .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
-        .op(Op::infix(Rule::mul, Assoc::Left)
+        .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left)) // 4
+        .op(Op::infix(Rule::mul, Assoc::Left) // 3
             | Op::infix(Rule::div, Assoc::Left)
             | Op::infix(Rule::rem, Assoc::Left))
-        .op(Op::infix(Rule::pow, Assoc::Right));
+        .op(Op::infix(Rule::pow, Assoc::Right)) // 2
+        .op(Op::prefix(Rule::bang) | Op::prefix(Rule::as_mut));
 }
 
 /// An located expression.
@@ -300,10 +305,7 @@ impl<'ctx> From<VarUse<'ctx>> for Expr<'ctx> {
 ///
 /// # Panics
 /// Panics if the pair is _not_ an if-then-else rule.
-pub(super) fn parse_if_then_else<'ctx>(
-    ctx: &mut Context<'ctx>,
-    pair: Pair<'ctx, Rule>,
-) -> Expr<'ctx> {
+pub(super) fn parse_if_then_else<'ctx>(ctx: &Context<'ctx>, pair: Pair<'ctx, Rule>) -> Expr<'ctx> {
     debug_assert!(matches!(pair.as_rule(), Rule::if_then));
     let span = Span::from(pair.as_span());
     let mut pairs = pair.into_inner();
@@ -381,7 +383,7 @@ pub(super) fn parse_if_then_else<'ctx>(
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
-    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         let span = Span::from(pair.as_span());
         let kind = match pair.as_rule() {
             Rule::expr | Rule::primitive | Rule::matched_primitive | Rule::matched_expr => {
@@ -417,12 +419,9 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                         // (infix ~ prefix* ~ primary ~ postfix*)*`
                         // where infix is one of the infix rules (add, sub, mul, etc.), and **NOT**
                         // the `infix` rule.
-                        let pairs = pair.into_inner().map(|pair| {
-                            if let Rule::infix = pair.as_rule() {
-                                pair.into_inner().next().unwrap()
-                            } else {
-                                pair
-                            }
+                        let pairs = pair.into_inner().map(|pair| match pair.as_rule() {
+                            Rule::infix | Rule::prefix => pair.into_inner().next().unwrap(),
+                            _ => pair,
                         });
                         PRATT_PARSER
                             .map_primary(|primary| Expr::parse(primary, ctx))
@@ -434,6 +433,34 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                     args: vec![lhs, rhs],
                                 };
                                 Expr { span, kind }
+                            })
+                            .map_prefix(|op, mut rhs| match op.as_rule() {
+                                Rule::as_mut => match &mut rhs.kind {
+                                    PlaceE(_) => todo!(),
+                                    _ => {
+                                        ctx.emit(
+                                            Diagnostic::error()
+                                                .with_code(AS_MUT_NOT_PLACE_ERROR)
+                                                .with_message(format!(
+                                                    "Only places can be mutably borrowed"
+                                                ))
+                                                .with_labels(vec![rhs
+                                                    .span
+                                                    .as_label()
+                                                    .with_message("not a place")]),
+                                        );
+                                        rhs
+                                    }
+                                },
+                                _ => {
+                                    let op_span = Span::from(op.as_span());
+                                    let span = rhs.span.merge(rhs.span);
+                                    let kind = CallE {
+                                        name: Namespaced::name_with_span(op.as_str(), op_span),
+                                        args: vec![rhs],
+                                    };
+                                    Expr { span, kind }
+                                }
                             })
                             .parse(pairs)
                             .kind

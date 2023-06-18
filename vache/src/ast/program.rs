@@ -45,7 +45,7 @@ impl<'ctx> From<Fun<'ctx>> for Program<'ctx> {
 }
 
 impl<'ctx> Parsable<'ctx, Pairs<'ctx, Rule>> for Program<'ctx> {
-    fn parse(pairs: Pairs<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+    fn parse(pairs: Pairs<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         let mut funs: Vec<_> = default();
         let mut structs: Vec<_> = default();
         let mut enums: Vec<_> = default();

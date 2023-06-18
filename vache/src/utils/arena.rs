@@ -18,6 +18,10 @@ impl Arena {
     pub fn alloc<T>(&self, t: T) -> &T {
         self.0.alloc(boxed(t))
     }
+
+    pub fn alloc_mut<T>(&self, t: T) -> &mut T {
+        &mut *self.0.alloc(boxed(t))
+    }
 }
 
 impl Default for Arena {

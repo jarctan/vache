@@ -135,7 +135,7 @@ impl<'ctx> Stmt<'ctx> {
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
-    fn parse(pair: Pair<'ctx, Rule>, ctx: &mut Context<'ctx>) -> Self {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         assert!(matches!(pair.as_rule(), Rule::stmt));
         let pair = pair.into_inner().next().unwrap();
         let span = Span::from(pair.as_span());

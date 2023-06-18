@@ -118,13 +118,13 @@ use crate::reporter::Diagnostic;
 /// Can be parsed from elements of `T`.
 pub trait Parsable<'ctx, T> {
     /// Parses `tokens` into `Self` using `ctx`.
-    fn parse(tokens: T, ctx: &mut Context<'ctx>) -> Self;
+    fn parse(tokens: T, ctx: &Context<'ctx>) -> Self;
 }
 
 impl<'ctx> Context<'ctx> {
     /// Parses `tokens`.
     #[must_use]
-    pub fn parse<U, T: Parsable<'ctx, U>>(&mut self, pair: U) -> T {
+    pub fn parse<U, T: Parsable<'ctx, U>>(&self, pair: U) -> T {
         T::parse(pair, self)
     }
 }
@@ -219,7 +219,13 @@ pub fn parse_rules<'ctx, T: Parsable<'ctx, Pairs<'ctx, Rule>>>(
 
     let res: T = ctx.parse(pairs);
 
-    Ok(res)
+    // Check for second-stage parser errors
+    if !ctx.reporter.has_errors() {
+        Ok(res)
+    } else {
+        ctx.reporter.flush().display()?;
+        bail!("Parsing errors found");
+    }
 }
 
 /// Parses some source code into a parsable element `T`, using rule `rule`.
@@ -235,7 +241,13 @@ pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
 
     let res: T = ctx.parse(pairs.next().context("Parser grammar error")?);
 
-    Ok(res)
+    // Check for second-stage parser errors
+    if !ctx.reporter.has_errors() {
+        Ok(res)
+    } else {
+        ctx.reporter.flush().display()?;
+        bail!("Parsing errors found");
+    }
 }
 
 /// Parses the source code for a file, and returns the parsed program.
