@@ -9,7 +9,7 @@ use PatKind::*;
 use PlaceKind::*;
 use Ty::*;
 
-use crate::ast::fun::{binop_bool_sig, binop_int_sig};
+use crate::ast::fun::{binop_bool_sig, binop_int_sig, unop_bool_sig};
 use crate::codes::*;
 use crate::reporter::Diagnostic;
 use crate::tast::*;
@@ -111,6 +111,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         typer.add_fun(binop_int_sig("!=", BoolT));
         typer.add_fun(binop_bool_sig("&&", BoolT));
         typer.add_fun(binop_bool_sig("||", BoolT));
+        typer.add_fun(unop_bool_sig("!", BoolT));
 
         typer
     }
@@ -449,6 +450,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         let span = e.span;
         match e.kind {
             ast::ExprKind::UnitE => Expr::new(UnitE, UnitT, self.current_stratum(), span),
+            ast::ExprKind::BoolE(b) => Expr::new(BoolE(b), BoolT, self.current_stratum(), span),
             ast::ExprKind::IntegerE(i) => {
                 Expr::new(IntegerE(i), IntT, self.current_stratum(), span)
             }
@@ -1133,6 +1135,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     fn visit_pattern(&mut self, pat: ast::Expr<'ctx>) -> Option<Pat<'ctx>> {
         let span = pat.span;
         match pat.kind {
+            ast::ExprKind::BoolE(i) => Some(Pat::new(BoolM(i), IntT, span)),
             ast::ExprKind::IntegerE(i) => Some(Pat::new(IntegerM(i), IntT, span)),
             ast::ExprKind::StringE(s) => Some(Pat::new(StringM(s), IntT, span)),
             ast::ExprKind::PlaceE(place) => {

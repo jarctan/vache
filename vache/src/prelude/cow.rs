@@ -15,11 +15,11 @@ pub fn cow() -> TokenStream {
             Owned(B),
         }
 
-        impl<B: Clone> fmt::Debug for Cow<'_, B>
+        impl<B: Clone> ::std::fmt::Debug for Cow<'_, B>
         where
-            B: fmt::Debug,
+            B: ::std::fmt::Debug,
         {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 match *self {
                     Cow::Borrowed(ref b) => write!(f, "&{:?}", b),
                     Cow::MutBorrowed(ref b) => write!(f, "&mut {:?}", b),
@@ -28,15 +28,15 @@ pub fn cow() -> TokenStream {
             }
         }
 
-        impl<B: Clone> fmt::Display for Cow<'_, B>
+        impl<B: Clone> ::std::fmt::Display for Cow<'_, B>
         where
-            B: fmt::Display,
+            B: ::std::fmt::Display,
         {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 match *self {
-                    Cow::Borrowed(ref b) => fmt::Display::fmt(b, f),
-                    Cow::MutBorrowed(ref b) => fmt::Display::fmt(b, f),
-                    Cow::Owned(ref o) => fmt::Display::fmt(o, f),
+                    Cow::Borrowed(ref b) => ::std::fmt::Display::fmt(b, f),
+                    Cow::MutBorrowed(ref b) => ::std::fmt::Display::fmt(b, f),
+                    Cow::Owned(ref o) => ::std::fmt::Display::fmt(o, f),
                 }
             }
         }
@@ -76,7 +76,7 @@ pub fn cow() -> TokenStream {
             }
         }
 
-        impl<B: Clone> Deref for Cow<'_, B> {
+        impl<B: Clone> ::std::ops::Deref for Cow<'_, B> {
             type Target = B;
 
             fn deref(&self) -> &B {
@@ -88,7 +88,7 @@ pub fn cow() -> TokenStream {
             }
         }
 
-        impl<B: Clone> DerefMut for Cow<'_, B> {
+        impl<B: Clone> ::std::ops::DerefMut for Cow<'_, B> {
             fn deref_mut(&mut self) -> &mut B {
                 match self {
                     Cow::Borrowed(borrowed) => {
@@ -140,13 +140,13 @@ pub fn cow() -> TokenStream {
             }
         }
 
-        impl<'a, B: Clone> Borrow<B> for Cow<'a, B> {
+        impl<'a, B: Clone> ::std::borrow::Borrow<B> for Cow<'a, B> {
             fn borrow(&self) -> &B {
                 self
             }
         }
 
-        impl<'a, B: Clone> BorrowMut<B> for Cow<'a, B> {
+        impl<'a, B: Clone> ::std::borrow::BorrowMut<B> for Cow<'a, B> {
             fn borrow_mut(&mut self) -> &mut B {
                 self
             }

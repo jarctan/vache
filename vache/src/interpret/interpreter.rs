@@ -312,6 +312,7 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
     fn visit_rvalue(&mut self, rvalue: &RValue<'ctx>, stratum: Stratum) -> ValueRef {
         match rvalue {
             RValue::Unit => self.add_value(UnitV, stratum),
+            RValue::Bool(b) => self.add_value(BoolV(*b), stratum),
             RValue::Integer(i) => self.add_value(IntV((*i).clone()), stratum),
             RValue::String(s) => self.add_value(StrV(s.to_string()), stratum),
             RValue::Place(place) => {

@@ -17,6 +17,18 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for &'ctx str {
     }
 }
 
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for bool {
+    fn parse(pair: Pair<'ctx, Rule>, _ctx: &Context<'ctx>) -> Self {
+        debug_assert!(pair.as_rule() == Rule::boolean);
+
+        match pair.as_str() {
+            "true" => true,
+            "false" => false,
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl<'ctx> Parsable<'ctx, Pair<'_, Rule>> for BigInt {
     fn parse(pair: Pair<Rule>, _ctx: &Context) -> Self {
         debug_assert!(pair.as_rule() == Rule::integer);

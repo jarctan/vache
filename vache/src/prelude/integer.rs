@@ -73,15 +73,15 @@ pub fn integer() -> TokenStream {
             }
         }
 
-        impl fmt::Display for __Integer {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                <::num_bigint::BigInt as fmt::Display>::fmt(&self.0, f)
+        impl ::std::fmt::Display for __Integer {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                <::num_bigint::BigInt as ::std::fmt::Display>::fmt(&self.0, f)
             }
         }
 
-        impl fmt::Debug for __Integer {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                <::num_bigint::BigInt as fmt::Debug>::fmt(&self.0, f)
+        impl ::std::fmt::Debug for __Integer {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                <::num_bigint::BigInt as ::std::fmt::Debug>::fmt(&self.0, f)
             }
         }
 

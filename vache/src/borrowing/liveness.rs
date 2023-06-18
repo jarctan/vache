@@ -33,6 +33,7 @@ pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<LocTr
                 InstrKind::Noop => outs.clone(),
                 InstrKind::Declare(var) => outs.clone() - Loc::from(var.name()),
                 InstrKind::Assign(lhs, RValue::Unit)
+                | InstrKind::Assign(lhs, RValue::Bool(_))
                 | InstrKind::Assign(lhs, RValue::String(_))
                 | InstrKind::Assign(lhs, RValue::Integer(_)) => {
                     outs.clone() - lhs.place().def() + lhs.place().uses_as_lhs()
@@ -128,6 +129,7 @@ fn loan_liveness<'ctx>(
                 InstrKind::Declare(var) => ins.clone() - Place::from(var.name()),
                 InstrKind::Assign(lhs, RValue::Unit)
                 | InstrKind::Assign(lhs, RValue::String(_))
+                | InstrKind::Assign(lhs, RValue::Bool(_))
                 | InstrKind::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs.place(),
                 InstrKind::Assign(lhs, RValue::Place(rhs)) => {
                     let mut ledger = ins.clone();
@@ -345,7 +347,10 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
                         }
                     }
                 }
-                InstrKind::Assign(_, RValue::Unit | RValue::Integer(..) | RValue::String(..)) => (),
+                InstrKind::Assign(
+                    _,
+                    RValue::Unit | RValue::Bool(..) | RValue::Integer(..) | RValue::String(..),
+                ) => (),
             }
         }
 

@@ -31,6 +31,7 @@ pub fn pretty_print_rule(rule: &Rule) -> &'static str {
         Rule::struct_instance => "`MyStruct { ... }`",
         Rule::unit => "`()`",
         Rule::integer => "an integer",
+        Rule::boolean => "a boolean",
         Rule::string => "a string",
         Rule::ty => "a type",
         Rule::array_ty => "an array type",

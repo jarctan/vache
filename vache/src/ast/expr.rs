@@ -72,6 +72,8 @@ pub enum ExprKind<'ctx> {
     /// Unit expression, that does nothing.
     #[default]
     UnitE,
+    /// A boolean.
+    BoolE(bool),
     /// An unbounded integer.
     IntegerE(BigInt),
     /// A string.
@@ -391,6 +393,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                 match pair.as_rule() {
                     Rule::unit => UnitE,
                     Rule::integer => IntegerE(ctx.parse(pair)),
+                    Rule::boolean => BoolE(ctx.parse(pair)),
                     Rule::string => StringE(ctx.parse(pair)),
                     Rule::ident => PlaceE(Place::new(VarP(ctx.parse(pair)), span)),
                     Rule::array => {

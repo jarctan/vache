@@ -76,7 +76,7 @@ impl<'ctx> From<Fun<'ctx>> for FunSig<'ctx> {
 
 /// Shortcut to create function signatures for integer binary operators.
 ///
-/// Typically those you can find for builtin functions.
+/// Typically used to sign builtin functions.
 pub fn binop_int_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
     FunSig {
         name: op,
@@ -87,11 +87,22 @@ pub fn binop_int_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
 
 /// Shortcut to create function signatures for bool binary operators.
 ///
-/// Typically those you can find for builtin functions.
+/// Typically used to sign builtin functions.
 pub fn binop_bool_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
     FunSig {
         name: op,
         params: vec![vardef("b1", BoolT), vardef("b2", BoolT)],
+        ret_ty,
+    }
+}
+
+/// Shortcut to create function signatures for bool unary operators.
+///
+/// Typically used to sign builtin functions.
+pub fn unop_bool_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
+    FunSig {
+        name: op,
+        params: vec![vardef("b", BoolT)],
         ret_ty,
     }
 }

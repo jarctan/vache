@@ -46,7 +46,13 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     pub fn translate_type(ty: &Ty, show_lifetime: bool) -> TokenStream {
         match ty {
             UnitT => quote!(()),
-            BoolT => quote!(bool),
+            BoolT => {
+                if show_lifetime {
+                    quote!(Cow<'a, bool>)
+                } else {
+                    quote!(Cow<bool>)
+                }
+            }
             IntT => {
                 if show_lifetime {
                     quote!(Cow<'a, __Integer>)
@@ -236,6 +242,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     fn visit_expr(&mut self, expr: Expr<'ctx>) -> TokenStream {
         match expr.kind {
             UnitE => quote!(()),
+            BoolE(b) => quote!(Cow::Owned(#b)),
             IntegerE(i) => {
                 let i = i
                     .to_u128()
@@ -293,6 +300,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         "!=" => "__neq".to_string(),
                         "&&" => "__and".to_string(),
                         "||" => "__or".to_string(),
+                        "!" => "__not".to_string(),
                         _ => name.name.to_string(),
                     };
                     let name = format_ident!("{name}");
@@ -321,7 +329,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let iffalse = self.visit_block(iffalse);
 
                 quote! {
-                    if #cond #iftrue else #iffalse
+                    if *(#cond) #iftrue else #iffalse
                 }
             }
             BlockE(box block) => self.visit_block(block),
@@ -376,7 +384,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let cond = self.visit_expr(cond);
                 let body = self.visit_block(body);
                 quote! {
-                    while #cond #body
+                    while *(#cond) #body
                 }
             }
 

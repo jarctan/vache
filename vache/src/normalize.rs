@@ -74,6 +74,13 @@ impl<'ctx> Normalizer<'ctx> {
                 stmts.push(Stmt::Assign(ptr, RValue::Unit));
                 Reference::new_moved(ptr)
             }
+            tast::ExprKind::BoolE(b) => {
+                let vardef = self.fresh_vardef(e.ty);
+                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
+                stmts.push(Stmt::Declare(vardef));
+                stmts.push(Stmt::Assign(ptr, RValue::Bool(*b)));
+                Reference::new_moved(ptr)
+            }
             tast::ExprKind::IntegerE(i) => {
                 let vardef = self.fresh_vardef(e.ty);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));

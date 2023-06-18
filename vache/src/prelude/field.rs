@@ -21,15 +21,15 @@ use proc_macro2::TokenStream;
 #[allow(clippy::missing_docs_in_private_items)]
 pub fn field() -> TokenStream {
     quote!(
-        pub struct Field<T>(MaybeUninit<T>);
+        pub struct Field<T>(__MaybeUninit<T>);
 
         impl<T> Field<T> {
             pub fn new(value: T) -> Self {
-                Self(MaybeUninit::new(value))
+                Self(__MaybeUninit::new(value))
             }
 
             pub fn take(&mut self) -> T {
-                unsafe { std::mem::replace(&mut self.0, MaybeUninit::uninit()).assume_init() }
+                unsafe { std::mem::replace(&mut self.0, __MaybeUninit::uninit()).assume_init() }
             }
 
             pub fn as_ref(&self) -> &T {
@@ -48,7 +48,7 @@ pub fn field() -> TokenStream {
         }
 
         impl<T: ::std::fmt::Debug> ::std::fmt::Debug for Field<T> {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 write!(f, "{:?}", self.as_ref())
             }
         }

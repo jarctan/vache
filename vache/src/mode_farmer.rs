@@ -61,19 +61,19 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
         self.farm
     }
 
-    /// Collects modes in a program.
+    /// Collects referencing modes in a program.
     fn visit_program(&mut self, p: &Program<'ctx>) {
         for f in p.funs.values() {
             self.visit_function(f);
         }
     }
 
-    /// Collects modes in a function.
+    /// Collects referencing modes in a function.
     fn visit_function(&mut self, f: &Fun<'ctx>) {
         self.visit_block(&f.body);
     }
 
-    /// Collects modes in a block.
+    /// Collects referencing modes in a block.
     fn visit_block(&mut self, b: &Block<'ctx>) {
         for stmt in &b.stmts {
             self.visit_stmt(stmt);
@@ -81,7 +81,7 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
         self.visit_expr(&b.ret);
     }
 
-    /// Collects modes in a statement.
+    /// Collects referencing modes in a statement.
     fn visit_stmt(&mut self, s: &Stmt<'ctx>) {
         match s {
             DeclareS(_, e) | AssignS(_, e) | ExprS(e) => self.visit_expr(e),
@@ -101,10 +101,10 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
         }
     }
 
-    /// Collects modes in an expression.
+    /// Collects referencing modes in an expression.
     fn visit_expr(&mut self, e: &Expr<'ctx>) {
         match &e.kind {
-            UnitE | IntegerE(_) | StringE(_) => (),
+            UnitE | BoolE(_) | IntegerE(_) | StringE(_) => (),
             PlaceE(place) => self.visit_place(place),
             RangeE(box e1, box e2) => {
                 self.visit_expr(e1);

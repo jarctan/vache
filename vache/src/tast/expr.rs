@@ -54,6 +54,8 @@ impl<'ctx> Expr<'ctx> {
 pub enum ExprKind<'ctx> {
     /// Unit expression, that does nothing.
     UnitE,
+    /// A boolean.
+    BoolE(bool),
     /// An unbounded integer.
     IntegerE(BigInt),
     /// A string.

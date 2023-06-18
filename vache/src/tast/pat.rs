@@ -37,6 +37,8 @@ impl<'ctx> Pat<'ctx> {
 /// Rule: all kinds end with a capital `M`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PatKind<'ctx> {
+    /// Boolean pattern.
+    BoolM(bool),
     /// Integer pattern.
     IntegerM(BigInt),
     /// A string.

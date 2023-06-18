@@ -1,0 +1,17 @@
+fn main() {
+    var a: int = 830198309123808;
+    var b: int = 830198309123809;
+    var res: bool = a > 0 && b < 0;
+    if !res {
+        print("garfield");
+    }
+    if a > b && a > 0 {
+        print("odie");
+    }
+    print("john");
+}
+################################
+garfield
+john
+################################
+8:17:Moved // last use of a

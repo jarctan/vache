@@ -42,8 +42,8 @@ pub fn vec() -> TokenStream {
             }
         }
 
-        impl<T: fmt::Display> fmt::Display for __Vec<T> {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        impl<T: ::std::fmt::Display> ::std::fmt::Display for __Vec<T> {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 write!(f, "[")?;
                 let mut iter = self.0.iter();
                 if let Some(i) = iter.next() {

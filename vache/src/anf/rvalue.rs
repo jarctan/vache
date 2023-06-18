@@ -12,6 +12,8 @@ use super::*;
 pub enum RValue<'ctx> {
     /// Unit expression, that does nothing.
     Unit,
+    /// A boolean.
+    Bool(bool),
     /// An unbounded integer.
     Integer(&'ctx BigInt),
     /// A string.
@@ -47,6 +49,7 @@ impl<'ctx> fmt::Debug for RValue<'ctx> {
         use RValue::*;
         match self {
             Unit => write!(f, "()"),
+            Bool(b) => write!(f, "{b}"),
             Integer(i) => write!(f, "{i}"),
             String(s) => write!(f, "\"{s}\""),
             Place(place) => write!(f, "{place:?}"),

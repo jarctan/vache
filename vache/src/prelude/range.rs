@@ -1,6 +1,6 @@
 //! Redefining ranges.
 //!
-//! The current main reason for re-implemeting ranges is to provide a `Display`
+//! The current main reason for re-implementing ranges is to provide a `Display`
 //! implementation for them.
 
 use proc_macro2::TokenStream;
@@ -17,8 +17,8 @@ pub fn range() -> TokenStream {
             }
         }
 
-        impl<T: fmt::Display> fmt::Display for __Range<T> {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        impl<T: ::std::fmt::Display> ::std::fmt::Display for __Range<T> {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 write!(f, "{}..{}", self.0.start, self.0.end)
             }
         }

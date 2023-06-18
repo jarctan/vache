@@ -169,7 +169,10 @@ impl<'cfg> InstrKind<'cfg> {
                     }
                 }
             }
-            InstrKind::Assign(_, RValue::Unit | RValue::Integer(_) | RValue::String(_)) => {
+            InstrKind::Assign(
+                _,
+                RValue::Unit | RValue::Bool(_) | RValue::Integer(_) | RValue::String(_),
+            ) => {
                 panic!("{to_find:?} not found in this {self:?}, cannot make it owned")
             }
             InstrKind::Noop

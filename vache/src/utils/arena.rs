@@ -19,6 +19,8 @@ impl Arena {
         self.0.alloc(boxed(t))
     }
 
+    /// Allocates a new element in the arena and returns a mutable reference
+    /// into it.
     pub fn alloc_mut<T>(&self, t: T) -> &mut T {
         &mut *self.0.alloc(boxed(t))
     }
