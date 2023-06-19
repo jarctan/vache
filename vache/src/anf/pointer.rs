@@ -74,18 +74,30 @@ impl<'a, 'ctx> From<&'a Pointer<'ctx>> for Pointer<'ctx> {
 pub struct Reference<'ctx> {
     /// Pointer into the location.
     pointer: Pointer<'ctx>,
-    /// Do we transfer ownership or take by reference?
+    /// Addressing/referencing mode.
     ///
-    /// If `None`, the mode is `Moved`.
-    mode: Option<&'ctx mut Mode>,
+    /// If there are multiple modes, that means that this reference is tied to
+    /// multiple [`Mode`]s in the typed AST. The invariant is that they will
+    /// always share the same mode, and modifying the mode of the [`Reference`]
+    /// will modify the mode of all the `&'ctx mut Mode` in the vector.
+    modes: Vec<&'ctx mut Mode>,
 }
 
 impl<'ctx> Reference<'ctx> {
-    /// Creates a new reference, with its pointer and mode.
+    /// Creates a new [`Reference`], with its pointer and mode.
     pub fn new(ptr: Pointer<'ctx>, mode: &'ctx mut Mode) -> Self {
         Self {
             pointer: ptr,
-            mode: Some(mode),
+            modes: vec![mode],
+        }
+    }
+
+    /// Creates a new [`Reference`], with multiple referencing modes at the same
+    /// time.
+    pub fn new_multi_modes(ptr: Pointer<'ctx>, modes: Vec<&'ctx mut Mode>) -> Self {
+        Self {
+            pointer: ptr,
+            modes,
         }
     }
 
@@ -93,29 +105,29 @@ impl<'ctx> Reference<'ctx> {
     pub fn new_moved(ptr: Pointer<'ctx>) -> Self {
         Self {
             pointer: ptr,
-            mode: None,
+            modes: vec![],
         }
     }
 
-    /// Reference mode.
+    /// Addressing mode.
     pub fn mode(&self) -> Mode {
-        self.mode.as_ref().map(|mode| **mode).unwrap_or(Mode::Moved)
+        self.modes.get(0).map(|mode| **mode).unwrap_or(Mode::Moved)
+    }
+
+    /// Returns the addressing modes of that [`Reference`], consuming `self`.
+    ///
+    /// Used so that modes from one [`Reference`] may go
+    pub fn into_modes_mut(self) -> Vec<&'ctx mut Mode> {
+        self.modes
     }
 
     /// Gets a mutable reference into the mode.
     ///
     /// # Panics
     /// Panics if the reference has no associated mode in the AST.
-    pub fn mode_mut(&mut self) -> &mut Mode {
-        self.mode.as_mut().unwrap()
-    }
-
-    /// Makes
-    pub fn make_moved(&mut self) {
-        if let Some(mode) = &mut self.mode {
-            **mode = Mode::Moved;
-        } else {
-            // Already moved by default, nothing to do.
+    pub fn set_mode(&mut self, new_mode: Mode) {
+        for mode in &mut self.modes {
+            **mode = new_mode;
         }
     }
 
@@ -135,10 +147,6 @@ impl<'ctx> Deref for Reference<'ctx> {
 
 impl fmt::Debug for Reference<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(ref mode) = self.mode {
-            write!(f, "{}{:?}", mode, self.pointer)
-        } else {
-            write!(f, "{:?}", self.pointer)
-        }
+        write!(f, "{}{:?}", self.mode(), self.pointer)
     }
 }

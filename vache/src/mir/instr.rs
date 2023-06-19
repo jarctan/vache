@@ -192,7 +192,7 @@ impl<'ctx> InstrKind<'ctx> {
             )
         } else {
             let el = &mut els[0];
-            *el.mode_mut() = Mode::Cloned;
+            el.set_mode(Mode::Cloned);
         }
     }
 }

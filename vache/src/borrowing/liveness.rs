@@ -139,70 +139,46 @@ fn loan_liveness<'ctx>(
 ///
 /// Performs liveliness analysis, determining which borrows are invalidated.
 pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) -> CfgI<'ctx> {
-    println!("{:?}", cfg);
-    // Compute the two analyses
+    // Compute the var analysis first
     let var_flow = var_liveness(&cfg, entry_l);
 
-    let mut updates = true;
-    while updates {
-        // Reset update flag
-        updates = false;
-
-        // Compute loan liveness for the first time
-        let loan_flow = loan_liveness(&cfg, entry_l, &var_flow);
-
-        // Check last variable use and replace with a move
-        let mut invalidated: Borrows<'ctx> = Borrows::new();
-        for (label, instr) in cfg.bfs_mut(entry_l, false) {
-            let outs = &var_flow[&label].outs;
-            let ledger = &loan_flow[&label].ins;
-            for reference in instr.references_mut() {
-                match reference.mode() {
-                    Mode::Borrowed | Mode::MutBorrowed | Mode::SMutBorrowed | Mode::SBorrowed => {
-                        if !outs.contains(reference.loc()) {
-                            /*if ledger.has_loans(*reference.place()) {
-                                let loans = ledger.loans(*reference.place()).collect::<Vec<_>>();
-                                println!("Invalidating {loans:?}");
-                                //invalidated.extend(loans);
-                            }*/
-                            reference.make_moved();
-                            updates = true;
-                        }
+    // Check last variable use and replace with a move
+    let mut invalidated: Borrows<'ctx> = Borrows::new();
+    for (label, instr) in cfg.bfs_mut(entry_l, false) {
+        let outs = &var_flow[&label].outs;
+        for reference in instr.references_mut() {
+            match reference.mode() {
+                Mode::Borrowed | Mode::MutBorrowed | Mode::SMutBorrowed | Mode::SBorrowed => {
+                    if !outs.contains(reference.loc()) {
+                        reference.set_mode(Mode::Moved);
                     }
-                    Mode::Cloned => (), // We clone, there's a reason fot that. So you can't move
-                    Mode::Moved => (),  // already moved
-                    Mode::Assigning => (), // assigning modes can't be moved
                 }
+                Mode::Cloned => (), // We clone, there's a reason fot that. So you can't move
+                Mode::Moved => (),  // already moved
+                Mode::Assigning => (), // assigning modes can't be moved
             }
         }
+    }
 
-        // If we did a last var use optimization, update the loan liveness.
-        // Otherwise, keep it as is.
-        let loan_flow = if updates {
-            loan_liveness(&cfg, entry_l, &var_flow)
-        } else {
-            loan_flow
-        };
+    // Now, compute loan analysis
+    let loan_flow = loan_liveness(&cfg, entry_l, &var_flow);
 
-        // List all borrows that are invalidated by mutation of the variable afterwards.
-        for (label, instr) in cfg.bfs(entry_l, false) {
-            for lhs in instr.mutated_place() {
-                for &borrow in loan_flow[&label].ins.loans(lhs) {
-                    invalidated.insert(borrow);
-                }
+    // List all borrows that are invalidated by mutation of the variable afterwards.
+    for (label, instr) in cfg.bfs(entry_l, false) {
+        for lhs in instr.mutated_place() {
+            for &borrow in loan_flow[&label].ins.loans(lhs) {
+                invalidated.insert(borrow);
             }
         }
-        // Extend with those of the ledger. Take the exit_l to have them all
-        invalidated.extend(loan_flow[&exit_l].outs.invalidations());
+    }
 
-        // If we made no update, we reached the fixpoint of our optimizations, and there
-        // is no invalidations anymore so it's fine
-        updates |= !invalidated.is_empty();
+    // Extend with the invalidations of the ledger. Take them at exit_l to have them
+    // all
+    invalidated.extend(loan_flow[&exit_l].outs.invalidations());
 
-        // Transform all invalidated borrows into clones
-        for Borrow { label, place, .. } in invalidated {
-            cfg[&label].force_clone(&place);
-        }
+    // Transform all invalidated borrows into clones
+    for Borrow { label, place, .. } in invalidated {
+        cfg[&label].force_clone(&place);
     }
 
     cfg

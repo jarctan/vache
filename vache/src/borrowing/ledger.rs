@@ -241,15 +241,6 @@ impl<'ctx> Ledger<'ctx> {
     pub fn invalidations<'a>(&'a self) -> impl Iterator<Item = Borrow<'ctx>> + 'a {
         self.invalidations.iter().copied()
     }
-
-    /// Has this place conceded any loan that is still active?
-    pub fn has_loans(&self, place: Place<'ctx>) -> bool {
-        if let Some(loans) = self.loans.get(&place.root()) {
-            !loans.is_empty()
-        } else {
-            false
-        }
-    }
 }
 
 impl fmt::Debug for Ledger<'_> {

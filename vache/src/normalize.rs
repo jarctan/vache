@@ -135,7 +135,15 @@ impl<'ctx> Normalizer<'ctx> {
                             self.arena
                                 .alloc(Place::IndexP(e_ptr.as_ptr(), ix_ptr.as_ptr())),
                         );
-                        Reference::new(final_ptr, &mut place.mode)
+
+                        // The reference into `IndexP` will depend on multiple modes: the global one,
+                        // the modes of the array expression, and the mode of the index expression.
+                        // All are tied.
+                        let mut modes = vec![&mut place.mode];
+                        modes.extend(e_ptr.into_modes_mut());
+                        modes.extend(ix_ptr.into_modes_mut());
+
+                        Reference::new_multi_modes(final_ptr, modes)
                     }
                 }
             }
