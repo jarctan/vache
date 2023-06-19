@@ -77,16 +77,16 @@ impl<'ctx> PartialEq<&str> for VarUse<'ctx> {
 }
 
 impl<'ctx> VarUse<'ctx> {
-    /// A fresh variable.
+    /// A fresh variable, related to some code`span`.
     ///
     /// These are variables used internally by the CFG, that starts with `__cfg`
     /// followed by a unique numeral ID.
-    pub(crate) fn fresh(arena: &'ctx Arena) -> VarUse<'ctx> {
+    pub(crate) fn fresh(arena: &'ctx Arena, span: Span) -> VarUse<'ctx> {
         let number = VAR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let name: &str = arena.alloc(boxed(format!("時{number:?}")));
         VarUse {
             name: name.into(),
-            span: Span::default(),
+            span,
         }
     }
 

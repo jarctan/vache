@@ -41,14 +41,14 @@ impl<'ctx> Normalizer<'ctx> {
         self.stm = u64::from(self.stm).checked_sub(1).unwrap().into();
     }
 
-    /// Creates a fresh variable definition.
-    fn fresh_vardef(&self, ty: Ty<'ctx>) -> VarDef<'ctx> {
-        let var = VarUse::fresh(self.arena); // TODO: associate with the right codespan.
+    /// Creates a fresh variable definition, that is related to some code`span`.
+    fn fresh_vardef(&self, ty: Ty<'ctx>, span: Span) -> VarDef<'ctx> {
+        let var = VarUse::fresh(self.arena, span);
         VarDef {
             var,
             ty,
             stm: self.stm,
-            span: default(), // TODO: associate with the right codespan.
+            span,
         }
     }
 
@@ -71,35 +71,35 @@ impl<'ctx> Normalizer<'ctx> {
     ) -> Reference<'ctx> {
         match &mut e.kind {
             tast::ExprKind::UnitE => {
-                let vardef = self.fresh_vardef(e.ty);
+                let vardef = self.fresh_vardef(e.ty, e.span);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(DeclareS(vardef));
                 stmts.push(AssignS(ptr, RValue::Unit));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::BoolE(b) => {
-                let vardef = self.fresh_vardef(e.ty);
+                let vardef = self.fresh_vardef(e.ty, e.span);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(DeclareS(vardef));
                 stmts.push(AssignS(ptr, RValue::Bool(*b)));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::IntegerE(i) => {
-                let vardef = self.fresh_vardef(e.ty);
+                let vardef = self.fresh_vardef(e.ty, e.span);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(DeclareS(vardef));
                 stmts.push(AssignS(ptr, RValue::Integer(i)));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::StringE(s) => {
-                let vardef = self.fresh_vardef(e.ty);
+                let vardef = self.fresh_vardef(e.ty, e.span);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(DeclareS(vardef));
                 stmts.push(AssignS(ptr, RValue::String(s)));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::RangeE(start, end) => {
-                let vardef = self.fresh_vardef(e.ty);
+                let vardef = self.fresh_vardef(e.ty, e.span);
                 let start_ptr = self.visit_expr(stmts, start, Some(Mode::Borrowed), structs, ret_ptr);
                 let end_ptr = self.visit_expr(stmts, end, Some(Mode::Borrowed), structs, ret_ptr);
                 let final_ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
@@ -152,7 +152,7 @@ impl<'ctx> Normalizer<'ctx> {
                     .map(|arg| self.visit_expr(stmts, arg, None, structs, ret_ptr))
                     .collect();
 
-                let vardef = self.fresh_vardef(e.ty);
+                let vardef = self.fresh_vardef(e.ty, e.span);
                 let destination = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(DeclareS(vardef));
 
@@ -170,7 +170,7 @@ impl<'ctx> Normalizer<'ctx> {
                     .map(|arg| self.visit_expr(stmts, arg, None, structs, ret_ptr))
                     .collect();
 
-                let vardef = self.fresh_vardef(e.ty);
+                let vardef = self.fresh_vardef(e.ty, e.span);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(DeclareS(vardef));
                 stmts.push(AssignS(ptr, RValue::Variant { enun, variant, args }));
@@ -181,7 +181,7 @@ impl<'ctx> Normalizer<'ctx> {
                 let cond = self.visit_expr(stmts, cond, Some(Mode::SBorrowed), structs, ret_ptr);
 
                 // Destination
-                let dest_def = self.fresh_vardef(iftrue.ret.ty);
+                let dest_def = self.fresh_vardef(iftrue.ret.ty, e.span);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
                 stmts.push(DeclareS(dest_def));
 
@@ -207,7 +207,7 @@ impl<'ctx> Normalizer<'ctx> {
                 fields,
             } => {
                 // Destination
-                let dest_def = self.fresh_vardef(e.ty);
+                let dest_def = self.fresh_vardef(e.ty, e.span);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
                 stmts.push(DeclareS(dest_def));
 
@@ -228,7 +228,7 @@ impl<'ctx> Normalizer<'ctx> {
             }
             tast::ExprKind::ArrayE(array) => {
                 // Destination
-                let dest_def = self.fresh_vardef(array[0].ty);
+                let dest_def = self.fresh_vardef(array[0].ty, e.span);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
                 stmts.push(DeclareS(dest_def));
 
@@ -383,7 +383,7 @@ impl<'ctx> Normalizer<'ctx> {
         f: &'ctx mut tast::Fun<'tast>,
         structs: &HashMap<&'ctx str, Struct<'ctx>>,
     ) -> Fun<'ctx> {
-        let vardef = self.fresh_vardef(f.ret_ty.kind);
+        let vardef = self.fresh_vardef(f.ret_ty.kind, f.body.ret.span);
         let ret_ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
 
         // Declare the return variable

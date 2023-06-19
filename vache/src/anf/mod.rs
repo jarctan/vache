@@ -21,4 +21,4 @@ pub use program::Program;
 pub use rvalue::RValue;
 pub use stmt::Stmt;
 
-pub use crate::tast::{Enum, Mode, Namespaced, Stratum, Struct, Ty, VarDef, VarUse, Varname};
+pub use crate::tast::{Enum, Mode, Namespaced, Span, Stratum, Struct, Ty, VarDef, VarUse, Varname};
