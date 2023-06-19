@@ -5,7 +5,7 @@ use super::flow::Flow;
 use super::tree::LocTree;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
-use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Place, RValue};
+use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Place};
 
 /// Variable liveness analysis.
 ///
@@ -31,56 +31,24 @@ pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<LocTr
             let outs: LocTree<()> = successors.map(|x| var_flow[&x].ins.clone()).sum();
             let ins: LocTree<()> = match &instr.kind {
                 InstrKind::Noop => outs.clone(),
-                InstrKind::Declare(var) => outs.clone() - Loc::from(var.name()),
-                InstrKind::Assign(lhs, RValue::Unit)
-                | InstrKind::Assign(lhs, RValue::Bool(_))
-                | InstrKind::Assign(lhs, RValue::String(_))
-                | InstrKind::Assign(lhs, RValue::Integer(_)) => {
-                    outs.clone() - lhs.place().def() + lhs.place().uses_as_lhs()
-                }
-                InstrKind::Assign(lhs, RValue::Place(rhs)) => {
+                InstrKind::Declare(_) => outs.clone(),
+                InstrKind::Assign(lhs, _)
+                | InstrKind::Call {
+                    name: _,
+                    args: _,
+                    destination: Some(lhs),
+                } => {
                     outs.clone() - lhs.place().def()
                         + lhs.place().uses_as_lhs()
-                        + rhs.place.uses_as_rhs()
-                }
-                InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
-                    outs.clone() - lhs.place().def()
-                        + lhs.place().uses_as_lhs()
-                        + fields.values().flat_map(|field| field.place.uses_as_rhs())
-                }
-                InstrKind::Assign(
-                    lhs,
-                    RValue::Variant {
-                        enun: _,
-                        variant: _,
-                        args,
-                    },
-                ) => {
-                    outs.clone() - lhs.place().def()
-                        + lhs.place().uses_as_lhs()
-                        + args.iter().flat_map(|arg| arg.place.uses_as_rhs())
-                }
-                InstrKind::Assign(lhs, RValue::Array(array)) => {
-                    outs.clone() - lhs.place().def()
-                        + lhs.place().uses_as_lhs()
-                        + array.iter().flat_map(|item| item.place.uses_as_rhs())
-                }
-                InstrKind::Assign(lhs, RValue::Range(start, end)) => {
-                    outs.clone() - lhs.place().def()
-                        + lhs.place().uses_as_lhs()
-                        + start.place.uses_as_rhs()
-                        + end.place.uses_as_rhs()
+                        + instr
+                            .references()
+                            .flat_map(|item| item.place().uses_as_rhs())
                 }
                 InstrKind::Call {
                     name: _,
                     args,
-                    destination,
-                } => {
-                    outs.clone() - destination.as_ref().map(|x| *x.loc())
-                        + args
-                            .iter()
-                            .flat_map(|x| x.place().uses_as_rhs().into_iter())
-                }
+                    destination: None,
+                } => outs.clone() + args.iter().flat_map(|x| x.place().uses_as_rhs()),
                 InstrKind::Branch(v) => outs.clone() + Loc::from(v),
                 InstrKind::Return(v) => outs.clone() + Loc::from(v),
             };
@@ -125,91 +93,22 @@ fn loan_liveness<'ctx>(
             let predecessors = cfg.preneighbors(label);
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
             let outs: Ledger = match &instr.kind {
-                InstrKind::Noop => ins.clone(),
                 InstrKind::Declare(var) => ins.clone() - Place::from(var.name()),
-                InstrKind::Assign(lhs, RValue::Unit)
-                | InstrKind::Assign(lhs, RValue::String(_))
-                | InstrKind::Assign(lhs, RValue::Bool(_))
-                | InstrKind::Assign(lhs, RValue::Integer(_)) => ins.clone() - lhs.place(),
-                InstrKind::Assign(lhs, RValue::Place(rhs)) => {
-                    let mut ledger = ins.clone();
-                    if var_flow[&label].outs.contains(lhs.loc()) {
-                        let borrows = ledger.borrow(lhs.place(), rhs, label);
-                        ledger.set_borrows(lhs.place(), borrows);
-                    } else {
-                        ledger.flush_place(lhs.place());
-                    }
-                    ledger
-                }
-                InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => {
-                    let mut ledger = ins.clone();
-                    if var_flow[&label].outs.contains(lhs.loc()) {
-                        let borrows = fields
-                            .values()
-                            .map(|field| ledger.borrow(lhs.place(), field, label))
-                            .sum::<Borrows>();
-                        ledger.set_borrows(lhs.place(), borrows);
-                    } else {
-                        ledger.flush_place(lhs.place());
-                    }
-                    ledger
-                }
-                InstrKind::Assign(
-                    lhs,
-                    RValue::Variant {
-                        enun: _,
-                        variant: _,
-                        args,
-                    },
-                ) => {
-                    let mut ledger = ins.clone();
-                    if var_flow[&label].outs.contains(lhs.loc()) {
-                        let borrows = args
-                            .iter()
-                            .map(|arg| ledger.borrow(lhs.place(), arg, label))
-                            .sum::<Borrows>();
-                        ledger.set_borrows(lhs.place(), borrows);
-                    } else {
-                        ledger.flush_place(lhs.place());
-                    }
-                    ledger
-                }
-                InstrKind::Assign(lhs, RValue::Array(array)) => {
-                    let mut ledger = ins.clone();
-                    if var_flow[&label].outs.contains(lhs.loc()) {
-                        let borrows = array
-                            .iter()
-                            .map(|item| ledger.borrow(lhs.place(), item, label))
-                            .sum::<Borrows>();
-                        ledger.set_borrows(lhs.place(), borrows);
-                    } else {
-                        ledger.flush_place(lhs.place());
-                    }
-                    ledger
-                }
-                InstrKind::Assign(lhs, RValue::Range(start, end)) => {
-                    let mut ledger = ins.clone();
-                    if var_flow[&label].outs.contains(lhs.loc()) {
-                        let borrows = ledger.borrow(lhs.place(), start, label)
-                            + ledger.borrow(lhs.place(), end, label);
-                        ledger.set_borrows(lhs.place(), borrows);
-                    } else {
-                        ledger.flush_place(lhs.place());
-                    }
-                    ledger
-                }
-                InstrKind::Call {
+                InstrKind::Assign(lhs, _)
+                | InstrKind::Call {
                     name: _,
-                    args,
-                    destination: Some(destination),
+                    args: _,
+                    destination: Some(lhs),
                 } => {
-                    let mut ledger = ins.clone() - destination.place();
-                    if var_flow[&label].outs.contains(destination.loc()) {
-                        let borrows = args
-                            .iter()
-                            .map(|arg| ledger.borrow(destination.place(), arg, label))
+                    let mut ledger = ins.clone() - *lhs.place();
+                    if var_flow[&label].outs.contains(lhs.loc()) {
+                        let borrows = instr
+                            .references()
+                            .map(|reference| ledger.borrow(lhs.place(), reference, label))
                             .sum::<Borrows>();
-                        ledger = ledger + (destination.place(), borrows);
+                        ledger.set_borrows(lhs.place(), borrows);
+                    } else {
+                        ledger.flush_place(lhs.place());
                     }
                     ledger
                 }
@@ -217,7 +116,8 @@ fn loan_liveness<'ctx>(
                 | InstrKind::Return(_)
                 | InstrKind::Call {
                     destination: None, ..
-                } => ins.clone(),
+                }
+                | InstrKind::Noop => ins.clone(),
             } - out_of_scope[&label].get_all_locs();
 
             let flow = Flow { ins, outs };
@@ -239,6 +139,7 @@ fn loan_liveness<'ctx>(
 ///
 /// Performs liveliness analysis, determining which borrows are invalidated.
 pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) -> CfgI<'ctx> {
+    println!("{:?}", cfg);
     // Compute the two analyses
     let var_flow = var_liveness(&cfg, entry_l);
 
@@ -251,106 +152,27 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
         let loan_flow = loan_liveness(&cfg, entry_l, &var_flow);
 
         // Check last variable use and replace with a move
+        let mut invalidated: Borrows<'ctx> = Borrows::new();
         for (label, instr) in cfg.bfs_mut(entry_l, false) {
             let outs = &var_flow[&label].outs;
             let ledger = &loan_flow[&label].ins;
-            match &mut instr.kind {
-                InstrKind::Noop
-                | InstrKind::Declare(_)
-                | InstrKind::Branch(_)
-                | InstrKind::Return(_) => (),
-                InstrKind::Assign(_, RValue::Place(place)) => match place.mode() {
-                    Mode::Cloned => {
-                        if !outs.contains(place.loc())
-                            && !ledger.has_loans(place.place())
-                            && place.mode() != Mode::Moved
-                        {
-                            place.make_moved();
+            for reference in instr.references_mut() {
+                match reference.mode() {
+                    Mode::Borrowed | Mode::MutBorrowed | Mode::SMutBorrowed | Mode::SBorrowed => {
+                        if !outs.contains(reference.loc()) {
+                            /*if ledger.has_loans(*reference.place()) {
+                                let loans = ledger.loans(*reference.place()).collect::<Vec<_>>();
+                                println!("Invalidating {loans:?}");
+                                //invalidated.extend(loans);
+                            }*/
+                            reference.make_moved();
                             updates = true;
                         }
                     }
-                    Mode::Borrowed | Mode::MutBorrowed | Mode::SBorrowed => {
-                        if !outs.contains(place.loc())
-                            && !ledger.has_loans(place.place())
-                            && place.mode() != Mode::Moved
-                        {
-                            place.make_moved();
-                            updates = true;
-                        }
-                    }
-                    Mode::Moved => (),
-                    Mode::Assigning => (),
-                },
-                InstrKind::Assign(_, RValue::Array(items)) => {
-                    for item in items {
-                        if !outs.contains(item.loc())
-                            && !ledger.has_loans(item.place())
-                            && item.mode() != Mode::Moved
-                        {
-                            item.make_moved();
-                            updates = true;
-                        }
-                    }
+                    Mode::Cloned => (), // We clone, there's a reason fot that. So you can't move
+                    Mode::Moved => (),  // already moved
+                    Mode::Assigning => (), // assigning modes can't be moved
                 }
-                InstrKind::Assign(_, RValue::Range(start, end)) => {
-                    for item in [start, end] {
-                        if !outs.contains(item.loc())
-                            && !ledger.has_loans(item.place())
-                            && item.mode() != Mode::Moved
-                        {
-                            item.make_moved();
-                            updates = true;
-                        }
-                    }
-                }
-                InstrKind::Assign(_, RValue::Struct { name: _, fields }) => {
-                    for field in fields.values_mut() {
-                        if !outs.contains(field.loc())
-                            && !ledger.has_loans(field.place())
-                            && field.mode() != Mode::Moved
-                        {
-                            field.make_moved();
-                            updates = true;
-                        }
-                    }
-                }
-                InstrKind::Assign(
-                    _,
-                    RValue::Variant {
-                        enun: _,
-                        variant: _,
-                        args,
-                    },
-                ) => {
-                    for arg in args {
-                        if !outs.contains(arg.loc())
-                            && !ledger.has_loans(arg.place())
-                            && arg.mode() != Mode::Moved
-                        {
-                            arg.make_moved();
-                            updates = true;
-                        }
-                    }
-                }
-                InstrKind::Call {
-                    name: _,
-                    args,
-                    destination: _,
-                } => {
-                    for arg in args {
-                        if !outs.contains(arg.loc())
-                            && !ledger.has_loans(arg.place())
-                            && arg.mode() != Mode::Moved
-                        {
-                            arg.make_moved();
-                            updates = true;
-                        }
-                    }
-                }
-                InstrKind::Assign(
-                    _,
-                    RValue::Unit | RValue::Bool(..) | RValue::Integer(..) | RValue::String(..),
-                ) => (),
             }
         }
 
@@ -363,7 +185,6 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
         };
 
         // List all borrows that are invalidated by mutation of the variable afterwards.
-        let mut invalidated: Borrows<'ctx> = Borrows::new();
         for (label, instr) in cfg.bfs(entry_l, false) {
             for lhs in instr.mutated_place() {
                 for &borrow in loan_flow[&label].ins.loans(lhs) {

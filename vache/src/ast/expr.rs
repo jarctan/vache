@@ -10,7 +10,7 @@ use pest::iterators::Pair;
 use pest::pratt_parser::*;
 use PlaceKind::*;
 
-use super::{Block, Context, Namespaced, Parsable, Place, PlaceKind, Span, VarUse};
+use super::{Block, Context, Mode, Namespaced, Parsable, Place, PlaceKind, Span, VarUse};
 use crate::codes::*;
 use crate::grammar::*;
 use crate::utils::boxed;
@@ -395,7 +395,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                     Rule::integer => IntegerE(ctx.parse(pair)),
                     Rule::boolean => BoolE(ctx.parse(pair)),
                     Rule::string => StringE(ctx.parse(pair)),
-                    Rule::ident => PlaceE(Place::new(VarP(ctx.parse(pair)), span)),
+                    Rule::ident => PlaceE(Place::new(VarP(ctx.parse(pair)), span, default())),
                     Rule::array => {
                         let mut pairs = pair.into_inner();
                         consume!(pairs, Rule::lb);
@@ -438,10 +438,10 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                 Expr { span, kind }
                             })
                             .map_prefix(|op, mut rhs| match op.as_rule() {
-                                Rule::as_mut => match &mut rhs.kind {
-                                    PlaceE(_) => todo!(),
-                                    _ => {
-                                        ctx.emit(
+                                Rule::as_mut => {
+                                    match &mut rhs.kind {
+                                        PlaceE(place) => place.mode = Mode::MutBorrowed,
+                                        _ => ctx.emit(
                                             Diagnostic::error()
                                                 .with_code(AS_MUT_NOT_PLACE_ERROR)
                                                 .with_message(format!(
@@ -451,10 +451,10 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                                     .span
                                                     .as_label()
                                                     .with_message("not a place")]),
-                                        );
-                                        rhs
+                                        ),
                                     }
-                                },
+                                    rhs
+                                }
                                 _ => {
                                     let op_span = Span::from(op.as_span());
                                     let span = rhs.span.merge(rhs.span);
@@ -522,7 +522,11 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                 let mut pairs = pair.into_inner();
                                 consume!(pairs, Rule::dt);
                                 let field: VarUse = ctx.parse(consume!(pairs));
-                                PlaceE(Place::new(FieldP(boxed(acc), field.into()), span))
+                                PlaceE(Place::new(
+                                    FieldP(boxed(acc), field.into()),
+                                    span,
+                                    default(),
+                                ))
                             }
                             Rule::index_postfix => {
                                 let mut pairs = pair.into_inner();
@@ -530,6 +534,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                 let expr = PlaceE(Place::new(
                                     IndexP(boxed(acc), boxed(ctx.parse(consume!(pairs)))),
                                     span,
+                                    default(),
                                 ));
                                 consume!(pairs, Rule::rb);
                                 expr

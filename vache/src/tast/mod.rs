@@ -6,7 +6,6 @@
 pub mod block;
 pub mod expr;
 pub mod fun;
-pub mod mode;
 pub mod pat;
 pub mod place;
 pub mod program;
@@ -17,7 +16,6 @@ pub mod var;
 pub use block::Block;
 pub use expr::{Expr, ExprKind};
 pub use fun::Fun;
-pub use mode::Mode;
 pub use pat::{Pat, PatKind};
 pub use place::{Place, PlaceKind};
 pub use program::Program;
@@ -27,4 +25,4 @@ pub use stratum::Stratum;
 pub use var::vardef;
 pub use var::VarDef;
 
-pub use crate::ast::{Enum, Namespaced, Span, Struct, Ty, TyUse, VarUse, Varname};
+pub use crate::ast::{Enum, Mode, Namespaced, Span, Struct, Ty, TyUse, VarUse, Varname};

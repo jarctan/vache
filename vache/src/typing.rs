@@ -211,12 +211,15 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         }
     }
 
-    /// Type-checks a place (lhs expression).
-    fn visit_place(&mut self, place: ast::Place<'ctx>, mode: Mode) -> Option<Place<'ctx>> {
+    /// Type-checks a **lhs** place expression.
+    ///
+    /// This will essentially visit and type the place, and **change the mode**
+    /// to `Assigning`.
+    fn visit_lhs_place(&mut self, place: ast::Place<'ctx>) -> Option<Place<'ctx>> {
         match place.kind {
             ast::PlaceKind::VarP(var) => {
                 if let Some((vardef, stm)) = self.get_var(var) {
-                    Some(Place::var(var, vardef.ty, stm, mode, place.span))
+                    Some(Place::var(var, vardef.ty, stm, Mode::Assigning, place.span))
                 } else {
                     self.ctx.emit(
                         Diagnostic::error()
@@ -237,7 +240,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             kind: IndexP(boxed(e), boxed(ix)),
                             ty,
                             stm: e_stm,
-                            mode,
+                            mode: Mode::Assigning,
                             span: place.span,
                         })
                     }
@@ -298,7 +301,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         Some(Place {
                             stm: s.stm,
                             kind: FieldP(boxed(s), field),
-                            mode,
+                            mode: Mode::Assigning,
                             ty,
                             span: place.span,
                         })
@@ -306,7 +309,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     HoleT => Some(Place {
                         stm: s.stm,
                         kind: FieldP(boxed(s), field),
-                        mode,
+                        mode: Mode::Assigning,
                         ty: HoleT,
                         span: place.span,
                     }),
@@ -460,11 +463,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 ast::PlaceKind::VarP(v) => match self.get_var(v) {
                     Some((vardef, stm)) => Expr::new(
                         PlaceE(Place::var(
-                            vardef.var,
-                            vardef.ty,
-                            stm,
-                            default(),
-                            place.span,
+                            vardef.var, vardef.ty, stm, place.mode, place.span,
                         )),
                         vardef.ty,
                         stm,
@@ -512,7 +511,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         Expr::new(
                             PlaceE(Place {
                                 kind: FieldP(boxed(s), field),
-                                mode: default(),
+                                mode: place.mode,
                                 ty,
                                 stm,
                                 span: place.span,
@@ -542,7 +541,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             Expr::new(
                                 PlaceE(Place {
                                     kind: IndexP(boxed(e), boxed(ix)),
-                                    mode: default(),
+                                    mode: place.mode,
                                     ty,
                                     stm: e_stm,
                                     span: place.span,
@@ -931,7 +930,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     let rhs_span = expr.span;
                     let expr = self.visit_expr(expr);
                     let expr_ty = &expr.ty;
-                    let place = self.visit_place(place, Mode::Assigning)?;
+                    let place = self.visit_lhs_place(place)?;
 
                     // Check the type
                     if &place.ty != expr_ty {

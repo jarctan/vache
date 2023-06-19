@@ -126,7 +126,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     Mode::Cloned => quote!(#var.clone()),
                     Mode::Borrowed => quote!(__borrow(&#var)),
                     Mode::SBorrowed => quote!(#var),
-                    Mode::MutBorrowed => quote!(#var),
+                    Mode::MutBorrowed => quote!(__borrow_mut(&mut #var)),
+                    Mode::SMutBorrowed => quote!(#var),
                     Mode::Moved => quote!(#var),
                     Mode::Assigning => quote!(#var),
                 }
@@ -145,6 +146,9 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     Mode::SBorrowed => {
                         quote!((#array).get(#index).context(#codespan)?)
                     }
+                    Mode::SMutBorrowed => {
+                        quote!(#array.get_mut(#index).context(#codespan)?)
+                    }
                     Mode::MutBorrowed => {
                         quote!(__borrow_mut((#array).get_mut(#index).context(#codespan)?))
                     }
@@ -160,6 +164,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     Mode::Borrowed => quote!(__borrow((#strukt).#field.as_ref())),
                     Mode::SBorrowed => unimplemented!(),
                     Mode::MutBorrowed => quote!(__borrow_mut((#strukt).#field.as_mut())),
+                    Mode::SMutBorrowed => unimplemented!(),
                     Mode::Cloned => quote!((#strukt).#field.clone().take()),
                     Mode::Moved => quote!((#strukt).#field.take()),
                     Mode::Assigning => quote!((#strukt).#field),

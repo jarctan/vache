@@ -3,7 +3,7 @@
 use std::fmt;
 
 use super::{Loc, Pointer, VarUse, Varname};
-use crate::utils::set::Set;
+use crate::utils::boxed;
 
 /// Kinds of places.
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -41,25 +41,25 @@ impl<'ctx> Place<'ctx> {
     ///
     /// Only difference with rhs is that if the place is a variable, the
     /// variable need not to exist beforehand.
-    pub fn uses_as_lhs(&self) -> Set<Loc<'ctx>> {
+    pub fn uses_as_lhs<'a>(&'a self) -> Box<dyn Iterator<Item = Loc<'ctx>> + 'a> {
         match self {
-            VarP(_) | FieldP(_, _) => [].into_iter().collect(),
-            IndexP(..) => self.uses_as_rhs(),
+            VarP(_) | FieldP(_, _) => boxed(std::iter::empty()),
+            IndexP(..) => boxed(self.uses_as_rhs()),
         }
     }
 
     /// Gets the variables used by that place (variables that need to exist
     /// beforehand), if that place is in the right hand side.
-    pub fn uses_as_rhs(&self) -> Set<Loc<'ctx>> {
+    pub fn uses_as_rhs<'a>(&'a self) -> Box<dyn Iterator<Item = Loc<'ctx>> + 'a> {
         match self {
-            VarP(v) => [Loc::VarL(*v)].into_iter().collect(),
-            FieldP(strukt, field) => [Loc::FieldL(strukt.loc(), field)].into_iter().collect(),
-            IndexP(array, index) => array
-                .place()
-                .uses_as_rhs()
-                .into_iter()
-                .chain(index.place().uses_as_rhs().into_iter())
-                .collect(),
+            VarP(v) => boxed(std::iter::once(Loc::VarL(*v))),
+            FieldP(strukt, field) => boxed(std::iter::once(Loc::FieldL(strukt.loc(), field))),
+            IndexP(array, index) => boxed(
+                array
+                    .place()
+                    .uses_as_rhs()
+                    .chain(index.place().uses_as_rhs()),
+            ),
         }
     }
 }

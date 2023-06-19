@@ -35,8 +35,8 @@ impl<'ctx> Pointer<'ctx> {
     }
 
     /// Gets the place of the pointer.
-    pub fn place(&self) -> Place<'ctx> {
-        *self.place
+    pub fn place(&self) -> &'ctx Place<'ctx> {
+        self.place
     }
 }
 

@@ -5,7 +5,7 @@ use std::default::default;
 use std::fmt;
 use std::iter::Extend;
 use std::iter::Sum;
-use std::ops::{Add, BitOr, Sub};
+use std::ops::{Add, Sub};
 
 use super::borrow::{Borrow, Borrows};
 use super::LocTree;
@@ -13,6 +13,7 @@ use crate::mir::Mode;
 use crate::mir::Reference;
 use crate::mir::{CfgLabel, Loc, Place};
 use crate::utils::boxed;
+use crate::utils::set::Set;
 
 /// A loan ledger.
 #[derive(Clone, PartialEq, Eq, Default)]
@@ -34,14 +35,16 @@ impl<'ctx> Ledger<'ctx> {
     /// the borrow of `reference` at CFG label `label`.
     pub fn borrow(
         &mut self,
-        borrower: Place<'ctx>,
+        borrower: impl Into<Place<'ctx>>,
         reference: &Reference<'ctx>,
         label: CfgLabel,
     ) -> Borrows<'ctx> {
+        let borrower = borrower.into();
         match reference.mode() {
-            Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed => {
+            Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed | Mode::SMutBorrowed => {
                 // You clone their loans + the loan into the borrowed pointer
                 self.borrows(reference.place())
+                    .filter(|b| b.place != borrower) // Remove borrows into ourselves.
                     .map(|borrow| Borrow {
                         label: borrow.label,
                         borrower, // Note that we update the borrower. That's re-borrowing in action
@@ -49,15 +52,20 @@ impl<'ctx> Ledger<'ctx> {
                     })
                     .collect::<Borrows>()
                     + Borrow {
-                        place: reference.place(),
+                        place: *reference.place(),
                         borrower,
                         label,
                     }
             }
             Mode::Moved => {
-                // You take their entire place, so you take their entire loans!
+                // Moving invalidates all the loans of the previous place
+                let loans: Vec<_> = self.loans(*reference.place()).copied().collect();
+                self.invalidations.extend(loans);
+
+                // You take their entire place, so you take all their borrows!
                 // We remove the loans from that place, and
                 self.borrows(reference.place())
+                    .filter(|b| b.place != borrower) // Remove borrows into ourselves.
                     .map(|borrow| Borrow {
                         label: borrow.label,
                         borrower, // Note that we update the borrower. That's re-borrowing in action
@@ -112,14 +120,72 @@ impl<'ctx> Ledger<'ctx> {
         borrows
     }
 
+    /// Simultaneous removal of several locations from the ledger.
+    pub fn flush_locs(&mut self, locs: impl Iterator<Item = Loc<'ctx>>) {
+        let locs: Set<_> = locs.collect();
+
+        // First, remove all the borrows of the locations to flush
+        // We store at the same time the locations we really want to remove from the
+        // ledger: these are those that have at least one borrow active. Those
+        // that are well-behaved and have no borrow left can stay longer without
+        // problems, allowing borrowers of that location not to be invalidated
+        let mut to_clean: Set<_> = default();
+        for loc in locs.iter() {
+            let borrows: Borrows = self
+                .borrows
+                .remove(loc)
+                .map_or(default(), |node| node.into());
+
+            if !borrows.is_empty() {
+                to_clean.insert(loc);
+            }
+
+            for borrow in borrows.iter().copied() {
+                // If the borrow is not invalidated, remove it from the loans.
+                if !self.invalidations.contains(&borrow) {
+                    let loc = borrow.place.root();
+                    self.loans
+                        .get_mut(&loc)
+                        .unwrap_or_else(|| panic!("Ledger error: want to free a non-invalidated borrow {borrow:?} but loaner is not alive anymore!"))
+                        .remove(&borrow);
+                }
+            }
+        }
+
+        // THEN, remove the locations themselves from the ledger
+        // We need to do that in a second step because we don't want to add as
+        // invalidated loans loans that were made by locations that are being
+        // flushed at the same time as the loaner!
+        for loc in to_clean {
+            let removed_loans = self.loans.remove(loc);
+            let loans: Vec<Borrow> = removed_loans
+                .as_ref()
+                .map(|loans| {
+                    loans
+                        .iter()
+                        .copied()
+                        .filter(|loan| !locs.contains(&loan.borrower.root()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            self.invalidations.extend(loans);
+        }
+    }
+
     /// Sets the new `borrows` of `place`.
+    ///
+    /// Note: will filter borrows that are made into `place` itself.
     pub fn set_borrows(
         &mut self,
         place: impl Into<Place<'ctx>>,
         borrows: impl Into<Borrows<'ctx>>,
     ) {
         let place = place.into();
-        let borrows = borrows.into();
+
+        // Remove borrows into ourselves.
+        let mut borrows = borrows.into();
+        borrows.retain(|b| b.place != place);
+
         // First, flush the place.
         self.flush_place(place);
 
@@ -166,9 +232,9 @@ impl<'ctx> Ledger<'ctx> {
     /// Returns all loans of a place.
     pub fn borrows<'a>(
         &'a self,
-        place: Place<'ctx>,
+        place: impl Into<Place<'ctx>>,
     ) -> Box<dyn Iterator<Item = Borrow<'ctx>> + 'a> {
-        self.borrows.get_all(place.root())
+        self.borrows.get_all(place.into().root())
     }
 
     /// Returns the list of invalidations.
@@ -201,30 +267,6 @@ impl<'ctx, B: Into<Borrows<'ctx>>> Add<(Place<'ctx>, B)> for Ledger<'ctx> {
     }
 }
 
-impl<'ctx> Add for Ledger<'ctx> {
-    type Output = Ledger<'ctx>;
-
-    fn add(self, rhs: Self) -> Self {
-        self.bitor(rhs)
-    }
-}
-
-impl<'ctx> BitOr for Ledger<'ctx> {
-    type Output = Self;
-
-    fn bitor(self, _rhs: Self) -> Self {
-        todo!()
-    }
-}
-
-impl<'ctx, 'a> Sub<&'a Ledger<'ctx>> for Ledger<'ctx> {
-    type Output = Self;
-
-    fn sub(self, _rhs: &Self) -> Self {
-        todo!()
-    }
-}
-
 impl<'ctx> Sub<Place<'ctx>> for Ledger<'ctx> {
     type Output = Ledger<'ctx>;
 
@@ -237,10 +279,8 @@ impl<'ctx> Sub<Place<'ctx>> for Ledger<'ctx> {
 impl<'ctx: 'a, 'a, I: IntoIterator<Item = Loc<'ctx>>> Sub<I> for Ledger<'ctx> {
     type Output = Ledger<'ctx>;
 
-    fn sub(mut self, iter: I) -> Self {
-        for loc in iter {
-            self.flush_loc(loc);
-        }
+    fn sub(mut self, locs: I) -> Self {
+        self.flush_locs(locs.into_iter());
         self
     }
 }

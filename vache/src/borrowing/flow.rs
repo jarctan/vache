@@ -2,21 +2,12 @@
 //! definition of flows.
 use std::fmt::{self, Debug};
 use std::iter::Sum;
-use std::ops::{BitOr, Sub};
 
 /// Elements that can be used a containers for flows.
 ///
 /// Overall, somethings that behaves like a set: we can bit or, sum, subtract
 /// between (same) implementers of that trait.
-pub trait Flowable = Sized
-    + Debug
-    + Clone
-    + Default
-    + PartialEq
-    + Eq
-    + Sum
-    + BitOr<Output = Self>
-    + for<'a> Sub<&'a Self, Output = Self>;
+pub trait Flowable = Sized + Debug + Clone + Default + PartialEq + Eq + Sum;
 
 /// A flow point: a collection of inputs, and a collection of outputs.
 #[derive(Clone, PartialEq, Eq, Default)]

@@ -57,13 +57,13 @@ impl<'ctx> Normalizer<'ctx> {
     /// * The expression itself (as a parser AST node).
     /// * The destination variable that will store the result of this
     ///   expression.
-    /// * `mode`: Preferred mode.
+    /// * `mode`: Overriding mode, if any.
     /// * The map of structures declarations.
     fn visit_expr<'tast>(
         &mut self,
         stmts: &mut Vec<Stmt<'ctx>>,
         e: &'ctx mut tast::Expr<'tast>,
-        mode: Mode,
+        mode: Option<Mode>,
         structs: &HashMap<&'ctx str, Struct<'ctx>>,
     ) -> Reference<'ctx> {
         match &mut e.kind {
@@ -97,8 +97,8 @@ impl<'ctx> Normalizer<'ctx> {
             }
             tast::ExprKind::RangeE(start, end) => {
                 let vardef = self.fresh_vardef(e.ty);
-                let start_ptr = self.visit_expr(stmts, start, Mode::SBorrowed, structs);
-                let end_ptr = self.visit_expr(stmts, end, Mode::MutBorrowed, structs);
+                let start_ptr = self.visit_expr(stmts, start, Some(Mode::Borrowed), structs);
+                let end_ptr = self.visit_expr(stmts, end, Some(Mode::Borrowed), structs);
                 let final_ptr = Pointer::new(
                     self.arena,
                     self.arena
@@ -109,14 +109,18 @@ impl<'ctx> Normalizer<'ctx> {
                 Reference::new_moved(final_ptr)
             }
             tast::ExprKind::PlaceE(place) => {
-                place.mode = mode;
+                // If we requested a specific mode, set it
+                if let Some(mode) = mode {
+                    place.mode = mode;
+                }
+
                 match &mut place.kind {
                     tast::PlaceKind::VarP(v) => {
                         let ptr = Pointer::new(self.arena, self.arena.alloc(Place::from(*v)));
                         Reference::new(ptr, &mut place.mode)
                     }
                     tast::PlaceKind::FieldP(box strukt, field) => {
-                        let strukt_ptr = self.visit_expr(stmts, strukt, Mode::Moved, structs);
+                        let strukt_ptr = self.visit_expr(stmts, strukt, Some(Mode::Moved), structs);
                         let final_ptr = Pointer::new(
                             self.arena,
                             self.arena.alloc(Place::FieldP(strukt_ptr.as_ptr(), field)),
@@ -124,8 +128,8 @@ impl<'ctx> Normalizer<'ctx> {
                         Reference::new(final_ptr, &mut place.mode)
                     }
                     tast::PlaceKind::IndexP(box e, box ix) => {
-                        let e_ptr = self.visit_expr(stmts, e, Mode::MutBorrowed, structs);
-                        let ix_ptr = self.visit_expr(stmts, ix, Mode::SBorrowed, structs);
+                        let e_ptr = self.visit_expr(stmts, e, Some(Mode::SMutBorrowed), structs);
+                        let ix_ptr = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), structs);
                         let final_ptr = Pointer::new(
                             self.arena,
                             self.arena
@@ -138,7 +142,7 @@ impl<'ctx> Normalizer<'ctx> {
             tast::ExprKind::CallE { name, args } => {
                 let arg_vars = args
                     .iter_mut()
-                    .map(|arg| self.visit_expr(stmts, arg, default(), structs))
+                    .map(|arg| self.visit_expr(stmts, arg, None, structs))
                     .collect();
 
                 let vardef = self.fresh_vardef(e.ty);
@@ -156,7 +160,7 @@ impl<'ctx> Normalizer<'ctx> {
             tast::ExprKind::VariantE { enun, variant, args } => {
                 let args = args
                     .iter_mut()
-                    .map(|arg| self.visit_expr(stmts, arg, default(), structs))
+                    .map(|arg| self.visit_expr(stmts, arg, None, structs))
                     .collect();
 
                 let vardef = self.fresh_vardef(e.ty);
@@ -167,7 +171,7 @@ impl<'ctx> Normalizer<'ctx> {
             }
             tast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
                 // The switch variable
-                let cond = self.visit_expr(stmts, cond, Mode::SBorrowed, structs);
+                let cond = self.visit_expr(stmts, cond, Some(Mode::SBorrowed), structs);
 
                 // Destination
                 let dest_def = self.fresh_vardef(iftrue.ret.ty);
@@ -252,7 +256,7 @@ impl<'ctx> Normalizer<'ctx> {
             self.visit_stmt(stmt, &mut stmts, structs);
         }
         self.pop_scope();
-        let reference = self.visit_expr(&mut stmts, &mut b.ret, Mode::Cloned, structs);
+        let reference = self.visit_expr(&mut stmts, &mut b.ret, Some(Mode::Moved), structs);
         (reference, stmts)
     }
 
@@ -272,7 +276,7 @@ impl<'ctx> Normalizer<'ctx> {
         match s {
             tast::Stmt::DeclareS(vardef, expr) => {
                 stmts.push(Stmt::Declare(*vardef));
-                let tmp = self.visit_expr(stmts, expr, default(), structs);
+                let tmp = self.visit_expr(stmts, expr, None, structs);
                 stmts.push(Stmt::Assign(
                     Pointer::new(self.arena, self.arena.alloc(Place::VarP(vardef.name()))),
                     RValue::Place(tmp),
@@ -283,14 +287,16 @@ impl<'ctx> Normalizer<'ctx> {
                 let lhs = match &mut place.kind {
                     tast::PlaceKind::VarP(ref var) => var.into(),
                     tast::PlaceKind::IndexP(box array, box ix) => {
-                        let array = self.visit_expr(stmts, array, Mode::MutBorrowed, structs);
+                        let array =
+                            self.visit_expr(stmts, array, Some(Mode::SMutBorrowed), structs);
 
-                        let ix = self.visit_expr(stmts, ix, Mode::SBorrowed, structs);
+                        let ix = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), structs);
 
                         Place::IndexP(array.as_ptr(), ix.as_ptr())
                     }
                     tast::PlaceKind::FieldP(box strukt, field) => {
-                        let strukt = self.visit_expr(stmts, strukt, Mode::MutBorrowed, structs);
+                        let strukt =
+                            self.visit_expr(stmts, strukt, Some(Mode::SMutBorrowed), structs);
 
                         Place::FieldP(strukt.as_ptr(), field)
                     }
@@ -301,7 +307,7 @@ impl<'ctx> Normalizer<'ctx> {
             tast::Stmt::WhileS { cond, body } => {
                 let mut cond_block = vec![];
                 self.push_scope();
-                let cond = self.visit_expr(&mut cond_block, cond, Mode::Borrowed, structs);
+                let cond = self.visit_expr(&mut cond_block, cond, Some(Mode::Borrowed), structs);
                 self.pop_scope();
 
                 let (_, body) = self.visit_block(body, structs);
@@ -331,7 +337,7 @@ impl<'ctx> Normalizer<'ctx> {
                 self.pop_scope();*/
             }
             tast::Stmt::ExprS(e) => {
-                self.visit_expr(stmts, e, Mode::Moved, structs);
+                self.visit_expr(stmts, e, Some(Mode::Moved), structs);
             }
             tast::Stmt::HoleS => panic!("Normalization should not be run on a code with holes"),
         }

@@ -5,7 +5,7 @@ use std::default::default;
 use pest::iterators::Pair;
 
 use super::{Context, Parsable};
-use super::{Expr, ExprKind, Span, VarUse};
+use super::{Expr, ExprKind, Mode, Span, VarUse};
 use crate::grammar::*;
 use crate::utils::boxed;
 
@@ -16,14 +16,17 @@ pub struct Place<'ctx> {
     pub kind: PlaceKind<'ctx>,
     /// Codespan.
     pub span: Span,
+    /// Place mode.
+    pub mode: Mode,
 }
 
 impl<'ctx> Place<'ctx> {
     /// Creates a new place.
-    pub fn new(kind: impl Into<PlaceKind<'ctx>>, span: impl Into<Span>) -> Self {
+    pub fn new(kind: impl Into<PlaceKind<'ctx>>, span: impl Into<Span>, mode: Mode) -> Self {
         Self {
             kind: kind.into(),
             span: span.into(),
+            mode,
         }
     }
 }
@@ -33,6 +36,7 @@ impl<'ctx> From<PlaceKind<'ctx>> for Place<'ctx> {
         Self {
             kind,
             span: default(),
+            mode: default(),
         }
     }
 }

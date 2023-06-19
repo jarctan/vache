@@ -12,9 +12,9 @@ use crate::utils::boxed;
 /// the target node of that edge.
 ///
 /// Example: an If statement has an outgoing edge to two other nodes. One of
-/// them is labeled wit `TrueB`, the other `FalseB`.
+/// them is labeled wit [`Branch::TrueB`], the other [`Branch::FalseB`].
 ///
-/// The unconditional jump is `DefaultB`.
+/// The unconditional jump is [`Branch::DefaultB`].
 #[derive(Debug, PartialEq, Eq, Default, Hash, Clone)]
 pub enum Branch {
     /// Branch if true.
@@ -86,101 +86,113 @@ pub enum InstrKind<'ctx> {
     Return(Pointer<'ctx>),
 }
 
-impl<'cfg> InstrKind<'cfg> {
-    /// If this instruction mutates a variable, returns it.
-    /// Otherwise, returns `None`.
-    pub fn mutated_place<'a>(&'a self) -> Box<dyn Iterator<Item = Place<'cfg>> + 'a> {
+impl<'ctx> InstrKind<'ctx> {
+    /// If this instruction mutates some variables, returns them.
+    /// Otherwise, returns [`None`].
+    pub fn mutated_place<'a>(&'a self) -> Box<dyn Iterator<Item = Place<'ctx>> + 'a> {
         match self {
             InstrKind::Noop | InstrKind::Branch(_) => boxed([].into_iter()),
             InstrKind::Declare(..) => boxed([].into_iter()),
             InstrKind::Call {
                 destination: Some(v),
                 ..
-            } => boxed([v.place()].into_iter()),
+            } => boxed([*v.place()].into_iter()),
             InstrKind::Call {
                 destination: None, ..
             } => boxed([].into_iter()),
-            InstrKind::Assign(lhs, RValue::Place(rhs)) if rhs.mode() == Mode::MutBorrowed => {
-                boxed([lhs.place(), rhs.place()].into_iter())
+            InstrKind::Assign(lhs, RValue::Place(rhs))
+                if matches!(rhs.mode(), Mode::MutBorrowed | Mode::SMutBorrowed) =>
+            {
+                boxed([*lhs.place(), *rhs.place()].into_iter())
             }
-            InstrKind::Assign(lhs, _) => boxed([lhs.place()].into_iter()),
+            InstrKind::Assign(lhs, _) => boxed([*lhs.place()].into_iter()),
             InstrKind::Return(_) => boxed([].into_iter()),
         }
     }
 
-    /// Changes the instruction to force cloning `place` inside that
-    /// instruction.
-    ///
-    /// # Panics
-    /// Panics if the instruction does not contain `place`.
-    pub fn force_clone(&mut self, to_find: &Place) {
+    /// Returns mutable borrows into the references of this [`InstrKind`].
+    pub fn references_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Reference<'ctx>> + 'a> {
         match self {
-            InstrKind::Assign(_, RValue::Place(reference)) => {
-                debug_assert!(
-                    to_find == &reference.place(),
-                    "Could not find {to_find:?} to clone in {self:?}"
-                );
-                *reference.mode_mut() = Mode::Cloned;
-            }
-            InstrKind::Call {
-                name: _,
-                args,
-                destination: _,
-            } => {
-                for arg in args.iter_mut() {
-                    if &arg.place() == to_find {
-                        *arg.mode_mut() = Mode::Cloned;
-                    }
-                }
-            }
-            InstrKind::Assign(_, RValue::Range(start, end)) => {
-                for arg in [start, end] {
-                    if &arg.place() == to_find {
-                        *arg.mode_mut() = Mode::Cloned;
-                    }
-                }
-            }
-            InstrKind::Assign(_, RValue::Struct { fields, .. }) => {
-                for field in fields.values_mut() {
-                    if &field.place() == to_find {
-                        *field.mode_mut() = Mode::Cloned;
-                    }
-                }
-            }
+            InstrKind::Noop
+            | InstrKind::Declare(_)
+            | InstrKind::Branch(_)
+            | InstrKind::Return(_) => boxed(std::iter::empty()),
+            InstrKind::Assign(_, RValue::Place(place)) => boxed(std::iter::once(place)),
+            InstrKind::Assign(_, RValue::Array(items)) => boxed(items.iter_mut()),
+            InstrKind::Assign(_, RValue::Range(start, end)) => boxed([start, end].into_iter()),
+            InstrKind::Assign(_, RValue::Struct { name: _, fields }) => boxed(fields.values_mut()),
             InstrKind::Assign(
                 _,
                 RValue::Variant {
                     enun: _,
                     variant: _,
                     args,
-                    ..
                 },
-            ) => {
-                for arg in args {
-                    if &arg.place() == to_find {
-                        *arg.mode_mut() = Mode::Cloned;
-                    }
-                }
-            }
-            InstrKind::Assign(_, RValue::Array(items)) => {
-                for field in items.iter_mut() {
-                    if &field.place() == to_find {
-                        *field.mode_mut() = Mode::Cloned;
-                    }
-                }
-            }
+            ) => boxed(args.iter_mut()),
+            InstrKind::Call {
+                name: _,
+                args,
+                destination: _,
+            } => boxed(args.iter_mut()),
             InstrKind::Assign(
                 _,
-                RValue::Unit | RValue::Bool(_) | RValue::Integer(_) | RValue::String(_),
-            ) => {
-                panic!("{to_find:?} not found in this {self:?}, cannot make it owned")
-            }
+                RValue::Unit | RValue::Bool(..) | RValue::Integer(..) | RValue::String(..),
+            ) => boxed(std::iter::empty()),
+        }
+    }
+
+    /// Returns the references of this [`InstrKind`].
+    pub fn references<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Reference<'ctx>> + 'a> {
+        match self {
             InstrKind::Noop
-            | InstrKind::Branch(_)
             | InstrKind::Declare(_)
-            | InstrKind::Return(_) => {
-                panic!("force_clone() cannot be applied here")
-            }
+            | InstrKind::Branch(_)
+            | InstrKind::Return(_) => boxed(std::iter::empty()),
+            InstrKind::Assign(_, RValue::Place(place)) => boxed(std::iter::once(place)),
+            InstrKind::Assign(_, RValue::Array(items)) => boxed(items.iter()),
+            InstrKind::Assign(_, RValue::Range(start, end)) => boxed([start, end].into_iter()),
+            InstrKind::Assign(_, RValue::Struct { name: _, fields }) => boxed(fields.values()),
+            InstrKind::Assign(
+                _,
+                RValue::Variant {
+                    enun: _,
+                    variant: _,
+                    args,
+                },
+            ) => boxed(args.iter()),
+            InstrKind::Call {
+                name: _,
+                args,
+                destination: _,
+            } => boxed(args.iter()),
+            InstrKind::Assign(
+                _,
+                RValue::Unit | RValue::Bool(..) | RValue::Integer(..) | RValue::String(..),
+            ) => boxed(std::iter::empty()),
+        }
+    }
+
+    /// Changes the instruction to change `to_find`'s referencing mode to
+    /// [`Mode::Cloned`].
+    ///
+    /// # Panics
+    /// Panics if the instruction does not contain `to_find`.
+    pub fn force_clone(&mut self, to_find: &Place) {
+        let mut els = self
+            .references_mut()
+            .filter(|reference| reference.place() == to_find)
+            .collect::<Vec<_>>();
+
+        if els.len() != 1 {
+            panic!(
+                "Could not find {to_find:?} to clone in {self:?} ({:?} possible entries)",
+                els.len()
+            )
+        } else {
+            let el = &mut els[0];
+            *el.mode_mut() = Mode::Cloned;
         }
     }
 }

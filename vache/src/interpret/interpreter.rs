@@ -298,8 +298,8 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
             Mode::Cloned | Mode::SBorrowed => {
                 self.add_value(self.get_value(v_ref).clone(), stratum)
             }
-            Mode::Moved | Mode::Borrowed | Mode::MutBorrowed => {
-                assert!(stratum >= v_ref.stratum, "Runtime error: ownership addressing should be specified as owned if moving variable out of its stratum");
+            Mode::Moved | Mode::Borrowed | Mode::SMutBorrowed | Mode::MutBorrowed => {
+                debug_assert!(stratum >= v_ref.stratum, "Runtime error: ownership addressing should be specified as owned if moving variable out of its stratum");
                 v_ref
             }
             Mode::Assigning => {

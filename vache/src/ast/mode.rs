@@ -16,6 +16,10 @@ pub enum Mode {
     ///
     /// Shallow borrow = simply a `&mut`, not a clone of the `Cow` contents.
     MutBorrowed,
+    /// Have a (shallow) mutable reference onto that value.
+    ///
+    /// Shallow borrow = simply a `&mut`, not a clone of the `Cow` contents.
+    SMutBorrowed,
     /// Clone the value to own it.
     Cloned,
     /// Move the value out of its original variable.
@@ -34,7 +38,8 @@ impl Mode {
         // variants.
         match self {
             Borrowed | MutBorrowed => true,
-            SBorrowed => false, // Note: a shallow borrow is not considered borrowing.
+            SBorrowed | SMutBorrowed => false, /* Note: a shallow borrow is not considered */
+            // borrowing.
             Cloned | Moved | Assigning => false,
         }
     }
@@ -46,7 +51,8 @@ impl fmt::Display for Mode {
         match self {
             Borrowed => write!(f, "&_"),
             SBorrowed => write!(f, "&"),
-            MutBorrowed => write!(f, "&mut "),
+            MutBorrowed => write!(f, "&mut_"),
+            SMutBorrowed => write!(f, "&mut "),
             Cloned => write!(f, "^"),
             Moved => write!(f, "!"),
             Assigning => write!(f, "@"),
