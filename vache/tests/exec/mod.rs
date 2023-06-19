@@ -73,7 +73,11 @@ fn exec_va(filename: &str) {
     // If we specified a borrow-testing section
     if let Some(borrows) = borrows {
         // One borrow per line, so split lines
-        for borrow in borrows.split('\n') {
+        for borrow in borrows
+            .split('\n')
+            .map(str::trim)
+            .filter(|borrow| !borrow.is_empty())
+        {
             // Discard comments at the end
             let borrow = borrow
                 .split_once("//")
@@ -179,6 +183,7 @@ fn interpret_va(filename: &str) {
     match typecheck(&mut context, program)? {
         Ok(mut checked) => {
             let mir = borrow_check(mir(&mut checked)?)?;
+            eprintln!("MIR: {mir:?}");
 
             // Interpret
             let res = interpret(mir).context("execution error")?;

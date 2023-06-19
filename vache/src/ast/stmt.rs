@@ -40,6 +40,12 @@ pub enum StmtKind<'ctx> {
     AssignS(Place<'ctx>, Expr<'ctx>),
     /// An expression, whose final value is discarded.
     ExprS(Expr<'ctx>),
+    /// A break statement.
+    BreakS,
+    /// A continue statement.
+    ContinueS,
+    /// A return statement.
+    ReturnS(Expr<'ctx>),
     /// A while loop.
     WhileS {
         /// Condition.
@@ -182,6 +188,21 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
                     span,
                 })
             }
+            Rule::return_stmt => {
+                let mut pairs = pair.into_inner();
+                let kw_pair = consume!(pairs, Rule::return_kw);
+                let span = Span::from(kw_pair.as_span());
+                let expr = consume_opt!(pairs, Rule::expr)
+                    .map(|pair| ctx.parse(pair))
+                    .unwrap_or(Expr {
+                        span: Span::at(span.end()),
+                        ..default()
+                    });
+                consume!(pairs, Rule::sc);
+                ReturnS(expr)
+            }
+            Rule::break_stmt => BreakS,
+            Rule::continue_stmt => ContinueS,
             Rule::if_then => ExprS(parse_if_then_else(ctx, pair)),
             rule => panic!("parser internal error: expected statement, found {rule:?}"),
         };

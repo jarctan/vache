@@ -129,7 +129,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Fun<'ctx> {
             .map(|param| ctx.parse(param))
             .collect();
 
-        let ret_ty: TyUse = if consume_opt!(pairs, Rule::arw) {
+        let ret_ty: TyUse = if consume_opt!(pairs, Rule::arw).is_some() {
             ctx.parse(consume!(pairs, Rule::ty))
         } else {
             // Otherwise, arbitrarily place the span of the nonexistent type return at the

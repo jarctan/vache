@@ -9,11 +9,11 @@ pub enum Stmt<'ctx> {
     /// A declaration. We assign the computation
     /// of the 2nd argument to the newly created variable
     /// defined in the 1st argument.
-    Declare(VarDef<'ctx>),
+    DeclareS(VarDef<'ctx>),
     /// An assignment.
-    Assign(Pointer<'ctx>, RValue<'ctx>),
+    AssignS(Pointer<'ctx>, RValue<'ctx>),
     /// A function call.
-    Call {
+    CallS {
         /// Name of the function to call.
         name: Namespaced<'ctx>,
         /// Arguments to that function.
@@ -22,11 +22,11 @@ pub enum Stmt<'ctx> {
         destination: Option<Pointer<'ctx>>,
     },
     /// An if expression.
-    If(Reference<'ctx>, Block<'ctx>, Block<'ctx>),
+    IfS(Reference<'ctx>, Block<'ctx>, Block<'ctx>),
     /// A block expression.
-    Block(Block<'ctx>),
+    BlockS(Block<'ctx>),
     /// A while statement.
-    While {
+    WhileS {
         /// Condition block.
         cond_block: Block<'ctx>,
         /// Condition.
@@ -35,5 +35,9 @@ pub enum Stmt<'ctx> {
         body: Block<'ctx>,
     },
     /// Return statement.
-    Return(Pointer<'ctx>),
+    ReturnS(Pointer<'ctx>),
+    /// Break statement.
+    BreakS,
+    /// Continue statement.
+    ContinueS,
 }

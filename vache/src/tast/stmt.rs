@@ -13,6 +13,12 @@ pub enum Stmt<'ctx> {
     AssignS(Place<'ctx>, Expr<'ctx>),
     /// An expression, whose final value is discarded.
     ExprS(Expr<'ctx>),
+    /// A break statement.
+    BreakS,
+    /// A continue statement.
+    ContinueS,
+    /// A return statement.
+    ReturnS(Expr<'ctx>),
     /// A while statement.
     WhileS {
         /// Condition.

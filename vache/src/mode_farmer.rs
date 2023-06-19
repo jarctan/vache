@@ -98,6 +98,9 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
                 self.visit_block(body);
             }
             HoleS => (),
+            BreakS => (),
+            ContinueS => (),
+            ReturnS(ret) => self.visit_expr(ret),
         }
     }
 

@@ -14,7 +14,13 @@ block = { lcb ~ (!(expr ~ rcb) ~ stmt)* ~ expr? ~ rcb }
 
 // Note: put expressions that can be used as statements without a ";"
 // AFTER the (expr ~ sc) because of greediness
-stmt = { while_loop | for_loop | declare | assign | (expr ~ sc) | if_then | match_expr | block }
+stmt = { return_stmt | break_stmt | continue_stmt | while_loop | for_loop | declare | assign | (expr ~ sc) | if_then | match_expr | block }
+
+return_stmt = { return_kw ~ expr? ~ sc }
+
+break_stmt = { break_kw ~ sc }
+
+continue_stmt = { continue_kw ~ sc }
 
 while_loop = { while_kw ~ expr ~ block }
 
@@ -76,14 +82,14 @@ str_ty = { "str" }
 
 int_ty = { "int" }
 
-keyword = { var_kw | struct_kw | if_kw | else_kw | while_kw | for_kw | in_kw | bool_ty | str_ty | int_ty | fn_kw | match_kw }
+keyword = { var_kw | struct_kw | if_kw | else_kw | while_kw | for_kw | in_kw | bool_ty | str_ty | int_ty | fn_kw | match_kw | break_kw | return_kw | continue_kw }
 
 prefix = { bang | as_mut }
 infix  = { add | sub | mul | div | rem | pow | le | lt | ge | gt | eqq | neq | and | or | not_in }
 
 // second case is a hack to also match identifiers that start with a keyword
 // https://stackoverflow.com/questions/61619285/peg-grammar-to-parse-identifier-name-which-is-not-a-keyword
-ident = @{ !"__" ~ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* | keyword ~ (ASCII_ALPHANUMERIC | "_")* }
+ident = @{ !"__" ~ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* | keyword ~ (ASCII_ALPHANUMERIC | "_")+ }
 
 if_then = { if_kw ~ expr ~ block ~ (else_kw ~ if_kw ~ expr ~ block)* ~ (else_kw ~ block)? }
 
@@ -135,16 +141,19 @@ not_in = { "not in" }
 not    = { "not" }
 as_mut = { "@" }
 
-while_kw  = { "while" }
-for_kw    = { "for" }
-in_kw     = { "in" }
-if_kw     = { "if" }
-else_kw   = { "else" }
-match_kw  = { "match" }
-var_kw    = { "var" }
-struct_kw = { "struct" }
-enum_kw   = { "enum" }
-rg        = { ".." }
-fn_kw     = { "fn" }
+while_kw    = { "while" }
+for_kw      = { "for" }
+in_kw       = { "in" }
+if_kw       = { "if" }
+else_kw     = { "else" }
+match_kw    = { "match" }
+var_kw      = { "var" }
+struct_kw   = { "struct" }
+enum_kw     = { "enum" }
+rg          = { ".." }
+fn_kw       = { "fn" }
+return_kw   = { "return" }
+break_kw    = { "break" }
+continue_kw = { "continue" }
 
 unit = { "()" }

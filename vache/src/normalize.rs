@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use std::default::default;
 
+use Stmt::*;
+
 use crate::anf::*;
 use crate::tast;
 use crate::Arena;
@@ -65,43 +67,44 @@ impl<'ctx> Normalizer<'ctx> {
         e: &'ctx mut tast::Expr<'tast>,
         mode: Option<Mode>,
         structs: &HashMap<&'ctx str, Struct<'ctx>>,
+        ret_ptr: Pointer<'ctx>,
     ) -> Reference<'ctx> {
         match &mut e.kind {
             tast::ExprKind::UnitE => {
                 let vardef = self.fresh_vardef(e.ty);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
-                stmts.push(Stmt::Declare(vardef));
-                stmts.push(Stmt::Assign(ptr, RValue::Unit));
+                stmts.push(DeclareS(vardef));
+                stmts.push(AssignS(ptr, RValue::Unit));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::BoolE(b) => {
                 let vardef = self.fresh_vardef(e.ty);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
-                stmts.push(Stmt::Declare(vardef));
-                stmts.push(Stmt::Assign(ptr, RValue::Bool(*b)));
+                stmts.push(DeclareS(vardef));
+                stmts.push(AssignS(ptr, RValue::Bool(*b)));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::IntegerE(i) => {
                 let vardef = self.fresh_vardef(e.ty);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
-                stmts.push(Stmt::Declare(vardef));
-                stmts.push(Stmt::Assign(ptr, RValue::Integer(i)));
+                stmts.push(DeclareS(vardef));
+                stmts.push(AssignS(ptr, RValue::Integer(i)));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::StringE(s) => {
                 let vardef = self.fresh_vardef(e.ty);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
-                stmts.push(Stmt::Declare(vardef));
-                stmts.push(Stmt::Assign(ptr, RValue::String(s)));
+                stmts.push(DeclareS(vardef));
+                stmts.push(AssignS(ptr, RValue::String(s)));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::RangeE(start, end) => {
                 let vardef = self.fresh_vardef(e.ty);
-                let start_ptr = self.visit_expr(stmts, start, Some(Mode::Borrowed), structs);
-                let end_ptr = self.visit_expr(stmts, end, Some(Mode::Borrowed), structs);
+                let start_ptr = self.visit_expr(stmts, start, Some(Mode::Borrowed), structs, ret_ptr);
+                let end_ptr = self.visit_expr(stmts, end, Some(Mode::Borrowed), structs, ret_ptr);
                 let final_ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
-                stmts.push(Stmt::Declare(vardef));
-                stmts.push(Stmt::Assign(final_ptr, RValue::Range(start_ptr, end_ptr)));
+                stmts.push(DeclareS(vardef));
+                stmts.push(AssignS(final_ptr, RValue::Range(start_ptr, end_ptr)));
                 Reference::new_moved(final_ptr)
             }
             tast::ExprKind::PlaceE(place) => {
@@ -116,7 +119,7 @@ impl<'ctx> Normalizer<'ctx> {
                         Reference::new(ptr, &mut place.mode)
                     }
                     tast::PlaceKind::FieldP(box strukt, field) => {
-                        let strukt_ptr = self.visit_expr(stmts, strukt, Some(Mode::Moved), structs);
+                        let strukt_ptr = self.visit_expr(stmts, strukt, Some(Mode::Moved), structs, ret_ptr);
                         let final_ptr = Pointer::new(
                             self.arena,
                             self.arena.alloc(Place::FieldP(strukt_ptr.as_ptr(), field)),
@@ -124,8 +127,8 @@ impl<'ctx> Normalizer<'ctx> {
                         Reference::new(final_ptr, &mut place.mode)
                     }
                     tast::PlaceKind::IndexP(box e, box ix) => {
-                        let e_ptr = self.visit_expr(stmts, e, Some(Mode::SMutBorrowed), structs);
-                        let ix_ptr = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), structs);
+                        let e_ptr = self.visit_expr(stmts, e, Some(Mode::SMutBorrowed), structs, ret_ptr);
+                        let ix_ptr = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), structs, ret_ptr);
                         let final_ptr = Pointer::new(
                             self.arena,
                             self.arena
@@ -146,14 +149,14 @@ impl<'ctx> Normalizer<'ctx> {
             tast::ExprKind::CallE { name, args } => {
                 let arg_vars = args
                     .iter_mut()
-                    .map(|arg| self.visit_expr(stmts, arg, None, structs))
+                    .map(|arg| self.visit_expr(stmts, arg, None, structs, ret_ptr))
                     .collect();
 
                 let vardef = self.fresh_vardef(e.ty);
                 let destination = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
-                stmts.push(Stmt::Declare(vardef));
+                stmts.push(DeclareS(vardef));
 
-                stmts.push(Stmt::Call {
+                stmts.push(CallS {
                     name: *name,
                     args: arg_vars,
                     destination: Some(destination),
@@ -164,39 +167,39 @@ impl<'ctx> Normalizer<'ctx> {
             tast::ExprKind::VariantE { enun, variant, args } => {
                 let args = args
                     .iter_mut()
-                    .map(|arg| self.visit_expr(stmts, arg, None, structs))
+                    .map(|arg| self.visit_expr(stmts, arg, None, structs, ret_ptr))
                     .collect();
 
                 let vardef = self.fresh_vardef(e.ty);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
-                stmts.push(Stmt::Declare(vardef));
-                stmts.push(Stmt::Assign(ptr, RValue::Variant { enun, variant, args }));
+                stmts.push(DeclareS(vardef));
+                stmts.push(AssignS(ptr, RValue::Variant { enun, variant, args }));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
                 // The switch variable
-                let cond = self.visit_expr(stmts, cond, Some(Mode::SBorrowed), structs);
+                let cond = self.visit_expr(stmts, cond, Some(Mode::SBorrowed), structs, ret_ptr);
 
                 // Destination
                 let dest_def = self.fresh_vardef(iftrue.ret.ty);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
-                stmts.push(Stmt::Declare(dest_def));
+                stmts.push(DeclareS(dest_def));
 
                 // Branches
-                let (iftrue_ptr, mut iftrue) = self.visit_block(iftrue, structs);
-                iftrue.push(Stmt::Assign(destination, RValue::Place(iftrue_ptr)));
+                let (iftrue_ptr, mut iftrue) = self.visit_block(iftrue, structs, ret_ptr);
+                iftrue.push(AssignS(destination, RValue::Place(iftrue_ptr)));
 
-                let (iffalse_ptr, mut iffalse) = self.visit_block(iffalse, structs);
-                iffalse.push(Stmt::Assign(destination, RValue::Place(iffalse_ptr)));
+                let (iffalse_ptr, mut iffalse) = self.visit_block(iffalse, structs, ret_ptr);
+                iffalse.push(AssignS(destination, RValue::Place(iffalse_ptr)));
 
                 // If condition
-                stmts.push(Stmt::If(cond, iftrue, iffalse));
+                stmts.push(IfS(cond, iftrue, iffalse));
 
                 Reference::new_moved(destination)
             }
             tast::ExprKind::BlockE(box b) => {
-                let (ret, block) = self.visit_block(b, structs);
-                stmts.push(Stmt::Block(block));
+                let (ret, block) = self.visit_block(b, structs, ret_ptr);
+                stmts.push(BlockS(block));
                 ret
             }
             tast::ExprKind::StructE {
@@ -206,14 +209,14 @@ impl<'ctx> Normalizer<'ctx> {
                 // Destination
                 let dest_def = self.fresh_vardef(e.ty);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
-                stmts.push(Stmt::Declare(dest_def));
+                stmts.push(DeclareS(dest_def));
 
                 let field_vars = fields
                     .iter_mut()
-                    .map(|(name, field)| (*name, self.visit_expr(stmts, field, default(), structs)))
+                    .map(|(name, field)| (*name, self.visit_expr(stmts, field, default(), structs, ret_ptr)))
                     .collect();
 
-                stmts.push(Stmt::Assign(
+                stmts.push(AssignS(
                     destination,
                     RValue::Struct {
                         name: s_name,
@@ -227,14 +230,14 @@ impl<'ctx> Normalizer<'ctx> {
                 // Destination
                 let dest_def = self.fresh_vardef(array[0].ty);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
-                stmts.push(Stmt::Declare(dest_def));
+                stmts.push(DeclareS(dest_def));
 
                 let array_vars = array
                     .iter_mut()
-                    .map(|item| self.visit_expr(stmts, item, default(), structs))
+                    .map(|item| self.visit_expr(stmts, item, default(), structs, ret_ptr))
                     .collect();
 
-                stmts.push(Stmt::Assign(destination, RValue::Array(array_vars)));
+                stmts.push(AssignS(destination, RValue::Array(array_vars)));
 
                 Reference::new_moved(destination)
             }
@@ -253,14 +256,16 @@ impl<'ctx> Normalizer<'ctx> {
         &mut self,
         b: &'ctx mut tast::Block<'tast>,
         structs: &HashMap<&'ctx str, Struct<'ctx>>,
+        ret_ptr: Pointer<'ctx>,
     ) -> (Reference<'ctx>, Block<'ctx>) {
         let mut stmts: Block = default();
         self.push_scope();
         for stmt in &mut b.stmts {
-            self.visit_stmt(stmt, &mut stmts, structs);
+            self.visit_stmt(stmt, &mut stmts, structs, ret_ptr);
         }
         self.pop_scope();
-        let reference = self.visit_expr(&mut stmts, &mut b.ret, Some(Mode::Moved), structs);
+        let reference =
+            self.visit_expr(&mut stmts, &mut b.ret, Some(Mode::Moved), structs, ret_ptr);
         (reference, stmts)
     }
 
@@ -276,47 +281,65 @@ impl<'ctx> Normalizer<'ctx> {
         s: &'ctx mut tast::Stmt<'tast>,
         stmts: &mut Vec<Stmt<'ctx>>,
         structs: &HashMap<&'ctx str, Struct<'ctx>>,
+        ret_ptr: Pointer<'ctx>,
     ) {
         match s {
             tast::Stmt::DeclareS(vardef, expr) => {
-                stmts.push(Stmt::Declare(*vardef));
-                let tmp = self.visit_expr(stmts, expr, None, structs);
-                stmts.push(Stmt::Assign(
+                stmts.push(DeclareS(*vardef));
+                let tmp = self.visit_expr(stmts, expr, None, structs, ret_ptr);
+                stmts.push(AssignS(
                     Pointer::new(self.arena, self.arena.alloc(Place::VarP(vardef.name()))),
                     RValue::Place(tmp),
                 ));
             }
             tast::Stmt::AssignS(place, expr) => {
-                let rhs = self.visit_expr(stmts, expr, default(), structs);
+                let rhs = self.visit_expr(stmts, expr, None, structs, ret_ptr);
                 let lhs = match &mut place.kind {
                     tast::PlaceKind::VarP(ref var) => var.into(),
                     tast::PlaceKind::IndexP(box array, box ix) => {
-                        let array =
-                            self.visit_expr(stmts, array, Some(Mode::SMutBorrowed), structs);
+                        let array = self.visit_expr(
+                            stmts,
+                            array,
+                            Some(Mode::SMutBorrowed),
+                            structs,
+                            ret_ptr,
+                        );
 
-                        let ix = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), structs);
+                        let ix =
+                            self.visit_expr(stmts, ix, Some(Mode::SBorrowed), structs, ret_ptr);
 
                         Place::IndexP(array.as_ptr(), ix.as_ptr())
                     }
                     tast::PlaceKind::FieldP(box strukt, field) => {
-                        let strukt =
-                            self.visit_expr(stmts, strukt, Some(Mode::SMutBorrowed), structs);
+                        let strukt = self.visit_expr(
+                            stmts,
+                            strukt,
+                            Some(Mode::SMutBorrowed),
+                            structs,
+                            ret_ptr,
+                        );
 
                         Place::FieldP(strukt.as_ptr(), field)
                     }
                 };
                 let lhs = Pointer::new(self.arena, self.arena.alloc(lhs));
-                stmts.push(Stmt::Assign(lhs, RValue::Place(rhs)));
+                stmts.push(AssignS(lhs, RValue::Place(rhs)));
             }
             tast::Stmt::WhileS { cond, body } => {
                 let mut cond_block = vec![];
                 self.push_scope();
-                let cond = self.visit_expr(&mut cond_block, cond, Some(Mode::Borrowed), structs);
+                let cond = self.visit_expr(
+                    &mut cond_block,
+                    cond,
+                    Some(Mode::Borrowed),
+                    structs,
+                    ret_ptr,
+                );
                 self.pop_scope();
 
-                let (_, body) = self.visit_block(body, structs);
+                let (_, body) = self.visit_block(body, structs, ret_ptr);
 
-                stmts.push(Stmt::While {
+                stmts.push(WhileS {
                     cond_block,
                     cond,
                     body,
@@ -330,7 +353,7 @@ impl<'ctx> Normalizer<'ctx> {
                 let cond_block: Vec<Stmt> = default();
 
                 self.push_scope();
-                block.push(Stmt::Declare(*item));
+                block.push(DeclareS(*item));
                 let iter = self.visit_expr(&mut block, iter, default(), structs);
                 let (_, body) = self.visit_block(body, structs);
                 block.push(Stmt::While {
@@ -341,9 +364,16 @@ impl<'ctx> Normalizer<'ctx> {
                 self.pop_scope();*/
             }
             tast::Stmt::ExprS(e) => {
-                self.visit_expr(stmts, e, Some(Mode::Moved), structs);
+                self.visit_expr(stmts, e, Some(Mode::Moved), structs, ret_ptr);
             }
             tast::Stmt::HoleS => panic!("Normalization should not be run on a code with holes"),
+            tast::Stmt::BreakS => stmts.push(BreakS),
+            tast::Stmt::ContinueS => stmts.push(ContinueS),
+            tast::Stmt::ReturnS(ret) => {
+                let ret = self.visit_expr(stmts, ret, Some(Mode::Moved), structs, ret_ptr);
+                stmts.push(AssignS(ret_ptr, RValue::Place(ret)));
+                stmts.push(ReturnS(ret_ptr));
+            }
         }
     }
 
@@ -353,13 +383,24 @@ impl<'ctx> Normalizer<'ctx> {
         f: &'ctx mut tast::Fun<'tast>,
         structs: &HashMap<&'ctx str, Struct<'ctx>>,
     ) -> Fun<'ctx> {
-        let (ret, mut body) = self.visit_block(&mut f.body, structs);
-        body.push(Stmt::Return(ret.as_ptr()));
+        let vardef = self.fresh_vardef(f.ret_ty.kind);
+        let ret_ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
+
+        // Declare the return variable
+        let mut body = vec![DeclareS(vardef)];
+
+        // Compute the body
+        let (ret, inner_body) = self.visit_block(&mut f.body, structs, ret_ptr);
+        body.extend(inner_body);
+
+        // Move the result of the body into the final return value
+        body.push(AssignS(ret_ptr, RValue::Place(ret)));
+        body.push(ReturnS(ret_ptr));
 
         Fun {
             name: f.name,
             params: f.params.clone(),
-            ret_v: Some(ret.as_ptr()),
+            ret_v: Some(ret_ptr),
             body,
         }
     }

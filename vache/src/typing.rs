@@ -215,7 +215,15 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     ///
     /// This will essentially visit and type the place, and **change the mode**
     /// to `Assigning`.
-    fn visit_lhs_place(&mut self, place: ast::Place<'ctx>) -> Option<Place<'ctx>> {
+    ///
+    /// * `ret_ty`: Return type of the function.
+    /// * `in_loop`: is this place in a loop?
+    fn visit_lhs_place(
+        &mut self,
+        place: ast::Place<'ctx>,
+        ret_ty: TyUse<'ctx>,
+        in_loop: bool,
+    ) -> Option<Place<'ctx>> {
         match place.kind {
             ast::PlaceKind::VarP(var) => {
                 if let Some((vardef, stm)) = self.get_var(var) {
@@ -231,8 +239,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
             }
             ast::PlaceKind::IndexP(box e, box ix) => {
-                let e = self.visit_expr(e);
-                let ix = self.visit_expr(ix);
+                let e = self.visit_expr(e, ret_ty, in_loop);
+                let ix = self.visit_expr(ix, ret_ty, in_loop);
                 match (e.ty.as_array(), ix.ty.is_int()) {
                     (Some(ty), true) => {
                         let e_stm = e.stm; // Needed now because we move e after
@@ -269,7 +277,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
             }
             ast::PlaceKind::FieldP(box s, field) => {
-                let s = self.visit_expr(s);
+                let s = self.visit_expr(s, ret_ty, in_loop);
                 match s.ty {
                     StructT(strukt) => {
                         let strukt = self.struct_env[strukt];
@@ -449,7 +457,10 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     }
 
     /// Type-checks an expression.
-    fn visit_expr(&mut self, e: ast::Expr<'ctx>) -> Expr<'ctx> {
+    ///
+    /// * `ret_ty`: Return type of the function.
+    /// * `in_loop`: is this expression in a loop?
+    fn visit_expr(&mut self, e: ast::Expr<'ctx>, ret_ty: TyUse<'ctx>, in_loop: bool) -> Expr<'ctx> {
         let span = e.span;
         match e.kind {
             ast::ExprKind::UnitE => Expr::new(UnitE, UnitT, self.current_stratum(), span),
@@ -480,7 +491,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     }
                 },
                 ast::PlaceKind::FieldP(box s, field) => {
-                    let s = self.visit_expr(s);
+                    let s = self.visit_expr(s, ret_ty, in_loop);
                     if let StructT(strukt) = &s.ty {
                         let strukt = self.struct_env[strukt];
                         // Check that the field we want to access exists
@@ -533,8 +544,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
 
                 ast::PlaceKind::IndexP(box e, box ix) => {
-                    let e = self.visit_expr(e);
-                    let ix = self.visit_expr(ix);
+                    let e = self.visit_expr(e, ret_ty, in_loop);
+                    let ix = self.visit_expr(ix, ret_ty, in_loop);
                     match (e.ty.as_array(), ix.ty.is_int()) {
                         (Some(ty), true) => {
                             let e_stm = e.stm; // Needed now because we move e after
@@ -585,18 +596,24 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             // Make a special case for `print` until we get generic functions so that we
             // can express `print` more elegantly with the other builtin functions.
             ast::ExprKind::CallE { name, args } if name.name == "print" => {
-                let args: Vec<Expr> = args.into_iter().map(|arg| self.visit_expr(arg)).collect();
+                let args: Vec<Expr> = args
+                    .into_iter()
+                    .map(|arg| self.visit_expr(arg, ret_ty, in_loop))
+                    .collect();
 
                 Expr::new(CallE { name, args }, UnitT, self.current_stratum(), span)
             }
             ast::ExprKind::CallE { name, args } => {
-                let args: Vec<Expr> = args.into_iter().map(|arg| self.visit_expr(arg)).collect();
+                let args: Vec<Expr> = args
+                    .into_iter()
+                    .map(|arg| self.visit_expr(arg, ret_ty, in_loop))
+                    .collect();
                 self.visit_call(name, args, span)
             }
             ast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
-                let cond = self.visit_expr(cond);
-                let iftrue = self.visit_block(iftrue);
-                let iffalse = self.visit_block(iffalse);
+                let cond = self.visit_expr(cond, ret_ty, in_loop);
+                let iftrue = self.visit_block(iftrue, ret_ty, in_loop);
+                let iffalse = self.visit_block(iffalse, ret_ty, in_loop);
 
                 // Condition must be a bool
                 if !cond.ty.is_bool() {
@@ -637,7 +654,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 )
             }
             ast::ExprKind::BlockE(box e) => {
-                let b = self.visit_block(e);
+                let b = self.visit_block(e, ret_ty, in_loop);
                 let ret_stm = b.ret.stm;
                 let ret_ty = b.ret.ty;
                 Expr::new(BlockE(boxed(b)), ret_ty, ret_stm, span)
@@ -652,7 +669,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 // here.
                 let fields: Vec<(&str, Expr)> = fields
                     .into_iter()
-                    .map(|(name, expr)| (name, self.visit_expr(expr)))
+                    .map(|(name, expr)| (name, self.visit_expr(expr, ret_ty, in_loop)))
                     .collect();
 
                 let strukt = &self.struct_env[s_name];
@@ -727,7 +744,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 // here.
                 let array: Vec<Expr> = array
                     .into_iter()
-                    .map(|expr| self.visit_expr(expr))
+                    .map(|expr| self.visit_expr(expr, ret_ty, in_loop))
                     .collect();
 
                 let common_stm = array
@@ -750,8 +767,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 Expr::new(ArrayE(array), ty, common_stm, span)
             }
             ast::ExprKind::RangeE(box start, box end) => {
-                let start = self.visit_expr(start);
-                let end = self.visit_expr(end);
+                let start = self.visit_expr(start, ret_ty, in_loop);
+                let end = self.visit_expr(end, ret_ty, in_loop);
 
                 // Check that the type of both ends is `int`
                 if !start.ty.is_int() {
@@ -782,7 +799,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 )
             }
             ast::expr::ExprKind::MatchE(box matched, branches) => {
-                let matched = self.visit_expr(matched);
+                let matched = self.visit_expr(matched, ret_ty, in_loop);
                 let enun = match matched.ty {
                     EnumT(enun) => enun,
                     _ => {
@@ -828,7 +845,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         );
                     };
                     self.push_scope();
-                    let expr = self.visit_expr(expr);
+                    let expr = self.visit_expr(expr, ret_ty, in_loop);
                     self.pop_scope().unwrap();
                     new_branches.push((pat, expr));
                 }
@@ -837,12 +854,199 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         }
     }
 
+    /// Type-checks a statement.
+    ///
+    /// * `ret_ty`: Return type of the function.
+    /// * `in_loop`: is this statement in a loop?
+    fn visit_stmt(&mut self, s: ast::Stmt<'ctx>, ret_ty: TyUse<'ctx>, in_loop: bool) -> Stmt<'ctx> {
+        use Stmt::*;
+        let res: Option<Stmt> = try {
+            match s.kind {
+                ast::StmtKind::DeclareS(mut vardef, expr) => {
+                    let rhs_span = expr.span;
+                    let stm = self.current_stratum();
+                    let expr = self.visit_expr(expr, ret_ty, in_loop);
+                    let expr_ty = &expr.ty;
+
+                    // Check type declaration.
+                    self.check_ty(&mut vardef.ty);
+
+                    // Check the type
+                    if &vardef.ty != expr_ty {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message("Left and right hand side have incompatible types")
+                                .with_labels(vec![rhs_span.as_label().with_message(format!(
+                                    "expected type {}, found type {expr_ty}",
+                                    vardef.ty
+                                ))]),
+                        );
+                    }
+
+                    self.add_var(vardef);
+
+                    DeclareS(VarDef::with_stratum(vardef, stm), expr)
+                }
+                ast::StmtKind::AssignS(place, expr) => {
+                    let rhs_span = expr.span;
+                    let expr = self.visit_expr(expr, ret_ty, in_loop);
+                    let expr_ty = &expr.ty;
+                    let place = self.visit_lhs_place(place, ret_ty, in_loop)?;
+
+                    // Check the type
+                    if &place.ty != expr_ty {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message("Left and right hand side have incompatible types")
+                                .with_labels(vec![rhs_span.as_label().with_message(format!(
+                                    "expected type {}, found type {expr_ty}",
+                                    place.ty
+                                ))]),
+                        );
+                    }
+
+                    AssignS(place, expr)
+                }
+                ast::StmtKind::WhileS { cond, body } => {
+                    let cond = self.visit_expr(cond, ret_ty, in_loop);
+                    if cond.ty != BoolT {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message("expected type bool, found type int")
+                                .with_labels(vec![body.span.as_label().with_message("here")])
+                                .with_notes(vec![
+                                    "condition of while loop must be of type bool".to_string()
+                                ]),
+                        );
+                    }
+
+                    let body = self.visit_block(body, ret_ty, true);
+                    if body.ret.ty != UnitT {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_message("body of expression should not return anything")
+                                .with_labels(vec![body.span.as_label().with_message("here")]),
+                        );
+                    }
+
+                    WhileS { cond, body }
+                }
+                ast::StmtKind::ForS { item, iter, body } => {
+                    let stm = self.current_stratum();
+
+                    let iter = self.visit_expr(iter, ret_ty, in_loop);
+
+                    let item_ty = match iter.ty.as_iter() {
+                        Some(item_ty) => item_ty,
+                        None => {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(TYPE_MISMATCH_ERROR)
+                                    .with_message(format!(
+                                        "Expected iterator, found type {}",
+                                        iter.ty
+                                    ))
+                                    .with_labels(vec![iter.span.as_label()])
+                                    .with_notes(vec![
+                                        "For loop requires an iterator here".to_string()
+                                    ]),
+                            );
+                            HoleT
+                        }
+                    };
+                    let item = item.with_type(item_ty);
+                    //
+                    // Introduce a new intermediate scope, in which `item` is defined`
+                    self.push_scope();
+
+                    self.add_var(item);
+                    let item = VarDef::with_stratum(item, stm);
+
+                    let body = self.visit_block(body, ret_ty, true);
+
+                    // Pop the intermediate scope
+                    self.pop_scope();
+
+                    if body.ret.ty != UnitT {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message("body of expression should not return anything")
+                                .with_labels(vec![body.span.as_label().with_message("here")]),
+                        );
+                    }
+                    ForS { item, iter, body }
+                }
+                ast::StmtKind::ExprS(e) => ExprS(self.visit_expr(e, ret_ty, in_loop)),
+                ast::StmtKind::BreakS => {
+                    if !in_loop {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(NOT_IN_LOOP_ERROR)
+                                .with_message("this instruction can only be used within loops")
+                                .with_labels(vec![s.span.as_label()]),
+                        );
+                    }
+                    BreakS
+                }
+                ast::StmtKind::ContinueS => {
+                    if !in_loop {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(NOT_IN_LOOP_ERROR)
+                                .with_message("this instruction can only be used within loops")
+                                .with_labels(vec![s.span.as_label()]),
+                        );
+                    }
+                    ContinueS
+                }
+                ast::StmtKind::ReturnS(ret) => {
+                    let ret = self.visit_expr(ret, ret_ty, in_loop);
+                    if ret_ty.kind != ret.ty {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message(format!(
+                                    "expected type {}, got type {}",
+                                    ret_ty.kind, ret.ty
+                                ))
+                                .with_labels(vec![
+                                    ret_ty
+                                        .span
+                                        .as_label()
+                                        .with_message("what the function returns"),
+                                    ret.span.as_label().with_message("what you want to return"),
+                                ]),
+                        );
+                    }
+                    ReturnS(ret)
+                }
+            }
+        };
+        res.unwrap_or_default()
+    }
+
     /// Type-checks a block.
-    fn visit_block(&mut self, b: ast::Block<'ctx>) -> Block<'ctx> {
+    ///
+    /// * `ret_ty`: Return type of the function.
+    /// * `in_loop`: is this block in a loop?
+    fn visit_block(
+        &mut self,
+        b: ast::Block<'ctx>,
+        ret_ty: TyUse<'ctx>,
+        in_loop: bool,
+    ) -> Block<'ctx> {
         let span = b.span;
         self.push_scope();
-        let stmts = b.stmts.into_iter().map(|s| self.visit_stmt(s)).collect();
-        let ret = self.visit_expr(b.ret);
+        let stmts = b
+            .stmts
+            .into_iter()
+            .map(|s| self.visit_stmt(s, ret_ty, in_loop))
+            .collect();
+        let ret = self.visit_expr(b.ret, ret_ty, in_loop);
         self.pop_scope().unwrap();
         Block { stmts, ret, span }
     }
@@ -858,7 +1062,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             self.add_var(*arg);
         }
 
-        let body = self.visit_block(f.body);
+        let body = self.visit_block(f.body, f.ret_ty, false);
         let body_ty = &body.ret.ty;
         if body_ty != &f.ret_ty {
             self.ctx.emit(
@@ -893,135 +1097,6 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ret_ty: f.ret_ty,
             body,
         }
-    }
-
-    /// Type-checks a statement.
-    fn visit_stmt(&mut self, s: ast::Stmt<'ctx>) -> Stmt<'ctx> {
-        use Stmt::*;
-        let res: Option<Stmt> = try {
-            match s.kind {
-                ast::StmtKind::DeclareS(mut vardef, expr) => {
-                    let rhs_span = expr.span;
-                    let stm = self.current_stratum();
-                    let expr = self.visit_expr(expr);
-                    let expr_ty = &expr.ty;
-
-                    // Check type declaration.
-                    self.check_ty(&mut vardef.ty);
-
-                    // Check the type
-                    if &vardef.ty != expr_ty {
-                        self.ctx.emit(
-                            Diagnostic::error()
-                                .with_code(TYPE_MISMATCH_ERROR)
-                                .with_message("Left and right hand side have incompatible types")
-                                .with_labels(vec![rhs_span.as_label().with_message(format!(
-                                    "expected type {}, found type {expr_ty}",
-                                    vardef.ty
-                                ))]),
-                        );
-                    }
-
-                    self.add_var(vardef);
-
-                    DeclareS(VarDef::with_stratum(vardef, stm), expr)
-                }
-                ast::StmtKind::AssignS(place, expr) => {
-                    let rhs_span = expr.span;
-                    let expr = self.visit_expr(expr);
-                    let expr_ty = &expr.ty;
-                    let place = self.visit_lhs_place(place)?;
-
-                    // Check the type
-                    if &place.ty != expr_ty {
-                        self.ctx.emit(
-                            Diagnostic::error()
-                                .with_code(TYPE_MISMATCH_ERROR)
-                                .with_message("Left and right hand side have incompatible types")
-                                .with_labels(vec![rhs_span.as_label().with_message(format!(
-                                    "expected type {}, found type {expr_ty}",
-                                    place.ty
-                                ))]),
-                        );
-                    }
-
-                    AssignS(place, expr)
-                }
-                ast::StmtKind::WhileS { cond, body } => {
-                    let cond = self.visit_expr(cond);
-                    if cond.ty != BoolT {
-                        self.ctx.emit(
-                            Diagnostic::error()
-                                .with_code(TYPE_MISMATCH_ERROR)
-                                .with_message("expected type bool, found type int")
-                                .with_labels(vec![body.span.as_label().with_message("here")])
-                                .with_notes(vec![
-                                    "condition of while loop must be of type bool".to_string()
-                                ]),
-                        );
-                    }
-
-                    let body = self.visit_block(body);
-                    if body.ret.ty != UnitT {
-                        self.ctx.emit(
-                            Diagnostic::error()
-                                .with_message("body of expression should not return anything")
-                                .with_labels(vec![body.span.as_label().with_message("here")]),
-                        );
-                    }
-
-                    WhileS { cond, body }
-                }
-                ast::StmtKind::ForS { item, iter, body } => {
-                    let stm = self.current_stratum();
-
-                    let iter = self.visit_expr(iter);
-
-                    let item_ty = match iter.ty.as_iter() {
-                        Some(item_ty) => item_ty,
-                        None => {
-                            self.ctx.emit(
-                                Diagnostic::error()
-                                    .with_code(TYPE_MISMATCH_ERROR)
-                                    .with_message(format!(
-                                        "Expected iterator, found type {}",
-                                        iter.ty
-                                    ))
-                                    .with_labels(vec![iter.span.as_label()])
-                                    .with_notes(vec![
-                                        "For loop requires an iterator here".to_string()
-                                    ]),
-                            );
-                            HoleT
-                        }
-                    };
-                    let item = item.with_type(item_ty);
-                    //
-                    // Introduce a new intermediate scope, in which `item` is defined`
-                    self.push_scope();
-
-                    self.add_var(item);
-                    let item = VarDef::with_stratum(item, stm);
-
-                    let body = self.visit_block(body);
-
-                    // Pop the intermediate scope
-                    self.pop_scope();
-
-                    if body.ret.ty != UnitT {
-                        self.ctx.emit(
-                            Diagnostic::error()
-                                .with_code(TYPE_MISMATCH_ERROR)
-                                .with_message("body of expression should not return anything")
-                                .with_labels(vec![body.span.as_label().with_message("here")]),
-                        );
-                    }
-                    ForS { item, iter, body }
-                }
-                ast::StmtKind::ExprS(e) => ExprS(self.visit_expr(e)),
-            }
-        };
-        res.unwrap_or_default()
     }
 
     /// Type-checks a program.

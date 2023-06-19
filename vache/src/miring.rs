@@ -90,11 +90,19 @@ impl<'ctx> MIRer<'ctx> {
     /// Takes as arguments:
     /// * The expression itself (as a parser AST node)
     /// * The label to jump in the CFG to after evaluating this expression
+    /// * The exit label to return from the function
+    /// * The break label to break from the current while loop (if any)
     /// * The map of structures declarations.
-    fn visit_stmts(&mut self, b: anf::Block<'ctx>, dest_l: CfgLabel) -> CfgLabel {
-        b.into_iter()
-            .rev()
-            .fold(dest_l, |dest_l, s| self.visit_stmt(s, dest_l))
+    fn visit_stmts(
+        &mut self,
+        b: anf::Block<'ctx>,
+        dest_l: CfgLabel,
+        exit_l: CfgLabel,
+        break_l: Option<CfgLabel>,
+    ) -> CfgLabel {
+        b.into_iter().rev().fold(dest_l, |dest_l, s| {
+            self.visit_stmt(s, dest_l, exit_l, break_l)
+        })
     }
 
     /// Visits a statements, producing the CFG nodes and returning the label for
@@ -104,16 +112,22 @@ impl<'ctx> MIRer<'ctx> {
     /// * The statement to visit.
     /// * The label to jump at in the CFG after the execution of the statement.
     /// * A map of structures declarations.
-    fn visit_stmt(&mut self, s: anf::Stmt<'ctx>, dest_l: CfgLabel) -> CfgLabel {
+    fn visit_stmt(
+        &mut self,
+        s: anf::Stmt<'ctx>,
+        dest_l: CfgLabel,
+        exit_l: CfgLabel,
+        break_l: Option<CfgLabel>,
+    ) -> CfgLabel {
         match s {
-            anf::Stmt::Declare(vardef) => {
+            anf::Stmt::DeclareS(vardef) => {
                 self.insert(self.instr(InstrKind::Declare(vardef)), [(DefaultB, dest_l)])
             }
-            anf::Stmt::Assign(ptr, rvalue) => self.insert(
+            anf::Stmt::AssignS(ptr, rvalue) => self.insert(
                 self.instr(InstrKind::Assign(ptr, rvalue)),
                 [(DefaultB, dest_l)],
             ),
-            anf::Stmt::While {
+            anf::Stmt::WhileS {
                 cond,
                 body,
                 cond_block,
@@ -123,7 +137,7 @@ impl<'ctx> MIRer<'ctx> {
                 self.push_scope();
 
                 // The block itself.
-                let body_l = self.visit_stmts(body, loop_l);
+                let body_l = self.visit_stmts(body, loop_l, exit_l, Some(dest_l));
 
                 // If statement
                 let if_l = self.insert(
@@ -132,7 +146,7 @@ impl<'ctx> MIRer<'ctx> {
                 );
 
                 // Compute the condition.
-                let cond_l = self.visit_stmts(cond_block, if_l);
+                let cond_l = self.visit_stmts(cond_block, if_l, exit_l, break_l);
 
                 self.insert_at(loop_l, self.instr(InstrKind::Noop), [(DefaultB, cond_l)]);
 
@@ -140,7 +154,7 @@ impl<'ctx> MIRer<'ctx> {
 
                 loop_l
             }
-            anf::Stmt::Call {
+            anf::Stmt::CallS {
                 name,
                 args,
                 destination,
@@ -152,27 +166,32 @@ impl<'ctx> MIRer<'ctx> {
                 }),
                 [(DefaultB, dest_l)],
             ),
-            anf::Stmt::If(cond, iftrue, iffalse) => {
+            anf::Stmt::IfS(cond, iftrue, iffalse) => {
                 self.push_scope();
-                let iftrue = self.visit_stmts(iftrue, dest_l);
+                let iftrue = self.visit_stmts(iftrue, dest_l, exit_l, break_l);
                 self.pop_scope();
                 self.push_scope();
-                let iffalse = self.visit_stmts(iffalse, dest_l);
+                let iffalse = self.visit_stmts(iffalse, dest_l, exit_l, break_l);
                 self.pop_scope();
                 self.insert(
                     self.instr(InstrKind::Branch(cond)),
                     [(TrueB, iftrue), (FalseB, iffalse)],
                 )
             }
-            anf::Stmt::Block(b) => {
+            anf::Stmt::BlockS(b) => {
                 self.push_scope();
-                let res = self.visit_stmts(b, dest_l);
+                let res = self.visit_stmts(b, dest_l, exit_l, break_l);
                 self.pop_scope();
                 res
             }
-            anf::Stmt::Return(ret) => {
-                self.insert(self.instr(InstrKind::Return(ret)), [(DefaultB, dest_l)])
+            anf::Stmt::ReturnS(ret) => {
+                self.insert(self.instr(InstrKind::Return(ret)), [(DefaultB, exit_l)])
             }
+            anf::Stmt::BreakS => {
+                let break_l = break_l.expect("break statement must be in a while loop");
+                self.insert(self.instr(InstrKind::Noop), [(DefaultB, break_l)])
+            }
+            anf::Stmt::ContinueS => todo!(),
         }
     }
 
@@ -181,7 +200,7 @@ impl<'ctx> MIRer<'ctx> {
         let ret_l = self.fresh_label();
 
         self.push_scope();
-        let entry_l = self.visit_stmts(f.body, ret_l);
+        let entry_l = self.visit_stmts(f.body, ret_l, ret_l, None);
         self.pop_scope();
 
         let body = std::mem::take(&mut self.cfg);

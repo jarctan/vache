@@ -723,12 +723,13 @@ mod tests {
             }
         };
         let mir = borrow_check(mir(&mut checked)?)?;
+        eprintln!("MIR: {mir:?}");
         let main_fn = &mir.funs["main"];
         let dominators = main_fn.body.dominators(main_fn.entry_l);
 
         // Dominators of the label _after_ the if statement are only the labels _before_
         // the if statement.
-        let above_if: Vec<NodeIx> = (16..=23).map(NodeIx).collect();
+        let above_if: Vec<NodeIx> = (16..=24).map(NodeIx).collect();
         assert_eq!(
             dominators[&NodeIx(1)],
             std::iter::once(NodeIx(1))

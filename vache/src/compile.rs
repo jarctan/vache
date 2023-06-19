@@ -402,6 +402,12 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             }
             Stmt::HoleS => unreachable!(),
+            Stmt::BreakS => quote!(break;),
+            Stmt::ContinueS => quote!(continue;),
+            Stmt::ReturnS(ret) => {
+                let ret = self.visit_expr(ret);
+                quote!(return Ok(#ret);)
+            }
         }
     }
 
