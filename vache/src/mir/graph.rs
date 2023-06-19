@@ -670,6 +670,8 @@ mod tests {
         }
     }
 
+    /// Check on a simple while-loop program that we can have multiple in edges
+    /// for a single node.
     #[test]
     fn multiple_ins_mir() -> Result<()> {
         let arena = Arena::new();
@@ -683,8 +685,13 @@ mod tests {
             }
         };
         let mir = borrow_check(mir(&mut checked)?)?;
+        eprintln!("MIR: {mir:?}");
         let cfg = &mir.funs["main"].body;
-        let edges = cfg.node_map[&NodeIx(6)]
+
+        // Check that label of the entry of the loop has two preneighbors: before the
+        // loop and the end of the loop.
+        let loop_entry_l = NodeIx(7);
+        let edges = cfg.node_map[&loop_entry_l]
             .ins
             .keys()
             .map(|ix| &cfg.edge_map[ix])
@@ -693,13 +700,13 @@ mod tests {
             edges,
             [
                 &Edge {
-                    from: NodeIx(21),
-                    to: NodeIx(6),
+                    from: NodeIx(22),
+                    to: loop_entry_l,
                     weight: ()
                 },
                 &Edge {
-                    from: NodeIx(7),
-                    to: NodeIx(6),
+                    from: NodeIx(8),
+                    to: loop_entry_l,
                     weight: ()
                 }
             ]
@@ -729,10 +736,10 @@ mod tests {
 
         // Dominators of the label _after_ the if statement are only the labels _before_
         // the if statement.
-        let above_if: Vec<NodeIx> = (16..=24).map(NodeIx).collect();
+        let above_if: Vec<NodeIx> = (17..=25).map(NodeIx).collect();
         assert_eq!(
-            dominators[&NodeIx(1)],
-            std::iter::once(NodeIx(1))
+            dominators[&NodeIx(2)],
+            std::iter::once(NodeIx(2))
                 .chain(above_if.iter().copied())
                 .collect()
         );
@@ -762,8 +769,8 @@ mod tests {
         // The immediate of the label _after_ the if statement can only be the one
         // just before the if statement. Confer the CFG of that function for
         // details.
-        let bef_if_label = NodeIx(16);
-        assert_eq!(dominators[&NodeIx(1)], bef_if_label);
+        let bef_if_label = NodeIx(17);
+        assert_eq!(dominators[&NodeIx(2)], bef_if_label);
         Ok(())
     }
 }
