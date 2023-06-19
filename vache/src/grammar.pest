@@ -14,7 +14,7 @@ block = { lcb ~ (!(expr ~ rcb) ~ stmt)* ~ expr? ~ rcb }
 
 // Note: put expressions that can be used as statements without a ";"
 // AFTER the (expr ~ sc) because of greediness
-stmt = { return_stmt | break_stmt | continue_stmt | while_loop | for_loop | declare | assign | (expr ~ sc) | if_then | match_expr | block }
+stmt = { return_stmt | break_stmt | continue_stmt | while_loop | loop_loop | for_loop | declare | assign | (expr ~ sc) | if_then | match_expr | block }
 
 return_stmt = { return_kw ~ expr? ~ sc }
 
@@ -23,6 +23,8 @@ break_stmt = { break_kw ~ sc }
 continue_stmt = { continue_kw ~ sc }
 
 while_loop = { while_kw ~ expr ~ block }
+
+loop_loop = { loop_kw ~ block }
 
 for_loop = { for_kw ~ ident ~ in_kw ~ expr ~ block }
 
@@ -82,7 +84,7 @@ str_ty = { "str" }
 
 int_ty = { "int" }
 
-keyword = { var_kw | struct_kw | if_kw | else_kw | while_kw | for_kw | in_kw | bool_ty | str_ty | int_ty | fn_kw | match_kw | break_kw | return_kw | continue_kw }
+keyword = { var_kw | struct_kw | if_kw | else_kw | while_kw | for_kw | in_kw | bool_ty | str_ty | int_ty | fn_kw | match_kw | break_kw | return_kw | continue_kw | loop_kw }
 
 prefix = { bang | as_mut }
 infix  = { add | sub | mul | div | rem | pow | le | lt | ge | gt | eqq | neq | and | or | not_in }
@@ -155,5 +157,6 @@ fn_kw       = { "fn" }
 return_kw   = { "return" }
 break_kw    = { "break" }
 continue_kw = { "continue" }
+loop_kw     = { "loop" }
 
 unit = { "()" }

@@ -172,6 +172,18 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
                 let body = ctx.parse(consume!(pairs));
                 WhileS { cond, body }
             }
+            Rule::loop_loop => {
+                let mut pairs = pair.into_inner();
+                let loop_kw = consume!(pairs, Rule::loop_kw);
+                let span = Span::from(loop_kw.as_span());
+                // `loop` is just a `while true`
+                let cond = Expr {
+                    kind: BoolE(true),
+                    span,
+                };
+                let body = ctx.parse(consume!(pairs));
+                WhileS { cond, body }
+            }
             Rule::for_loop => {
                 let mut pairs = pair.into_inner();
                 consume!(pairs, Rule::for_kw);
