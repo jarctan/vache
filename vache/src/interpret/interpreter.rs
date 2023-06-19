@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
 use string_builder::Builder as StringBuilder;
@@ -44,6 +45,72 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
         }
     }
 
+    /// Shortcut to produce the result of a call to an integer binop operation
+    /// `f` that takes two booleans and returns a value.
+    fn bool_binop(
+        &mut self,
+        f: impl Fn(&bool, &bool) -> Value<'ctx>,
+        args: &Vec<ValueRef>,
+        stratum: Stratum,
+    ) -> Option<ValueRef> {
+        let lhs = *args.get(0)?;
+        let rhs = *args.get(1)?;
+        match (self.get_value(lhs), self.get_value(rhs)) {
+            (BoolV(lhs), BoolV(rhs)) if args.len() == 2 => {
+                Some(self.add_value(f(lhs, rhs), stratum))
+            }
+            _ => None,
+        }
+    }
+
+    /// Shortcut to produce the result of a call to an integer unary operation
+    /// `f` that takes one boolean and returns a value.
+    fn bool_unop(
+        &mut self,
+        f: impl Fn(&bool) -> Value<'ctx>,
+        args: &Vec<ValueRef>,
+        stratum: Stratum,
+    ) -> Option<ValueRef> {
+        let arg = *args.get(0)?;
+        match self.get_value(arg) {
+            BoolV(arg) if args.len() == 1 => Some(self.add_value(f(arg), stratum)),
+            _ => None,
+        }
+    }
+
+    /// Returns the stringify-cation of a value from the store.
+    fn display(&self, value: &ValueRef) -> String {
+        let value = self.get_value(*value);
+        match value {
+            UninitV => panic!("Runtime error: Requested to display an uninitialized value"),
+            UnitV => "()".to_string(),
+            IntV(i) => format!("{i}"),
+            StrV(s) => format!("{s}"),
+            BoolV(b) => format!("{b}"),
+            StructV(name, fields) => {
+                // Display the  fields
+                let fields = fields
+                    .iter()
+                    .map(|(name, value)| format!("\t{}: {}", name, self.display(value)))
+                    .join(",\n");
+
+                // Extra `\n` if there are some fields
+                if !fields.is_empty() {
+                    format!("{name} {{\n{fields}\n}}")
+                } else {
+                    format!("{name} {{\n}}")
+                }
+            }
+            RangeV(start, end) => {
+                format!("{}..{}", self.display(start), self.display(end))
+            }
+            ArrayV(items) => {
+                let items = items.iter().map(|item| self.display(item)).join(", ");
+                format!("[{items}]")
+            }
+        }
+    }
+
     /// Checks if we can apply builtin functions to the call to
     /// `f_name(..args)`.
     fn check_builtin(
@@ -64,20 +131,14 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
             ">" => self.int_binop(|x, y| BoolV(x > y), args, stratum),
             "<=" => self.int_binop(|x, y| BoolV(x <= y), args, stratum),
             "<" => self.int_binop(|x, y| BoolV(x < y), args, stratum),
+            "&&" => self.bool_binop(|x, y| BoolV(*x && *y), args, stratum),
+            "||" => self.bool_binop(|x, y| BoolV(*x || *y), args, stratum),
+            "!" => self.bool_unop(|x| BoolV(!x), args, stratum),
             "print" => {
-                let mut args = args.iter();
-                // Special case for the first item, which may not have a space before.
-                if let Some(&arg) = args.next() {
-                    let val = self.get_value(arg);
-                    self.stdout.append(format!("{val}"));
-                }
-
-                for &arg in args {
-                    let val = self.get_value(arg);
-                    self.stdout.append(format!(" {val}"));
-                }
-
+                let args = args.iter().map(|arg| self.display(arg)).join(" ");
+                self.stdout.append(args);
                 self.stdout.append("\n");
+
                 Some(self.add_value(UnitV, self.current_stratum()))
             }
             _ => None,
@@ -238,7 +299,7 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                             .expect("Runtime error: array index is too big");
                         array[index]
                     }
-                    _ => panic!("Runtime error: incorrect indexing"),
+                    (array, index) => panic!("Runtime error: incorrect indexing {array:?}[{index:?}]"),
                 }
             }
         }
@@ -295,11 +356,13 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
     /// location of the cloned variable.
     pub fn opt_clone(&mut self, mode: &Mode, v_ref: ValueRef, stratum: Stratum) -> ValueRef {
         match mode {
-            Mode::Cloned | Mode::SBorrowed => {
-                self.add_value(self.get_value(v_ref).clone(), stratum)
-            }
-            Mode::Moved | Mode::Borrowed | Mode::SMutBorrowed | Mode::MutBorrowed => {
-                debug_assert!(stratum >= v_ref.stratum, "Runtime error: ownership addressing should be specified as owned if moving variable out of its stratum");
+            Mode::Cloned | Mode::Moved => self.add_value(self.get_value(v_ref).clone(), stratum),
+            Mode::Borrowed | Mode::SBorrowed | Mode::SMutBorrowed | Mode::MutBorrowed => {
+                debug_assert!(
+                    stratum >= v_ref.stratum,
+                    "Runtime error: borrowing value {:?} out of scope",
+                    self.get_value(v_ref)
+                );
                 v_ref
             }
             Mode::Assigning => {

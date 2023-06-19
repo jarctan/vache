@@ -13,7 +13,10 @@ mod structures;
 mod while_loop;
 
 use unindent::Unindent;
-use vache_lib::{check_all, config::Config, farm_modes, mir::Mode, run, Arena, Context};
+use vache_lib::{
+    borrow_check, check_all, config::Config, farm_modes, interpret, mir, mir::Mode, run, typecheck,
+    Arena, Context,
+};
 
 /// Automatically detects and runs `.vat` (Vache bundled test) files.
 ///
@@ -125,4 +128,69 @@ fn exec_va(filename: &str) {
             "output mismatch\nexpected:\n{expected}\nfound:\n{res}\nsee `{filename}` for details"
         )
     );
+}
+
+/// Automatically detects and interprets `.vat` (Vache bundled test) files.
+///
+/// Note: once Vache implements `assert`s, we may want to switch to `.va` files
+/// with `assert`s in them.
+#[by_resources("vache/tests/exec/**/*.vat")]
+#[test]
+fn interpret_va(filename: &str) {
+    let path = std::path::Path::new(filename);
+
+    // Remove prefix if we are not in the workspace pwd
+    let path = match path.strip_prefix("vache") {
+        Ok(path) => path,
+        Err(_) => path,
+    };
+
+    // Check that the path to the resource is correct
+    assert!(
+        path.exists(),
+        "Path of resource {} does not exist",
+        path.display()
+    );
+
+    let arena = Arena::new();
+
+    // Read the input
+    let cur_dir = std::env::current_dir().expect("Current dir not found");
+    let input: &str =
+        arena.alloc(std::fs::read_to_string(path).with_context(|| {
+            format!("Failed to open file `{filename}` in {}", cur_dir.display())
+        })?);
+    let mut parts = input.split("################################\n");
+    let input = parts.next().expect("file is empty");
+    let expected = parts
+        .next()
+        .context("not a valid .vat file, missing the expected part")?;
+
+    // Define the config/context of the compiler
+    let config = Config {
+        input,
+        filename: Some(filename),
+    };
+    let mut context = Context::new(config, &arena);
+
+    // Parse and type/borrow check
+    let program = parse_file(&mut context).context("Compilation failed")?;
+
+    match typecheck(&mut context, program)? {
+        Ok(mut checked) => {
+            let mir = borrow_check(mir(&mut checked)?)?;
+
+            // Interpret
+            let res = interpret(mir).context("execution error")?;
+
+            ensure!(
+                res == expected,
+            "output mismatch\nexpected:\n{expected}\nfound:\n{res}\nsee `{filename}` for details"
+            );
+        }
+        Err(diagnostics) => {
+            diagnostics.display()?;
+            ::anyhow::bail!("Compile errors");
+        }
+    }
 }

@@ -54,21 +54,6 @@ impl fmt::Debug for Value<'_> {
     }
 }
 
-impl fmt::Display for Value<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UninitV => panic!("Runtime error: Requested to display an uninitialized value"),
-            UnitV => write!(f, "()"),
-            IntV(i) => fmt::Display::fmt(i, f),
-            StrV(s) => fmt::Display::fmt(s, f),
-            BoolV(b) => fmt::Display::fmt(b, f),
-            StructV(name, _) => fmt::Display::fmt(name, f),
-            RangeV(..) => write!(f, ".."),
-            ArrayV(_) => write!(f, "[]"),
-        }
-    }
-}
-
 impl Value<'_> {
     /// Truthiness of the value.
     pub fn truth(&self) -> bool {

@@ -99,11 +99,7 @@ impl<'ctx> Normalizer<'ctx> {
                 let vardef = self.fresh_vardef(e.ty);
                 let start_ptr = self.visit_expr(stmts, start, Some(Mode::Borrowed), structs);
                 let end_ptr = self.visit_expr(stmts, end, Some(Mode::Borrowed), structs);
-                let final_ptr = Pointer::new(
-                    self.arena,
-                    self.arena
-                        .alloc(Place::IndexP(start_ptr.as_ptr(), end_ptr.as_ptr())),
-                );
+                let final_ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(Stmt::Declare(vardef));
                 stmts.push(Stmt::Assign(final_ptr, RValue::Range(start_ptr, end_ptr)));
                 Reference::new_moved(final_ptr)

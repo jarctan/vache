@@ -66,7 +66,8 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                         ::std::fs::remove_file(&dest_file).context("failed to remove binary at the end of the test")?;
                         Ok(())
                     }
-                    Err(err) => {
+                    Err(diagnostics) => {
+                        diagnostics.display()?;
                         ::anyhow::bail!("Compile errors");
                     }
                 }
@@ -89,7 +90,8 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                         );
                         Ok(())
                     }
-                    Err(err) => {
+                    Err(diagnostics) => {
+                        diagnostics.display()?;
                         ::anyhow::bail!("Compile errors");
                     }
                 }

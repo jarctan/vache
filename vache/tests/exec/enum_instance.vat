@@ -9,7 +9,6 @@ enum User2 {
 }
 
 fn main() {
-    var range: int.. = 1..5;
     var a: int = 0;
     var user: User = User::Test(a);
     print("a before:", a);
