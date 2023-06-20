@@ -1,0 +1,8 @@
+fn main() {
+    var tuple: (int, bool) = (12, true);
+    var z: int = tuple.0;
+    tuple.0 = 14;
+    print(tuple.0, z);
+}
+################################
+14 12
