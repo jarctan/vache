@@ -27,8 +27,10 @@ pub enum RValue<'ctx> {
         /// Value for each field.
         fields: HashMap<&'ctx str, Reference<'ctx>>,
     },
-    /// Array creation.
+    /// Arrays.
     Array(Vec<Reference<'ctx>>),
+    /// Tuples.
+    Tuple(Vec<Reference<'ctx>>),
     /// Range.
     ///
     /// Format: `Range(start, end).`
@@ -61,6 +63,13 @@ impl<'ctx> fmt::Debug for RValue<'ctx> {
                 res.finish()
             }
             Array(array) => f.debug_list().entries(array).finish(),
+            Tuple(items) => {
+                let mut display = f.debug_tuple("");
+                for item in items {
+                    display.field(item);
+                }
+                display.finish()
+            }
             Range(start, end) => write!(f, "{start:?}..{end:?}"),
             Variant {
                 enun,

@@ -99,6 +99,16 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     quote!(Cow<__Vec<#ty>>)
                 }
             }
+            TupleT(items) => {
+                let items = items
+                    .iter()
+                    .map(|item| Self::translate_type(item, show_lifetime));
+                if show_lifetime {
+                    quote!(Cow<'a, (#(Field<#items>),*)>)
+                } else {
+                    quote!(Cow<(#(Field<#items>),*)>)
+                }
+            }
             IterT(ty) => {
                 let ty = Self::translate_type(ty, show_lifetime);
                 if show_lifetime {
@@ -168,6 +178,19 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     Mode::Cloned => quote!((#strukt).#field.clone().take()),
                     Mode::Moved => quote!((#strukt).#field.take()),
                     Mode::Assigning => quote!((#strukt).#field),
+                }
+            }
+            ElemP(box tuple, elem) => {
+                let tuple = self.visit_expr(tuple);
+                let elem = syn::Index::from(elem);
+                match place.mode {
+                    Mode::Borrowed => quote!(__borrow((#tuple).#elem.as_ref())),
+                    Mode::SBorrowed => unimplemented!(),
+                    Mode::MutBorrowed => quote!(__borrow_mut((#tuple).#elem.as_mut())),
+                    Mode::SMutBorrowed => unimplemented!(),
+                    Mode::Cloned => quote!((#tuple).#elem.clone().take()),
+                    Mode::Moved => quote!((#tuple).#elem.take()),
+                    Mode::Assigning => quote!((#tuple).#elem),
                 }
             }
         }
@@ -273,6 +296,10 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let items = array.into_iter().map(|item| self.visit_expr(item));
                 quote!(Cow::Owned(__Vec(vec![#(#items),*])))
             }
+            TupleE(items) => {
+                let items = items.into_iter().map(|item| self.visit_expr(item));
+                quote!(Cow::Owned((#(Field::new(#items)),*)))
+            }
             CallE { name, args } => {
                 if name.name == "print" {
                     let mut builder = StringBuilder::default();
@@ -363,7 +390,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             Stmt::AssignS(lhs, rhs) => {
                 assert!(matches!(lhs.mode, Mode::Assigning));
                 // Different output if we have a field at lhs
-                let is_field = matches!(lhs.kind, FieldP(..));
+                let is_field = matches!(lhs.kind, FieldP(..) | ElemP(..));
 
                 let lhs = self.visit_place(lhs);
                 let rhs = self.visit_expr(rhs);

@@ -108,6 +108,10 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                 let items = items.iter().map(|item| self.display(item)).join(", ");
                 format!("[{items}]")
             }
+            TupleV(items) => {
+                let items = items.iter().map(|item| self.display(item)).join(", ");
+                format!("({items})")
+            }
         }
     }
 
@@ -281,11 +285,24 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
         let ptr = ptr.into();
         match ptr.place() {
             VarP(var) => self.get_var(var),
-            FieldP(strukt, field) => {
-                if let StructV(_, fields) = self.get_ptr_value(strukt) && let Some(var_ref) = fields.get(field) {
-                    *var_ref
-                } else{
-                    panic!()
+            FieldP(compound, field) => {
+                match self.get_ptr_value(compound) {
+                    StructV(_, fields) => {
+                        if let Some(var_ref) = fields.get(field) {
+                            *var_ref
+                        } else {
+                            panic!()
+                        }
+                    }
+                    TupleV(elems) => {
+                        if let Ok(elem) = field.parse::<usize>()
+                        && let Some(elem) = elems.get(elem) {
+                            *elem
+                        } else {
+                            panic!()
+                        }
+                    }
+                    _ => panic!()
                 }
             }
             IndexP(array, index) => {
@@ -310,11 +327,24 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
         let ptr = ptr.into();
         match ptr.place() {
             VarP(var) => self.get_var_mut(var),
-            FieldP(strukt, field) => {
-                if let StructV(_, fields) = self.get_ptr_value_mut(strukt) && let Some(var_ref) = fields.get_mut(field) {
-                    var_ref
-                } else{
-                    panic!()
+            FieldP(compound, field) => {
+                match self.get_ptr_value_mut(compound) {
+                    StructV(_, fields) => {
+                        if let Some(var_ref) = fields.get_mut(field) {
+                            var_ref
+                        } else {
+                            panic!()
+                        }
+                    }
+                    TupleV(elems) => {
+                        if let Ok(elem) = field.parse::<usize>()
+                        && let Some(elem) = elems.get_mut(elem) {
+                            elem
+                        } else {
+                            panic!()
+                        }
+                    }
+                    _ => panic!(),
                 }
             }
             IndexP(array, index) => {
@@ -389,6 +419,10 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
             RValue::Array(array) => {
                 let array = array.iter().map(|v| self.get_ptr(v)).collect();
                 self.add_value(ArrayV(array), stratum)
+            }
+            RValue::Tuple(items) => {
+                let items = items.iter().map(|v| self.get_ptr(v)).collect();
+                self.add_value(TupleV(items), stratum)
             }
             RValue::Range(start, end) => {
                 let start = self.get_ptr(start);

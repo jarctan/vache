@@ -121,6 +121,7 @@ impl<'ctx> InstrKind<'ctx> {
             | InstrKind::Return(_) => boxed(std::iter::empty()),
             InstrKind::Assign(_, RValue::Place(place)) => boxed(std::iter::once(place)),
             InstrKind::Assign(_, RValue::Array(items)) => boxed(items.iter_mut()),
+            InstrKind::Assign(_, RValue::Tuple(items)) => boxed(items.iter_mut()),
             InstrKind::Assign(_, RValue::Range(start, end)) => boxed([start, end].into_iter()),
             InstrKind::Assign(_, RValue::Struct { name: _, fields }) => boxed(fields.values_mut()),
             InstrKind::Assign(
@@ -152,6 +153,7 @@ impl<'ctx> InstrKind<'ctx> {
             | InstrKind::Return(_) => boxed(std::iter::empty()),
             InstrKind::Assign(_, RValue::Place(place)) => boxed(std::iter::once(place)),
             InstrKind::Assign(_, RValue::Array(items)) => boxed(items.iter()),
+            InstrKind::Assign(_, RValue::Tuple(items)) => boxed(items.iter()),
             InstrKind::Assign(_, RValue::Range(start, end)) => boxed([start, end].into_iter()),
             InstrKind::Assign(_, RValue::Struct { name: _, fields }) => boxed(fields.values()),
             InstrKind::Assign(

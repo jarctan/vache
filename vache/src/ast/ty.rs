@@ -4,6 +4,7 @@ use std::default::default;
 use std::fmt;
 use std::ops::Deref;
 
+use itertools::Itertools;
 use pest::iterators::Pair;
 
 use super::{Context, Parsable, Span};
@@ -137,6 +138,8 @@ pub enum Ty<'ctx> {
     VarT(&'ctx str),
     /// Arrays.
     ArrayT(&'ctx Ty<'ctx>),
+    /// Tuples.
+    TupleT(&'ctx [Ty<'ctx>]),
     /// Iterator.
     IterT(&'ctx Ty<'ctx>),
     /// Hole type.
@@ -154,6 +157,17 @@ impl<'ctx> Ty<'ctx> {
         match self {
             ArrayT(inner) => Some(**inner),
             HoleT => Some(HoleT),
+            _ => None,
+        }
+    }
+
+    /// Does this type reduce to an tuple type.
+    ///
+    /// If so, returns the types of the items.
+    pub fn as_tuple(&self) -> Option<&'ctx [Ty<'ctx>]> {
+        match self {
+            TupleT(items) => Some(items),
+            HoleT => todo!(),
             _ => None,
         }
     }
@@ -214,6 +228,8 @@ impl<'ctx> PartialEq for Ty<'ctx> {
             (StrT, _) => false,
             (ArrayT(inner1), ArrayT(inner2)) => inner1 == inner2,
             (ArrayT(..), _) => false,
+            (TupleT(items1), TupleT(items2)) => items1 == items2,
+            (TupleT(..), _) => false,
             (IterT(inner1), IterT(inner2)) => inner1 == inner2,
             (IterT(..), _) => false,
             (StructT(name1), StructT(name2)) => name1 == name2,
@@ -246,6 +262,17 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for TyUse<'ctx> {
                 consume!(pairs, Rule::rb);
                 ArrayT(ctx.alloc(inner.kind))
             }
+            Rule::tuple_ty => {
+                let mut pairs = pair.into_inner();
+                consume!(pairs, Rule::lp);
+                consume_back!(pairs, Rule::rp);
+                let items: Vec<_> = pairs
+                    .filter(|pair| !matches!(pair.as_rule(), Rule::cma))
+                    .map(|item| TyUse::parse(item, ctx).kind)
+                    .collect();
+                let items: &'ctx [Ty] = ctx.alloc(items);
+                TupleT(items)
+            }
             Rule::iter_ty => {
                 let mut pairs = pair.into_inner();
                 let inner: TyUse = ctx.parse(consume!(pairs));
@@ -265,11 +292,13 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for TyUse<'ctx> {
 }
 
 impl Ty<'_> {
-    /// Is this type `Copy` in Rust (no deep clone needed).
+    /// Is this type [`Copy`] in Rust (if bitwise copy is sufficient).
     pub fn copyable(&self) -> bool {
         match self {
             UnitT | BoolT => true,
             IntT | StrT | StructT(_) | EnumT(_) | ArrayT(_) | IterT(_) | HoleT => false,
+            // Tuple is copy only if all items are copy
+            TupleT(items) => items.iter().all(|item| item.copyable()),
             VarT(_) => panic!("We don't know!"),
         }
     }
@@ -303,6 +332,7 @@ impl fmt::Display for Ty<'_> {
             EnumT(e) => write!(f, "{e}"),
             VarT(v) => write!(f, "{v}"),
             ArrayT(ty) => write!(f, "[{ty}]"),
+            TupleT(items) => write!(f, "({})", items.iter().join(", ")),
             IterT(ty) => write!(f, "{ty}.."),
             HoleT => write!(f, "?"),
         }
@@ -340,13 +370,21 @@ mod tests {
     #[parses("bool" as ty)]
     #[test]
     fn bool_ty(ty: TyUse) {
-        assert_eq!(ty, BoolT);
+        ensure!(ty == BoolT);
     }
 
     #[parses("bool.." as ty)]
     #[test]
     fn bool_iter(ty: TyUse) {
         ty.as_iter().context("expected an iterator")?;
+    }
+
+    #[parses("(bool, int)" as ty)]
+    #[test]
+    fn tuple_ty(ty: TyUse) {
+        let tys = ty.as_tuple().context("expected a tuple")?;
+        ensure!(tys[0] == BoolT);
+        ensure!(tys[1] == IntT);
     }
 
     #[parses("bool......" as ty)]

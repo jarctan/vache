@@ -124,7 +124,31 @@ impl<'ctx> Normalizer<'ctx> {
                             self.arena,
                             self.arena.alloc(Place::FieldP(strukt_ptr.as_ptr(), field)),
                         );
-                        Reference::new(final_ptr, &mut place.mode)
+
+                        // The reference into `FieldP` will depend on multiple modes: the global one,
+                        // and the modes of the strukt expression.
+                        let mut modes = vec![&mut place.mode];
+                        modes.extend(strukt_ptr.into_modes_mut());
+
+                        Reference::new_multi_modes(final_ptr, modes)
+                    }
+                    tast::PlaceKind::ElemP(box tuple, elem) => {
+                        let tuple_ptr = self.visit_expr(stmts, tuple, Some(Mode::Moved), structs, ret_ptr);
+
+                        // Write the element index as a string.
+                        let field = self.arena.alloc(format!("{elem}"));
+
+                        let final_ptr = Pointer::new(
+                            self.arena,
+                            self.arena.alloc(Place::FieldP(tuple_ptr.as_ptr(), field)),
+                        );
+
+                        // The reference into `ElemP` will depend on multiple modes: the global one,
+                        // and the modes of the tuple expression.
+                        let mut modes = vec![&mut place.mode];
+                        modes.extend(tuple_ptr.into_modes_mut());
+
+                        Reference::new_multi_modes(final_ptr, modes)
                     }
                     tast::PlaceKind::IndexP(box e, box ix) => {
                         let e_ptr = self.visit_expr(stmts, e, Some(Mode::SMutBorrowed), structs, ret_ptr);
@@ -136,7 +160,7 @@ impl<'ctx> Normalizer<'ctx> {
                         );
 
                         // The reference into `IndexP` will depend on multiple modes: the global one,
-                        // the modes of the array expression, and the mode of the index expression.
+                        // the modes of the array expression, and the modes of the index expression.
                         // All are tied.
                         let mut modes = vec![&mut place.mode];
                         modes.extend(e_ptr.into_modes_mut());
@@ -228,16 +252,35 @@ impl<'ctx> Normalizer<'ctx> {
             }
             tast::ExprKind::ArrayE(array) => {
                 // Destination
-                let dest_def = self.fresh_vardef(array[0].ty, e.span);
+                let dest_def = self.fresh_vardef(e.ty, e.span);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
                 stmts.push(DeclareS(dest_def));
 
+                // Visit each item in the array
                 let array_vars = array
                     .iter_mut()
                     .map(|item| self.visit_expr(stmts, item, default(), structs, ret_ptr))
                     .collect();
 
+                // Finally, assign the array to the destination
                 stmts.push(AssignS(destination, RValue::Array(array_vars)));
+
+                Reference::new_moved(destination)
+            }
+            tast::ExprKind::TupleE(items) => {
+                // Destination
+                let dest_def = self.fresh_vardef(e.ty, e.span);
+                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
+                stmts.push(DeclareS(dest_def));
+
+                // Visit each item in the tuple
+                let items_vars = items
+                    .iter_mut()
+                    .map(|item| self.visit_expr(stmts, item, default(), structs, ret_ptr))
+                    .collect();
+
+                // Finally, assign the tuple to the destination
+                stmts.push(AssignS(destination, RValue::Tuple(items_vars)));
 
                 Reference::new_moved(destination)
             }
@@ -320,6 +363,20 @@ impl<'ctx> Normalizer<'ctx> {
                         );
 
                         Place::FieldP(strukt.as_ptr(), field)
+                    }
+                    tast::PlaceKind::ElemP(box tuple, elem) => {
+                        let tuple = self.visit_expr(
+                            stmts,
+                            tuple,
+                            Some(Mode::SMutBorrowed),
+                            structs,
+                            ret_ptr,
+                        );
+
+                        // Write the element index as a string.
+                        let field = self.arena.alloc(format!("{elem}"));
+
+                        Place::FieldP(tuple.as_ptr(), field)
                     }
                 };
                 let lhs = Pointer::new(self.arena, self.arena.alloc(lhs));

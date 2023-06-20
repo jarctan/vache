@@ -43,7 +43,7 @@ impl<'ctx> Place<'ctx> {
     /// variable need not to exist beforehand.
     pub fn uses_as_lhs<'a>(&'a self) -> Box<dyn Iterator<Item = Loc<'ctx>> + 'a> {
         match self {
-            VarP(_) | FieldP(_, _) => boxed(std::iter::empty()),
+            VarP(..) | FieldP(..) => boxed(std::iter::empty()),
             IndexP(..) => boxed(self.uses_as_rhs()),
         }
     }
@@ -98,7 +98,7 @@ impl fmt::Debug for Place<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             VarP(var) => write!(f, "{var:?}"),
-            FieldP(pointer, field) => write!(f, "({pointer:?}).{field}"),
+            FieldP(strukt, field) => write!(f, "({strukt:?}).{field}"),
             IndexP(array, index) => write!(f, "({array:?})[{index:?}]"),
         }
     }

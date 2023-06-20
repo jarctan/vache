@@ -45,4 +45,6 @@ pub enum PlaceKind<'ctx> {
     IndexP(Box<Expr<'ctx>>, Box<Expr<'ctx>>),
     /// An field in an expression.
     FieldP(Box<Expr<'ctx>>, &'ctx str),
+    /// An element in a tuple.
+    ElemP(Box<Expr<'ctx>>, usize),
 }

@@ -27,6 +27,8 @@ pub enum Value<'ctx> {
     StructV(&'ctx str, HashMap<&'ctx str, ValueRef>),
     /// Array.
     ArrayV(Vec<ValueRef>),
+    /// Tuple.
+    TupleV(Vec<ValueRef>),
     /// A range between `start` and `end`.
     RangeV(ValueRef, ValueRef),
 }
@@ -50,6 +52,13 @@ impl fmt::Debug for Value<'_> {
                 display.finish()
             }
             ArrayV(array) => f.debug_list().entries(array).finish(),
+            TupleV(items) => {
+                let mut display = f.debug_tuple("");
+                for item in items {
+                    display.field(item);
+                }
+                display.finish()
+            }
         }
     }
 }

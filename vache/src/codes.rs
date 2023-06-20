@@ -31,5 +31,7 @@ pub const AS_MUT_NOT_PLACE_ERROR: &str = "E0014";
 /// Requiring an action that can only be executed within loops, but we are not
 /// in one.
 pub const NOT_IN_LOOP_ERROR: &str = "E0015";
+/// Tuple access error.
+pub const TUPLE_ACCESS_ERROR: &str = "E0016";
 /// Temporary: empty list error.
 pub const EMPTY_LIST_ERROR: &str = "E0100";

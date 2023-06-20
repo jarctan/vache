@@ -191,6 +191,11 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         match &mut ty.kind {
             UnitT | BoolT | IntT | StrT | HoleT => (),
             ArrayT(item) => self.check_ty(&mut item.with_span(ty.span)),
+            TupleT(items) => {
+                for item in items.iter() {
+                    self.check_ty(&mut item.with_span(ty.span));
+                }
+            }
             IterT(item) => self.check_ty(&mut item.with_span(ty.span)),
             VarT(name) => match self.valid_type_names.get(name) {
                 Some(TypeNameKind::Struct) => {
@@ -325,10 +330,56 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         self.ctx.emit(
                             Diagnostic::error()
                                 .with_code(FIELD_NOT_STRUCT_ERROR)
-                                .with_message(
-                                    "Cannot get a field of something which is not a struct",
-                                )
+                                .with_message("Field access only works for structures")
                                 .with_labels(vec![s.span.as_label().with_message("has no fields")]),
+                        );
+                        None
+                    }
+                }
+            }
+            ast::PlaceKind::ElemP(box tuple, elem) => {
+                let tuple = self.visit_expr(tuple, ret_ty, in_loop);
+                match tuple.ty {
+                    TupleT(elems) => {
+                        // Check that the field we want to access exists
+                        let ty = match elems.get(elem) {
+                            Some(ty) => *ty,
+                            None => {
+                                self.ctx.emit(
+                                    Diagnostic::error()
+                                        .with_code(TUPLE_ACCESS_ERROR)
+                                        .with_message(format!("Tuple index is out of bounds"))
+                                        .with_labels(vec![tuple.span.as_label().with_message(
+                                            format!("has only {} elements", elems.len()),
+                                        )]),
+                                );
+                                return None;
+                            }
+                        };
+
+                        Some(Place {
+                            stm: tuple.stm,
+                            kind: ElemP(boxed(tuple), elem),
+                            mode: Mode::Assigning,
+                            ty,
+                            span: place.span,
+                        })
+                    }
+                    HoleT => Some(Place {
+                        stm: tuple.stm,
+                        kind: ElemP(boxed(tuple), elem),
+                        mode: Mode::Assigning,
+                        ty: HoleT,
+                        span: place.span,
+                    }),
+                    _ => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_message("This kind of indexing only works for tuples")
+                                .with_labels(vec![tuple
+                                    .span
+                                    .as_label()
+                                    .with_message("has no elements")]),
                         );
                         None
                     }
@@ -534,15 +585,56 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     } else {
                         self.ctx.emit(
                             Diagnostic::error()
-                                .with_message(
-                                    "Cannot get a field of something which is not a struct",
-                                )
+                                .with_code(FIELD_NOT_STRUCT_ERROR)
+                                .with_message("Field access only works for structures")
                                 .with_labels(vec![s.span.as_label().with_message("has no fields")]),
                         );
                         Expr::hole(span)
                     }
                 }
-
+                ast::PlaceKind::ElemP(box tuple, elem) => {
+                    let tuple = self.visit_expr(tuple, ret_ty, in_loop);
+                    if let TupleT(elems) = &tuple.ty {
+                        // Check that the field we want to access exists
+                        let ty = match elems.get(elem) {
+                            Some(ty) => *ty,
+                            None => {
+                                self.ctx.emit(
+                                    Diagnostic::error()
+                                        .with_code(TUPLE_ACCESS_ERROR)
+                                        .with_message(format!("Tuple index is out of bounds"))
+                                        .with_labels(vec![tuple.span.as_label().with_message(
+                                            format!("has only {} elements", elems.len()),
+                                        )]),
+                                );
+                                HoleT
+                            }
+                        };
+                        let stm = tuple.stm; // Needed now because we move `tuple` after
+                        Expr::new(
+                            PlaceE(Place {
+                                kind: ElemP(boxed(tuple), elem),
+                                mode: place.mode,
+                                ty,
+                                stm,
+                                span: place.span,
+                            }),
+                            ty,
+                            stm,
+                            span,
+                        )
+                    } else {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_message("This kind of indexing only works for tuples")
+                                .with_labels(vec![tuple
+                                    .span
+                                    .as_label()
+                                    .with_message("has no elements")]),
+                        );
+                        Expr::hole(span)
+                    }
+                }
                 ast::PlaceKind::IndexP(box e, box ix) => {
                     let e = self.visit_expr(e, ret_ty, in_loop);
                     let ix = self.visit_expr(ix, ret_ty, in_loop);
@@ -738,20 +830,21 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     );
                     return Expr::hole(span);
                 }
+
                 // Compute the type of the items
-                // Because of borrowing rules, we need to do that before we immutably borrow
-                // `self` through `.get_struct()` since we need a mutable borrow into `self`
-                // here.
                 let array: Vec<Expr> = array
                     .into_iter()
                     .map(|expr| self.visit_expr(expr, ret_ty, in_loop))
                     .collect();
 
+                // Compute the common stratum, which is the max of the stratum of all the items
                 let common_stm = array
                     .iter()
                     .fold(Stratum::static_stm(), |s1, Expr { stm: s2, .. }| {
                         core::cmp::max(s1, *s2)
                     });
+
+                // Check that all items have the same type and compute the final type
                 let ty = ArrayT(self.ctx.alloc(array[0].ty));
                 if !array.iter().all(|item| item.ty == array[0].ty) {
                     self.ctx.emit(
@@ -764,7 +857,27 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             .with_labels(vec![span.into()]),
                     );
                 }
+
                 Expr::new(ArrayE(array), ty, common_stm, span)
+            }
+            ast::ExprKind::TupleE(items) => {
+                // Compute the type each the items
+                let items: Vec<Expr> = items
+                    .into_iter()
+                    .map(|expr| self.visit_expr(expr, ret_ty, in_loop))
+                    .collect();
+
+                let items_ty: Vec<Ty> = items.iter().map(|item| item.ty).collect();
+                let items_ty: &'ctx [Ty] = self.ctx.alloc(items_ty);
+
+                // Compute the common stratum, which is the max of the stratum of all the items
+                let common_stm = items
+                    .iter()
+                    .fold(Stratum::static_stm(), |s1, Expr { stm: s2, .. }| {
+                        core::cmp::max(s1, *s2)
+                    });
+
+                Expr::new(TupleE(items), TupleT(items_ty), common_stm, span)
             }
             ast::ExprKind::RangeE(box start, box end) => {
                 let start = self.visit_expr(start, ret_ty, in_loop);
@@ -1229,6 +1342,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     None
                 }
             }
+            ast::ExprKind::TupleE(_) => todo!(),
             ast::ExprKind::RangeE(..)
             | ast::ExprKind::StructE { .. }
             | ast::ExprKind::ArrayE(_)

@@ -95,6 +95,8 @@ pub enum ExprKind<'ctx> {
     },
     /// Array creation.
     ArrayE(Vec<Expr<'ctx>>),
+    /// Tuple creation.
+    TupleE(Vec<Expr<'ctx>>),
     /// A function call.
     CallE {
         /// Name/identifier of the function.
@@ -400,13 +402,22 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                         let mut pairs = pair.into_inner();
                         consume!(pairs, Rule::lb);
                         consume_back!(pairs, Rule::rb);
-                        let expr = ArrayE(
+                        ArrayE(
                             pairs
                                 .filter(|rule| !matches!(rule.as_rule(), Rule::cma))
                                 .map(|pair| ctx.parse(pair))
                                 .collect(),
-                        );
-                        expr
+                        )
+                    }
+                    Rule::tuple => {
+                        let mut pairs = pair.into_inner();
+                        consume!(pairs, Rule::lp);
+                        consume_back!(pairs, Rule::rp);
+                        let items = pairs
+                            .filter(|pair| !matches!(pair.as_rule(), Rule::cma))
+                            .map(|item| ctx.parse(item))
+                            .collect();
+                        TupleE(items)
                     }
                     Rule::with_postfix | Rule::primitive | Rule::matched_primitive => {
                         Expr::parse(pair, ctx).kind
@@ -472,10 +483,9 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                         let mut pairs = pair.into_inner();
                         let name = consume!(pairs).as_str();
                         consume!(pairs, Rule::lcb);
+                        consume_back!(pairs, Rule::rcb);
                         let fields = pairs
-                            .filter(|pair| {
-                                !matches!(pair.as_rule(), Rule::lcb | Rule::cln | Rule::cma)
-                            })
+                            .filter(|pair| !matches!(pair.as_rule(), Rule::cln | Rule::cma))
                             .array_chunks::<2>()
                             .map(|[field, value]| {
                                 let field: VarUse = ctx.parse(field);
@@ -521,12 +531,19 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                             Rule::field_postfix => {
                                 let mut pairs = pair.into_inner();
                                 consume!(pairs, Rule::dt);
-                                let field: VarUse = ctx.parse(consume!(pairs));
-                                PlaceE(Place::new(
-                                    FieldP(boxed(acc), field.into()),
-                                    span,
-                                    default(),
-                                ))
+                                // After a `.`, we have either an `ident` or a tuple index.
+                                if let Some(pair) = consume_opt!(pairs, Rule::ident) {
+                                    let field: VarUse = ctx.parse(pair);
+                                    PlaceE(Place::new(
+                                        FieldP(boxed(acc), field.into()),
+                                        span,
+                                        default(),
+                                    ))
+                                } else {
+                                    let pair = consume!(pairs, Rule::tuple_idx);
+                                    let el = pair.as_str().parse().expect("is not valid usize");
+                                    PlaceE(Place::new(ElemP(boxed(acc), el), span, default()))
+                                }
                             }
                             Rule::index_postfix => {
                                 let mut pairs = pair.into_inner();

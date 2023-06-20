@@ -47,13 +47,17 @@ binop = { prefix* ~ (with_postfix | primitive) ~ (infix ~ prefix* ~ (with_postfi
 with_postfix = { primitive ~ (field_postfix | index_postfix | call_postfix | range_postfix)+ }
 
 primitive           =  { struct_instance | primitive_wo_struct }
-primitive_wo_struct = _{ array | unit | integer | boolean | string | namespaced | subexpr | ident }
+primitive_wo_struct = _{ array | unit | integer | boolean | string | namespaced | tuple | subexpr | ident }
+
+tuple = { lp ~ expr ~ cma ~ (expr ~ (cma ~ expr)* ~ cma?)? ~ rp }
 
 subexpr = { lp ~ expr ~ rp }
 
 namespaced = { ident ~ (clncln ~ ident)+ }
 
-field_postfix = { dt ~ ident }
+field_postfix = { dt ~ (ident | tuple_idx) }
+
+tuple_idx = @{ (('1'..'9') ~ ('0'..'9')*) | "0" }
 
 index_postfix = { lb ~ primitive ~ rb }
 
@@ -69,7 +73,7 @@ boolean = @{ "true" | "false" }
 
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
-ty = { iter_ty | array_ty | int_ty | str_ty | bool_ty | unit | ident }
+ty = { iter_ty | array_ty | int_ty | str_ty | bool_ty | unit | ident | tuple_ty }
 
 // Separate iter_ty from others because it is left recursive
 iter_ty = { non_iter_ty ~ rg+ }
@@ -77,6 +81,8 @@ iter_ty = { non_iter_ty ~ rg+ }
 non_iter_ty = { array_ty | int_ty | str_ty | bool_ty | unit | ident }
 
 array_ty = { lb ~ ty ~ rb }
+
+tuple_ty = { lp ~ ty ~ cma ~ (ty ~ (cma ~ ty)* ~ cma?)? ~ rp }
 
 bool_ty = { "bool" }
 

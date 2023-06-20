@@ -123,6 +123,11 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
                     self.visit_expr(item);
                 }
             }
+            TupleE(items) => {
+                for item in items {
+                    self.visit_expr(item);
+                }
+            }
             CallE { name: _, args } => {
                 for arg in args {
                     self.visit_expr(arg);
@@ -162,6 +167,7 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
                 self.visit_expr(i);
             }
             FieldP(box strukt, _) => self.visit_expr(strukt),
+            ElemP(box tuple, _) => self.visit_expr(tuple),
         }
     }
 }

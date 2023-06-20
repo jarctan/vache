@@ -77,6 +77,8 @@ pub enum ExprKind<'ctx> {
     },
     /// Array creation.
     ArrayE(Vec<Expr<'ctx>>),
+    /// Tuple creation.
+    TupleE(Vec<Expr<'ctx>>),
     /// A function call.
     CallE {
         /// Name/identifier of the function.
