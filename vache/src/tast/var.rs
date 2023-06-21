@@ -55,6 +55,12 @@ impl<'ctx> From<VarDef<'ctx>> for VarUse<'ctx> {
     }
 }
 
+impl<'ctx> From<VarDef<'ctx>> for Varname<'ctx> {
+    fn from(vardef: VarDef<'ctx>) -> Self {
+        vardef.var.name()
+    }
+}
+
 impl<'ctx> From<VarDef<'ctx>> for crate::ast::VarDef<'ctx> {
     fn from(vardef: VarDef<'ctx>) -> Self {
         Self {

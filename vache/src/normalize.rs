@@ -19,7 +19,7 @@ pub(crate) struct Normalizer<'ctx> {
     /// actually represent in the MIR.
     ///
     /// Represented as a vec for each different scope.
-    var_t9n: Vec<HashMap<Varname<'ctx>, Pointer<'ctx>>>,
+    var_t9n: Vec<HashMap<Varname<'ctx>, &'ctx Place<'ctx>>>,
 }
 
 impl<'ctx> Normalizer<'ctx> {
@@ -70,8 +70,11 @@ impl<'ctx> Normalizer<'ctx> {
     }
 
     /// Creates a fresh variable definition, that is related to some code`span`.
-    fn fresh_vardef(&self, ty: Ty<'ctx>, span: Span) -> VarDef<'ctx> {
+    fn fresh_vardef(&mut self, ty: Ty<'ctx>, span: Span) -> VarDef<'ctx> {
         let var = VarUse::fresh(self.arena, span);
+
+        // Add the trivial translation for that vardef
+        self.add_translation(var, self.arena.alloc(Place::from(var)));
         VarDef {
             var,
             ty,
@@ -85,11 +88,12 @@ impl<'ctx> Normalizer<'ctx> {
     ///
     /// Since there are some identifiers that are patterns representing some
     /// field in the matched expression.
-    fn add_translation(&mut self, var: impl Into<Varname<'ctx>>, ptr: Pointer<'ctx>) {
+    fn add_translation(&mut self, var: impl Into<Varname<'ctx>>, place: &'ctx Place<'ctx>) {
+        let var = var.into();
         self.var_t9n
             .last_mut()
             .expect("there is always at least one translation env")
-            .insert(var.into(), ptr);
+            .insert(var, place);
     }
 
     /// Gets the pointer translation of a variable name.
@@ -97,14 +101,15 @@ impl<'ctx> Normalizer<'ctx> {
     /// If that variable is a pattern, we will get the pointer into what the
     /// pattern represents. Otherwise, the variable is a legit variable and
     /// we will get a new pointer into it.
-    fn get_translation_ptr(&self, var: impl Into<Varname<'ctx>>) -> Pointer<'ctx> {
+    fn get_translation_ptr(&self, var: impl Into<Varname<'ctx>>) -> Option<Pointer<'ctx>> {
         let var = var.into();
-        self.var_t9n
+        let place = self
+            .var_t9n
             .iter()
             .rev() // Search through latest env first
             .find_map(|var_t9n| var_t9n.get(&var))
-            .copied()
-            .unwrap_or_else(|| Pointer::new(self.arena, self.arena.alloc(Place::from(var))))
+            .copied()?;
+        Some(Pointer::new(self.arena, place))
     }
 
     /// Gets the place translation of a variable name.
@@ -112,14 +117,13 @@ impl<'ctx> Normalizer<'ctx> {
     /// If that variable is a pattern, we will get the place to which the
     /// pattern points. Otherwise, the variable is a legit variable and we
     /// will get the actual place of that variable.
-    fn get_translation_place(&self, var: impl Into<Varname<'ctx>>) -> Place<'ctx> {
+    fn get_translation_place(&self, var: impl Into<Varname<'ctx>>) -> Option<Place<'ctx>> {
         let var = var.into();
         self.var_t9n
             .iter()
             .rev() // Search through latest env first
             .find_map(|var_t9n| var_t9n.get(&var))
-            .map(|ptr| *ptr.place())
-            .unwrap_or_else(|| var.into())
+            .map(|&&place| place)
     }
 
     /// Visits a pattern `pat` that stands for `ptr` and introduces the
@@ -129,7 +133,7 @@ impl<'ctx> Normalizer<'ctx> {
             tast::PatKind::BoolM(_) | tast::PatKind::IntegerM(_) | tast::PatKind::StringM(_) => {
                 todo!()
             }
-            tast::PatKind::IdentM(i) => self.add_translation(i.name(), ptr),
+            tast::PatKind::IdentM(i) => self.add_translation(i.name(), ptr.place()),
             tast::PatKind::VariantM {
                 enun: _,
                 variant: _,
@@ -207,7 +211,7 @@ impl<'ctx> Normalizer<'ctx> {
 
                 match &mut place.kind {
                     tast::PlaceKind::VarP(v) => {
-                        let ptr = self.get_translation_ptr(*v);
+                        let ptr = self.get_translation_ptr(*v).unwrap_or_else(|| panic!("Could not find translation for {v:?}"));
                         Reference::new(ptr, &mut place.mode)
                     }
                     tast::PlaceKind::FieldP(box strukt, field) => {
@@ -431,8 +435,8 @@ impl<'ctx> Normalizer<'ctx> {
         for stmt in &mut b.stmts {
             self.visit_stmt(stmt, &mut stmts, ret_ptr);
         }
-        self.pop_scope();
         let reference = self.visit_expr(&mut stmts, &mut b.ret, Some(Mode::Moved), ret_ptr);
+        self.pop_scope();
         (reference, stmts)
     }
 
@@ -450,9 +454,20 @@ impl<'ctx> Normalizer<'ctx> {
         ret_ptr: Pointer<'ctx>,
     ) {
         match s {
-            tast::Stmt::DeclareS(vardef, expr) => {
-                stmts.push(DeclareS(*vardef));
+            tast::Stmt::DeclareS(old_vardef, expr) => {
+                // Check if the variable already exists, if so create a new binding.
+                let vardef = if self.get_translation_place(*old_vardef).is_some() {
+                    self.fresh_vardef(old_vardef.ty, old_vardef.span)
+                } else {
+                    *old_vardef
+                };
+                stmts.push(DeclareS(vardef));
                 let tmp = self.visit_expr(stmts, expr, None, ret_ptr);
+
+                // Add the translation AFTER we computed the rhs, so that the rhs may still
+                // refer to the old value
+                self.add_translation(*old_vardef, self.arena.alloc(Place::from(vardef)));
+
                 stmts.push(AssignS(
                     Pointer::new(self.arena, self.arena.alloc(Place::VarP(vardef.name()))),
                     RValue::Place(tmp),
@@ -461,7 +476,7 @@ impl<'ctx> Normalizer<'ctx> {
             tast::Stmt::AssignS(place, expr) => {
                 let rhs = self.visit_expr(stmts, expr, None, ret_ptr);
                 let lhs = match &mut place.kind {
-                    tast::PlaceKind::VarP(ref var) => self.get_translation_place(*var),
+                    tast::PlaceKind::VarP(ref var) => self.get_translation_place(*var).expect(""),
                     tast::PlaceKind::IndexP(box array, box ix) => {
                         let array =
                             self.visit_expr(stmts, array, Some(Mode::SMutBorrowed), ret_ptr);
@@ -543,6 +558,12 @@ impl<'ctx> Normalizer<'ctx> {
         // Declare the return variable
         let mut body = vec![DeclareS(vardef)];
 
+        // Body scope
+        self.push_scope();
+        for &param in &f.params {
+            self.add_translation(param, self.arena.alloc(Place::from(param)));
+        }
+
         // Compute the body
         let (ret, inner_body) = self.visit_block(&mut f.body, ret_ptr);
         body.extend(inner_body);
@@ -550,6 +571,8 @@ impl<'ctx> Normalizer<'ctx> {
         // Move the result of the body into the final return value
         body.push(AssignS(ret_ptr, RValue::Place(ret)));
         body.push(ReturnS(ret_ptr));
+
+        self.pop_scope();
 
         Fun {
             name: f.name,

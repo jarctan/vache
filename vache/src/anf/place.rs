@@ -3,6 +3,7 @@
 use std::fmt;
 
 use super::{Loc, Pointer, VarUse, Varname};
+use crate::tast::VarDef;
 use crate::utils::boxed;
 
 /// Kinds of places.
@@ -85,6 +86,18 @@ impl<'ctx> From<VarUse<'ctx>> for Place<'ctx> {
 impl<'a, 'ctx> From<&'a VarUse<'ctx>> for Place<'ctx> {
     fn from(var: &'a VarUse<'ctx>) -> Self {
         VarP((*var).into())
+    }
+}
+
+impl<'ctx> From<VarDef<'ctx>> for Place<'ctx> {
+    fn from(vardef: VarDef<'ctx>) -> Self {
+        VarP(vardef.var.into())
+    }
+}
+
+impl<'a, 'ctx> From<&'a VarDef<'ctx>> for Place<'ctx> {
+    fn from(vardef: &'a VarDef<'ctx>) -> Self {
+        VarP(vardef.var.into())
     }
 }
 
