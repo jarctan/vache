@@ -63,10 +63,10 @@ macro_rules! consume_back {
 macro_rules! consume_opt {
     ($pairs: expr, $rule: pat) => {{
         if let Some(pair) = $pairs.peek() && matches!(pair.as_rule(), $rule) {
-                Some($pairs.next().unwrap())
-            } else {
-                None
-            }
+                    Some($pairs.next().unwrap())
+                } else {
+                    None
+                }
     }};
 }
 

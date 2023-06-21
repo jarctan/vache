@@ -10,23 +10,21 @@ use crate::tast;
 use crate::Arena;
 
 /// Typed AST to ANF transformer.
-pub(crate) struct Normalizer<'a, 'ctx: 'a> {
+pub(crate) struct Normalizer<'ctx> {
     /// Compiler arena.
     arena: &'ctx Arena,
     /// Current stratum.
     stm: Stratum,
-    /// Structures of the program.
-    structs: &'a HashMap<&'ctx str, Struct<'ctx>>,
-    /// Enums of the program.
-    enums: &'a HashMap<&'ctx str, Enum<'ctx>>,
     /// Variable translation between pattern identifiers and the places they
     /// actually represent in the MIR.
-    var_t9n: HashMap<Varname<'ctx>, Pointer<'ctx>>,
+    ///
+    /// Represented as a vec for each different scope.
+    var_t9n: Vec<HashMap<Varname<'ctx>, Pointer<'ctx>>>,
 }
 
-impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
+impl<'ctx> Normalizer<'ctx> {
     /// Normalize a given program.
-    pub fn normalize<'tast: 'a>(p: &'ctx mut tast::Program<'tast>) -> Program<'ctx> {
+    pub fn normalize<'tast>(p: &'ctx mut tast::Program<'tast>) -> Program<'ctx> {
         let tast::Program {
             funs,
             structs,
@@ -37,15 +35,13 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
         let mut normalizer = Self {
             arena: *arena,
             stm: Stratum::static_stm(),
-            structs,
-            enums,
-            var_t9n: default(),
+            var_t9n: vec![default()],
         };
 
         Program {
             funs: funs
                 .iter_mut()
-                .map(|(name, f)| (*name, normalizer.visit_fun(f, structs)))
+                .map(|(name, f)| (*name, normalizer.visit_fun(f)))
                 .collect(),
             arena,
             structs,
@@ -53,14 +49,24 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
         }
     }
 
-    /// Pushes a scope, updating the current stratum id consequently.
+    /// Pushes a new scope.
     fn push_scope(&mut self) {
+        // Update the stratum
         self.stm = u64::from(self.stm).checked_add(1).unwrap().into();
+
+        // Pushes a new variable translation environment
+        self.var_t9n.push(default());
     }
 
-    /// Pops a scope, updating the current stratum id consequently.
+    /// Pops a scope.
     fn pop_scope(&mut self) {
+        // Update the stratum
         self.stm = u64::from(self.stm).checked_sub(1).unwrap().into();
+
+        // Pops the variable translation environment
+        self.var_t9n
+            .pop()
+            .expect("there should be always at least one environment");
     }
 
     /// Creates a fresh variable definition, that is related to some code`span`.
@@ -74,26 +80,50 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
         }
     }
 
+    /// Add the translation between a pattern-introduced variable name and the
+    /// pointer it actually represents.
+    ///
+    /// Since there are some identifiers that are patterns representing some
+    /// field in the matched expression.
     fn add_translation(&mut self, var: impl Into<Varname<'ctx>>, ptr: Pointer<'ctx>) {
-        self.var_t9n.insert(var.into(), ptr);
+        self.var_t9n
+            .last_mut()
+            .expect("there is always at least one translation env")
+            .insert(var.into(), ptr);
     }
 
+    /// Gets the pointer translation of a variable name.
+    ///
+    /// If that variable is a pattern, we will get the pointer into what the
+    /// pattern represents. Otherwise, the variable is a legit variable and
+    /// we will get a new pointer into it.
     fn get_translation_ptr(&self, var: impl Into<Varname<'ctx>>) -> Pointer<'ctx> {
         let var = var.into();
         self.var_t9n
-            .get(&var)
+            .iter()
+            .rev() // Search through latest env first
+            .find_map(|var_t9n| var_t9n.get(&var))
             .copied()
             .unwrap_or_else(|| Pointer::new(self.arena, self.arena.alloc(Place::from(var))))
     }
 
+    /// Gets the place translation of a variable name.
+    ///
+    /// If that variable is a pattern, we will get the place to which the
+    /// pattern points. Otherwise, the variable is a legit variable and we
+    /// will get the actual place of that variable.
     fn get_translation_place(&self, var: impl Into<Varname<'ctx>>) -> Place<'ctx> {
         let var = var.into();
         self.var_t9n
-            .get(&var)
+            .iter()
+            .rev() // Search through latest env first
+            .find_map(|var_t9n| var_t9n.get(&var))
             .map(|ptr| *ptr.place())
             .unwrap_or_else(|| var.into())
     }
 
+    /// Visits a pattern `pat` that stands for `ptr` and introduces the
+    /// necessary variables for it in the context.
     fn introduce_pat_vars(&mut self, pat: &tast::Pat<'ctx>, ptr: Pointer<'ctx>) {
         match &pat.kind {
             tast::PatKind::BoolM(_) | tast::PatKind::IntegerM(_) | tast::PatKind::StringM(_) => {
@@ -129,7 +159,6 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
         stmts: &mut Vec<Stmt<'ctx>>,
         e: &'ctx mut tast::Expr<'tast>,
         mode: Option<Mode>,
-        structs: &HashMap<&'ctx str, Struct<'ctx>>,
         ret_ptr: Pointer<'ctx>,
     ) -> Reference<'ctx> {
         match &mut e.kind {
@@ -163,8 +192,8 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
             }
             tast::ExprKind::RangeE(start, end) => {
                 let vardef = self.fresh_vardef(e.ty, e.span);
-                let start_ptr = self.visit_expr(stmts, start, Some(Mode::Borrowed), structs, ret_ptr);
-                let end_ptr = self.visit_expr(stmts, end, Some(Mode::Borrowed), structs, ret_ptr);
+                let start_ptr = self.visit_expr(stmts, start, Some(Mode::Borrowed), ret_ptr);
+                let end_ptr = self.visit_expr(stmts, end, Some(Mode::Borrowed), ret_ptr);
                 let final_ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
                 stmts.push(DeclareS(vardef));
                 stmts.push(AssignS(final_ptr, RValue::Range(start_ptr, end_ptr)));
@@ -182,7 +211,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
                         Reference::new(ptr, &mut place.mode)
                     }
                     tast::PlaceKind::FieldP(box strukt, field) => {
-                        let strukt_ptr = self.visit_expr(stmts, strukt, Some(Mode::Moved), structs, ret_ptr);
+                        let strukt_ptr = self.visit_expr(stmts, strukt, Some(Mode::Moved), ret_ptr);
                         let final_ptr = Pointer::new(
                             self.arena,
                             self.arena.alloc(Place::FieldP(strukt_ptr.as_ptr(), field)),
@@ -196,7 +225,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
                         Reference::new_multi_modes(final_ptr, modes)
                     }
                     tast::PlaceKind::ElemP(box tuple, elem) => {
-                        let tuple_ptr = self.visit_expr(stmts, tuple, Some(Mode::Moved), structs, ret_ptr);
+                        let tuple_ptr = self.visit_expr(stmts, tuple, Some(Mode::Moved), ret_ptr);
 
                         // Write the element index as a string.
                         let field = self.arena.alloc(format!("{elem}"));
@@ -214,8 +243,8 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
                         Reference::new_multi_modes(final_ptr, modes)
                     }
                     tast::PlaceKind::IndexP(box e, box ix) => {
-                        let e_ptr = self.visit_expr(stmts, e, Some(Mode::SMutBorrowed), structs, ret_ptr);
-                        let ix_ptr = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), structs, ret_ptr);
+                        let e_ptr = self.visit_expr(stmts, e, Some(Mode::SMutBorrowed), ret_ptr);
+                        let ix_ptr = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), ret_ptr);
                         let final_ptr = Pointer::new(
                             self.arena,
                             self.arena
@@ -236,7 +265,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
             tast::ExprKind::CallE { name, args } => {
                 let arg_vars = args
                     .iter_mut()
-                    .map(|arg| self.visit_expr(stmts, arg, None, structs, ret_ptr))
+                    .map(|arg| self.visit_expr(stmts, arg, None, ret_ptr))
                     .collect();
 
                 let vardef = self.fresh_vardef(e.ty, e.span);
@@ -254,7 +283,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
             tast::ExprKind::VariantE { enun, variant, args } => {
                 let args = args
                     .iter_mut()
-                    .map(|arg| self.visit_expr(stmts, arg, None, structs, ret_ptr))
+                    .map(|arg| self.visit_expr(stmts, arg, None, ret_ptr))
                     .collect();
 
                 let vardef = self.fresh_vardef(e.ty, e.span);
@@ -265,7 +294,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
             }
             tast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
                 // The switch variable
-                let cond = self.visit_expr(stmts, cond, Some(Mode::SBorrowed), structs, ret_ptr);
+                let cond = self.visit_expr(stmts, cond, Some(Mode::SBorrowed), ret_ptr);
 
                 // Destination
                 let dest_def = self.fresh_vardef(iftrue.ret.ty, e.span);
@@ -273,10 +302,10 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
                 stmts.push(DeclareS(dest_def));
 
                 // Branches
-                let (iftrue_ptr, mut iftrue) = self.visit_block(iftrue, structs, ret_ptr);
+                let (iftrue_ptr, mut iftrue) = self.visit_block(iftrue, ret_ptr);
                 iftrue.push(AssignS(destination, RValue::Place(iftrue_ptr)));
 
-                let (iffalse_ptr, mut iffalse) = self.visit_block(iffalse, structs, ret_ptr);
+                let (iffalse_ptr, mut iffalse) = self.visit_block(iffalse, ret_ptr);
                 iffalse.push(AssignS(destination, RValue::Place(iffalse_ptr)));
 
                 // If condition
@@ -292,7 +321,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
                     Ty::StrT => todo!(),
                     Ty::EnumT(_) => {
                         // The switch variable
-                        let matched = self.visit_expr(stmts, matched, Some(Mode::SBorrowed), structs, ret_ptr);
+                        let matched = self.visit_expr(stmts, matched, Some(Mode::SBorrowed), ret_ptr);
                         let dest_def = self.fresh_vardef(e.ty, e.span);
                         let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
 
@@ -301,7 +330,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
                             let mut branch_stmts = vec![];
                             self.push_scope();
                             self.introduce_pat_vars(pattern, matched.as_ptr());
-                            self.visit_expr(&mut branch_stmts,expr,  Some(Mode::Moved),structs, destination);
+                            self.visit_expr(&mut branch_stmts,expr,  Some(Mode::Moved),destination);
                             self.pop_scope();
                             (pattern.discriminant(), branch_stmts)
                         }).collect();
@@ -319,7 +348,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
                 }
             }
             tast::ExprKind::BlockE(box b) => {
-                let (ret, block) = self.visit_block(b, structs, ret_ptr);
+                let (ret, block) = self.visit_block(b, ret_ptr);
                 stmts.push(BlockS(block));
                 ret
             }
@@ -334,7 +363,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
 
                 let field_vars = fields
                     .iter_mut()
-                    .map(|(name, field)| (*name, self.visit_expr(stmts, field, default(), structs, ret_ptr)))
+                    .map(|(name, field)| (*name, self.visit_expr(stmts, field, default(), ret_ptr)))
                     .collect();
 
                 stmts.push(AssignS(
@@ -356,7 +385,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
                 // Visit each item in the array
                 let array_vars = array
                     .iter_mut()
-                    .map(|item| self.visit_expr(stmts, item, default(), structs, ret_ptr))
+                    .map(|item| self.visit_expr(stmts, item, default(), ret_ptr))
                     .collect();
 
                 // Finally, assign the array to the destination
@@ -373,7 +402,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
                 // Visit each item in the tuple
                 let items_vars = items
                     .iter_mut()
-                    .map(|item| self.visit_expr(stmts, item, default(), structs, ret_ptr))
+                    .map(|item| self.visit_expr(stmts, item, default(), ret_ptr))
                     .collect();
 
                 // Finally, assign the tuple to the destination
@@ -395,17 +424,15 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
     fn visit_block<'tast>(
         &mut self,
         b: &'ctx mut tast::Block<'tast>,
-        structs: &HashMap<&'ctx str, Struct<'ctx>>,
         ret_ptr: Pointer<'ctx>,
     ) -> (Reference<'ctx>, Block<'ctx>) {
         let mut stmts: Block = default();
         self.push_scope();
         for stmt in &mut b.stmts {
-            self.visit_stmt(stmt, &mut stmts, structs, ret_ptr);
+            self.visit_stmt(stmt, &mut stmts, ret_ptr);
         }
         self.pop_scope();
-        let reference =
-            self.visit_expr(&mut stmts, &mut b.ret, Some(Mode::Moved), structs, ret_ptr);
+        let reference = self.visit_expr(&mut stmts, &mut b.ret, Some(Mode::Moved), ret_ptr);
         (reference, stmts)
     }
 
@@ -420,55 +447,38 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
         &mut self,
         s: &'ctx mut tast::Stmt<'tast>,
         stmts: &mut Vec<Stmt<'ctx>>,
-        structs: &HashMap<&'ctx str, Struct<'ctx>>,
         ret_ptr: Pointer<'ctx>,
     ) {
         match s {
             tast::Stmt::DeclareS(vardef, expr) => {
                 stmts.push(DeclareS(*vardef));
-                let tmp = self.visit_expr(stmts, expr, None, structs, ret_ptr);
+                let tmp = self.visit_expr(stmts, expr, None, ret_ptr);
                 stmts.push(AssignS(
                     Pointer::new(self.arena, self.arena.alloc(Place::VarP(vardef.name()))),
                     RValue::Place(tmp),
                 ));
             }
             tast::Stmt::AssignS(place, expr) => {
-                let rhs = self.visit_expr(stmts, expr, None, structs, ret_ptr);
+                let rhs = self.visit_expr(stmts, expr, None, ret_ptr);
                 let lhs = match &mut place.kind {
                     tast::PlaceKind::VarP(ref var) => self.get_translation_place(*var),
                     tast::PlaceKind::IndexP(box array, box ix) => {
-                        let array = self.visit_expr(
-                            stmts,
-                            array,
-                            Some(Mode::SMutBorrowed),
-                            structs,
-                            ret_ptr,
-                        );
+                        let array =
+                            self.visit_expr(stmts, array, Some(Mode::SMutBorrowed), ret_ptr);
 
-                        let ix =
-                            self.visit_expr(stmts, ix, Some(Mode::SBorrowed), structs, ret_ptr);
+                        let ix = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), ret_ptr);
 
                         Place::IndexP(array.as_ptr(), ix.as_ptr())
                     }
                     tast::PlaceKind::FieldP(box strukt, field) => {
-                        let strukt = self.visit_expr(
-                            stmts,
-                            strukt,
-                            Some(Mode::SMutBorrowed),
-                            structs,
-                            ret_ptr,
-                        );
+                        let strukt =
+                            self.visit_expr(stmts, strukt, Some(Mode::SMutBorrowed), ret_ptr);
 
                         Place::FieldP(strukt.as_ptr(), field)
                     }
                     tast::PlaceKind::ElemP(box tuple, elem) => {
-                        let tuple = self.visit_expr(
-                            stmts,
-                            tuple,
-                            Some(Mode::SMutBorrowed),
-                            structs,
-                            ret_ptr,
-                        );
+                        let tuple =
+                            self.visit_expr(stmts, tuple, Some(Mode::SMutBorrowed), ret_ptr);
 
                         // Write the element index as a string.
                         let field = self.arena.alloc(format!("{elem}"));
@@ -482,16 +492,10 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
             tast::Stmt::WhileS { cond, body } => {
                 let mut cond_block = vec![];
                 self.push_scope();
-                let cond = self.visit_expr(
-                    &mut cond_block,
-                    cond,
-                    Some(Mode::Borrowed),
-                    structs,
-                    ret_ptr,
-                );
+                let cond = self.visit_expr(&mut cond_block, cond, Some(Mode::Borrowed), ret_ptr);
                 self.pop_scope();
 
-                let (_, body) = self.visit_block(body, structs, ret_ptr);
+                let (_, body) = self.visit_block(body, ret_ptr);
 
                 stmts.push(WhileS {
                     cond_block,
@@ -518,13 +522,13 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
                 self.pop_scope();*/
             }
             tast::Stmt::ExprS(e) => {
-                self.visit_expr(stmts, e, Some(Mode::Moved), structs, ret_ptr);
+                self.visit_expr(stmts, e, Some(Mode::Moved), ret_ptr);
             }
             tast::Stmt::HoleS => panic!("Normalization should not be run on a code with holes"),
             tast::Stmt::BreakS => stmts.push(BreakS),
             tast::Stmt::ContinueS => stmts.push(ContinueS),
             tast::Stmt::ReturnS(ret) => {
-                let ret = self.visit_expr(stmts, ret, Some(Mode::Moved), structs, ret_ptr);
+                let ret = self.visit_expr(stmts, ret, Some(Mode::Moved), ret_ptr);
                 stmts.push(AssignS(ret_ptr, RValue::Place(ret)));
                 stmts.push(ReturnS(ret_ptr));
             }
@@ -532,11 +536,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
     }
 
     /// Visits a function.
-    fn visit_fun<'tast>(
-        &mut self,
-        f: &'ctx mut tast::Fun<'tast>,
-        structs: &HashMap<&'ctx str, Struct<'ctx>>,
-    ) -> Fun<'ctx> {
+    fn visit_fun<'tast>(&mut self, f: &'ctx mut tast::Fun<'tast>) -> Fun<'ctx> {
         let vardef = self.fresh_vardef(f.ret_ty.kind, f.body.ret.span);
         let ret_ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
 
@@ -544,7 +544,7 @@ impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
         let mut body = vec![DeclareS(vardef)];
 
         // Compute the body
-        let (ret, inner_body) = self.visit_block(&mut f.body, structs, ret_ptr);
+        let (ret, inner_body) = self.visit_block(&mut f.body, ret_ptr);
         body.extend(inner_body);
 
         // Move the result of the body into the final return value
