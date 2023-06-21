@@ -2,7 +2,7 @@
 
 use num_bigint::BigInt;
 
-use super::{Block, Namespaced, Place, Span, Stratum, Ty};
+use super::{Block, Namespaced, Pat, Place, Span, Stratum, Ty};
 
 /// An expression in the typed AST.
 ///
@@ -90,6 +90,8 @@ pub enum ExprKind<'ctx> {
     IfE(Box<Expr<'ctx>>, Box<Block<'ctx>>, Box<Block<'ctx>>),
     /// A block expression.
     BlockE(Box<Block<'ctx>>),
+    /// A pattern matching.
+    MatchE(Box<Expr<'ctx>>, Vec<(Pat<'ctx>, Expr<'ctx>)>),
     /// Hole expression.
     HoleE,
     /// Enum variant.

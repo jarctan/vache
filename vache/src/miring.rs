@@ -44,7 +44,7 @@ impl<'ctx> MIRer<'ctx> {
     fn insert<'s>(
         &'s mut self,
         instr: Instr<'ctx>,
-        branches: impl IntoIterator<Item = (Branch, CfgLabel)>,
+        branches: impl IntoIterator<Item = (Branch<'ctx>, CfgLabel)>,
     ) -> CfgLabel {
         let from = self.cfg.add_node(instr);
         for (b, to) in branches {
@@ -61,7 +61,7 @@ impl<'ctx> MIRer<'ctx> {
         &'s mut self,
         label: CfgLabel,
         instr: Instr<'ctx>,
-        branches: impl IntoIterator<Item = (Branch, CfgLabel)>,
+        branches: impl IntoIterator<Item = (Branch<'ctx>, CfgLabel)>,
     ) {
         self.cfg[&label] = instr;
         for (b, to) in branches {
@@ -142,7 +142,7 @@ impl<'ctx> MIRer<'ctx> {
                 // If statement
                 let if_l = self.insert(
                     self.instr(InstrKind::Branch(cond)),
-                    [(TrueB, body_l), (FalseB, dest_l)],
+                    [(BoolB(true), body_l), (BoolB(false), dest_l)],
                 );
 
                 // Compute the condition.
@@ -175,8 +175,20 @@ impl<'ctx> MIRer<'ctx> {
                 self.pop_scope();
                 self.insert(
                     self.instr(InstrKind::Branch(cond)),
-                    [(TrueB, iftrue), (FalseB, iffalse)],
+                    [(BoolB(true), iftrue), (BoolB(false), iffalse)],
                 )
+            }
+            anf::Stmt::MatchS(matched, branches) => {
+                let branches: Vec<_> = branches
+                    .into_iter()
+                    .map(|(branch, stmts)| {
+                        self.push_scope();
+                        let branch_l = self.visit_stmts(stmts, dest_l, exit_l, break_l);
+                        self.pop_scope();
+                        (branch, branch_l)
+                    })
+                    .collect();
+                self.insert(self.instr(InstrKind::Branch(matched)), branches)
             }
             anf::Stmt::BlockS(b) => {
                 self.push_scope();

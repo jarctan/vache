@@ -20,12 +20,12 @@ pub use fun::Fun;
 pub use graph::{Cfg, CfgI, CfgLabel};
 #[cfg(test)]
 pub use instr::instr;
-pub use instr::{Branch, Instr, InstrKind};
+pub use instr::{Instr, InstrKind};
 pub use program::Program;
 
 pub use crate::anf::{
-    Enum, Loc, Mode, Namespaced, Place, Pointer, RValue, Reference, Stratum, Struct, Ty, VarDef,
-    VarUse, Varname,
+    Branch, Enum, Loc, Mode, Namespaced, Place, Pointer, RValue, Reference, Stratum, Struct, Ty,
+    VarDef, VarUse, Varname,
 };
 #[cfg(test)]
 pub use crate::tast::vardef;

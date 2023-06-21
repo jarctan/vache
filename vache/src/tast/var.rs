@@ -55,6 +55,19 @@ impl<'ctx> From<VarDef<'ctx>> for VarUse<'ctx> {
     }
 }
 
+impl<'ctx> From<VarDef<'ctx>> for crate::ast::VarDef<'ctx> {
+    fn from(vardef: VarDef<'ctx>) -> Self {
+        Self {
+            var: vardef.var,
+            ty: crate::ast::TyUse {
+                kind: vardef.ty,
+                span: vardef.span,
+            },
+            span: vardef.span,
+        }
+    }
+}
+
 /// Shortcut to create a new variable definition.
 #[cfg(test)]
 pub fn vardef<'ctx>(name: &'ctx str, ty: Ty<'ctx>, stm: Stratum) -> VarDef<'ctx> {

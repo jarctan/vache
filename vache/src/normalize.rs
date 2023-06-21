@@ -10,25 +10,47 @@ use crate::tast;
 use crate::Arena;
 
 /// Typed AST to ANF transformer.
-pub(crate) struct Normalizer<'ctx> {
+pub(crate) struct Normalizer<'a, 'ctx: 'a> {
     /// Compiler arena.
     arena: &'ctx Arena,
     /// Current stratum.
     stm: Stratum,
+    /// Structures of the program.
+    structs: &'a HashMap<&'ctx str, Struct<'ctx>>,
+    /// Enums of the program.
+    enums: &'a HashMap<&'ctx str, Enum<'ctx>>,
+    /// Variable translation between pattern identifiers and the places they
+    /// actually represent in the MIR.
+    var_t9n: HashMap<Varname<'ctx>, Pointer<'ctx>>,
 }
 
-impl<'ctx> Normalizer<'ctx> {
-    /// Creates a new MIR processor.
-    pub fn new(arena: &'ctx Arena) -> Self {
-        Self {
-            arena,
-            stm: Stratum::static_stm(),
-        }
-    }
-
+impl<'a, 'ctx: 'a> Normalizer<'a, 'ctx> {
     /// Normalize a given program.
-    pub fn normalize<'tast>(&mut self, p: &'ctx mut tast::Program<'tast>) -> Program<'ctx> {
-        self.visit_program(p)
+    pub fn normalize<'tast: 'a>(p: &'ctx mut tast::Program<'tast>) -> Program<'ctx> {
+        let tast::Program {
+            funs,
+            structs,
+            enums,
+            arena,
+        } = p;
+
+        let mut normalizer = Self {
+            arena: *arena,
+            stm: Stratum::static_stm(),
+            structs,
+            enums,
+            var_t9n: default(),
+        };
+
+        Program {
+            funs: funs
+                .iter_mut()
+                .map(|(name, f)| (*name, normalizer.visit_fun(f, structs)))
+                .collect(),
+            arena,
+            structs,
+            enums,
+        }
     }
 
     /// Pushes a scope, updating the current stratum id consequently.
@@ -49,6 +71,47 @@ impl<'ctx> Normalizer<'ctx> {
             ty,
             stm: self.stm,
             span,
+        }
+    }
+
+    fn add_translation(&mut self, var: impl Into<Varname<'ctx>>, ptr: Pointer<'ctx>) {
+        self.var_t9n.insert(var.into(), ptr);
+    }
+
+    fn get_translation_ptr(&self, var: impl Into<Varname<'ctx>>) -> Pointer<'ctx> {
+        let var = var.into();
+        self.var_t9n
+            .get(&var)
+            .copied()
+            .unwrap_or_else(|| Pointer::new(self.arena, self.arena.alloc(Place::from(var))))
+    }
+
+    fn get_translation_place(&self, var: impl Into<Varname<'ctx>>) -> Place<'ctx> {
+        let var = var.into();
+        self.var_t9n
+            .get(&var)
+            .map(|ptr| *ptr.place())
+            .unwrap_or_else(|| var.into())
+    }
+
+    fn introduce_pat_vars(&mut self, pat: &tast::Pat<'ctx>, ptr: Pointer<'ctx>) {
+        match &pat.kind {
+            tast::PatKind::BoolM(_) | tast::PatKind::IntegerM(_) | tast::PatKind::StringM(_) => {
+                todo!()
+            }
+            tast::PatKind::IdentM(i) => self.add_translation(i.name(), ptr),
+            tast::PatKind::VariantM {
+                enun: _,
+                variant: _,
+                args,
+            } => {
+                for (i, arg) in args.iter().enumerate() {
+                    let field = self.arena.alloc(format!("{}", i + 1));
+                    let place = self.arena.alloc(Place::FieldP(ptr, field));
+                    let ptr = Pointer::new(self.arena, place);
+                    self.introduce_pat_vars(arg, ptr);
+                }
+            }
         }
     }
 
@@ -115,7 +178,7 @@ impl<'ctx> Normalizer<'ctx> {
 
                 match &mut place.kind {
                     tast::PlaceKind::VarP(v) => {
-                        let ptr = Pointer::new(self.arena, self.arena.alloc(Place::from(*v)));
+                        let ptr = self.get_translation_ptr(*v);
                         Reference::new(ptr, &mut place.mode)
                     }
                     tast::PlaceKind::FieldP(box strukt, field) => {
@@ -221,6 +284,40 @@ impl<'ctx> Normalizer<'ctx> {
 
                 Reference::new_moved(destination)
             }
+            tast::ExprKind::MatchE(box matched, branches) => {
+                match matched.ty {
+                    Ty::UnitT => todo!(),
+                    Ty::BoolT => todo!(),
+                    Ty::IntT => todo!(),
+                    Ty::StrT => todo!(),
+                    Ty::EnumT(_) => {
+                        // The switch variable
+                        let matched = self.visit_expr(stmts, matched, Some(Mode::SBorrowed), structs, ret_ptr);
+                        let dest_def = self.fresh_vardef(e.ty, e.span);
+                        let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
+
+                        // Visit the branches, compute the discriminant
+                        let branches: HashMap<Branch, _> = branches.iter_mut().map(|(pattern, expr)| {
+                            let mut branch_stmts = vec![];
+                            self.push_scope();
+                            self.introduce_pat_vars(pattern, matched.as_ptr());
+                            self.visit_expr(&mut branch_stmts,expr,  Some(Mode::Moved),structs, destination);
+                            self.pop_scope();
+                            (pattern.discriminant(), branch_stmts)
+                        }).collect();
+
+                        // Destination
+                        stmts.push(DeclareS(dest_def));
+
+                        // If condition
+                        stmts.push(MatchS(matched, branches));
+
+                        Reference::new_moved(destination)
+                    },
+                    Ty::TupleT(_) => todo!(),
+                    _ => unreachable!()
+                }
+            }
             tast::ExprKind::BlockE(box b) => {
                 let (ret, block) = self.visit_block(b, structs, ret_ptr);
                 stmts.push(BlockS(block));
@@ -292,9 +389,9 @@ impl<'ctx> Normalizer<'ctx> {
     /// block in the CFG, and return the (entry) CFG label for it.
     ///
     /// Takes as arguments:
-    /// * The expression itself (as a parser AST node)
-    /// * The destination variable that will store the result of this expression
+    /// * The block itself (as a parser AST node)
     /// * The map of structures declarations.
+    /// * The _function_ return pointer.
     fn visit_block<'tast>(
         &mut self,
         b: &'ctx mut tast::Block<'tast>,
@@ -338,7 +435,7 @@ impl<'ctx> Normalizer<'ctx> {
             tast::Stmt::AssignS(place, expr) => {
                 let rhs = self.visit_expr(stmts, expr, None, structs, ret_ptr);
                 let lhs = match &mut place.kind {
-                    tast::PlaceKind::VarP(ref var) => var.into(),
+                    tast::PlaceKind::VarP(ref var) => self.get_translation_place(*var),
                     tast::PlaceKind::IndexP(box array, box ix) => {
                         let array = self.visit_expr(
                             stmts,
@@ -459,28 +556,6 @@ impl<'ctx> Normalizer<'ctx> {
             params: f.params.clone(),
             ret_v: Some(ret_ptr),
             body,
-        }
-    }
-
-    /// Visits a program, recursively producing CFGs for each function.
-    fn visit_program<'tast>(&mut self, p: &'ctx mut tast::Program<'tast>) -> Program<'ctx> {
-        let tast::Program {
-            funs,
-            structs,
-            enums,
-            arena,
-        } = p;
-
-        // Note: order is important.
-        // We must visit structures first.
-        Program {
-            funs: funs
-                .iter_mut()
-                .map(|(name, f)| (*name, self.visit_fun(f, structs)))
-                .collect(),
-            arena,
-            structs,
-            enums,
         }
     }
 }

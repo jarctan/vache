@@ -7,11 +7,13 @@ use num_traits::ToPrimitive;
 use proc_macro2::TokenStream;
 use string_builder::Builder as StringBuilder;
 use ExprKind::*;
+use PatKind::*;
 use PlaceKind::*;
 use Ty::*;
 
 use crate::tast::{
-    Block, Enum, Expr, ExprKind, Fun, Mode, Place, PlaceKind, Program, Stmt, Struct, Ty, Varname,
+    Block, Enum, Expr, ExprKind, Fun, Mode, Pat, PatKind, Place, PlaceKind, Program, Stmt, Struct,
+    Ty, Varname,
 };
 use crate::Context;
 
@@ -364,6 +366,21 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     if *(#cond) #iftrue else #iffalse
                 }
             }
+            MatchE(box matched, branches) => {
+                let matched = self.visit_expr(matched);
+                let branches = branches.into_iter().map(|(pattern, branch)| {
+                    let pattern = self.visit_pattern(pattern);
+                    let branch = self.visit_expr(branch);
+                    quote!(| #pattern => #branch)
+                });
+
+                quote! {
+                    match &*#matched {
+                        #(#branches)*
+                        _ => ::anyhow::bail!("Matching failed"),
+                    }
+                }
+            }
             BlockE(box block) => self.visit_block(block),
             HoleE => {
                 panic!("Cannot compile code with holes; your code probably even did not typecheck")
@@ -372,6 +389,35 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let start = self.visit_expr(start);
                 let end = self.visit_expr(end);
                 quote!(Cow::Owned(__Range::new(#start,#end)))
+            }
+        }
+    }
+
+    /// Compiles a pattern.
+    #[allow(clippy::only_used_in_recursion)]
+    fn visit_pattern(&mut self, pat: Pat<'ctx>) -> TokenStream {
+        match pat.kind {
+            BoolM(b) => quote!(#b),
+            IntegerM(i) => {
+                let i = i
+                    .to_u128()
+                    .expect("Integer {i} is too big to be represented in source code");
+                quote!(#i)
+            }
+            StringM(s) => quote!(#s),
+            IdentM(i) => {
+                let i = format_ident!("{}", i.name().as_str());
+                quote!(#i)
+            }
+            VariantM {
+                enun,
+                variant,
+                args,
+            } => {
+                let enun = format_ident!("{enun}");
+                let variant = format_ident!("{variant}");
+                let args = args.into_iter().map(|arg| self.visit_pattern(arg));
+                quote!(#enun::#variant(#(#args)*))
             }
         }
     }

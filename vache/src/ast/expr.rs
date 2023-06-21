@@ -111,7 +111,7 @@ pub enum ExprKind<'ctx> {
     /// A namespaced symbol.
     NamespacedE(Namespaced<'ctx>),
     /// A pattern matching.
-    MatchE(Box<Expr<'ctx>>, Vec<(Box<Expr<'ctx>>, Box<Expr<'ctx>>)>),
+    MatchE(Box<Expr<'ctx>>, Vec<(Expr<'ctx>, Expr<'ctx>)>),
 }
 
 use ExprKind::*;
@@ -514,7 +514,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                         let branches = pairs
                             .filter(|pair| !matches!(pair.as_rule(), Rule::pipe | Rule::farw))
                             .array_chunks()
-                            .map(|[pat, expr]| (boxed(ctx.parse(pat)), boxed(ctx.parse(expr))))
+                            .map(|[pat, expr]| (ctx.parse(pat), ctx.parse(expr)))
                             .collect::<Vec<_>>();
                         MatchE(boxed(matched), branches)
                     }

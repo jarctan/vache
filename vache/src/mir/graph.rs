@@ -36,13 +36,13 @@ impl fmt::Debug for EdgeIx {
 
 /// A node in the graph.
 #[derive(PartialEq, Eq, Debug)]
-struct Node<N> {
+struct Node<'ctx, N> {
     /// Value/weight of that node.
     value: N,
     /// List of ingoing edges, indexed by their weight.
-    ins: HashMap<EdgeIx, Branch>,
+    ins: HashMap<EdgeIx, Branch<'ctx>>,
     /// List of outgoing edges, indexed by their weight.
-    outs: HashMap<Branch, EdgeIx>,
+    outs: HashMap<Branch<'ctx>, EdgeIx>,
 }
 
 /// An edge in the graph.
@@ -58,7 +58,7 @@ struct Edge<E> {
     weight: E,
 }
 
-impl<N> Deref for Node<N> {
+impl<'ctx, N> Deref for Node<'ctx, N> {
     type Target = N;
 
     fn deref(&self) -> &Self::Target {
@@ -66,7 +66,7 @@ impl<N> Deref for Node<N> {
     }
 }
 
-impl<N> From<N> for Node<N> {
+impl<'ctx, N> From<N> for Node<'ctx, N> {
     fn from(value: N) -> Self {
         Self {
             value,
@@ -82,9 +82,9 @@ impl<N> From<N> for Node<N> {
 /// * `N` is the type of nodes weights
 /// * `E` is the type of edges weights
 #[derive(PartialEq, Eq)]
-pub struct Cfg<N, E = ()> {
+pub struct Cfg<'ctx, N, E = ()> {
     /// Map of node indexes to node data.
-    node_map: HashMap<NodeIx, Node<N>>,
+    node_map: HashMap<NodeIx, Node<'ctx, N>>,
     /// Map of edge indexes to the edge data.
     edge_map: HashMap<EdgeIx, Edge<E>>,
     /// Fresh node index counter.
@@ -94,12 +94,12 @@ pub struct Cfg<N, E = ()> {
 }
 
 /// A CFG with instructions as nodes.
-pub type CfgI<'ctx> = Cfg<Instr<'ctx>>;
+pub type CfgI<'ctx> = Cfg<'ctx, Instr<'ctx>>;
 
-impl<N, E> Cfg<N, E> {
+impl<'ctx, N, E> Cfg<'ctx, N, E> {
     /// Starting from a node, takes a given branch/path. Returns the target
     /// node, if any.
-    pub fn take_branch(&self, node: CfgLabel, branch: &Branch) -> Option<CfgLabel> {
+    pub fn take_branch(&self, node: CfgLabel, branch: &Branch<'ctx>) -> Option<CfgLabel> {
         self.node_map[&node]
             .outs
             .get(branch)
@@ -116,7 +116,7 @@ impl<N, E> Cfg<N, E> {
 
     /// Adds a new edge between `from` and `to` in the graph with weight
     /// `branch` and extra weight `E`.
-    pub fn add_edge(&mut self, from: CfgLabel, to: CfgLabel, branch: Branch, weight: E) {
+    pub fn add_edge(&mut self, from: CfgLabel, to: CfgLabel, branch: Branch<'ctx>, weight: E) {
         let edge = Edge { from, to, weight };
         let ix = EdgeIx(self.edge_ix_counter);
         self.edge_ix_counter = self.edge_ix_counter.checked_add(1).unwrap();
@@ -168,26 +168,26 @@ impl<N, E> Cfg<N, E> {
     /// Returns an immutable BFS iterator over the graph.
     ///
     /// `rev_dir`: take arrows in opposite direction.
-    pub fn bfs(&self, start: CfgLabel, rev_dir: bool) -> Bfs<'_, N, E> {
+    pub fn bfs(&self, start: CfgLabel, rev_dir: bool) -> Bfs<'ctx, '_, N, E> {
         Bfs::new(self, start, rev_dir)
     }
 
     /// Returns a mutable BFS iterator over the graph.
     ///
     /// `rev_dir`: take arrows in opposite direction.
-    pub fn bfs_mut(&mut self, start: CfgLabel, rev_dir: bool) -> BfsMut<'_, N, E> {
+    pub fn bfs_mut(&mut self, start: CfgLabel, rev_dir: bool) -> BfsMut<'ctx, '_, N, E> {
         BfsMut::new(self, start, rev_dir)
     }
 
     /// Returns an immutable DFS iterator over the graph.
     ///
     /// `rev_dir`: take arrows in opposite direction.
-    pub fn dfs(&self, start: CfgLabel, rev_dir: bool) -> Dfs<'_, N, E> {
+    pub fn dfs(&self, start: CfgLabel, rev_dir: bool) -> Dfs<'ctx, '_, N, E> {
         Dfs::new(self, start, rev_dir)
     }
 
     /// Returns a postorder iterator over the graph.
-    pub fn postorder(&self, start: CfgLabel) -> PostOrder<'_, N, E> {
+    pub fn postorder(&self, start: CfgLabel) -> PostOrder<'ctx, '_, N, E> {
         PostOrder::new(self, start)
     }
 
@@ -195,7 +195,7 @@ impl<N, E> Cfg<N, E> {
     ///
     /// You must provide a mapping for nodes, and one for edges. Use `map_ref`
     /// if you only have a reference into the CFG.
-    pub fn map<F, G, N2, E2>(self, mut node_map: F, mut edge_map: G) -> Cfg<N2, E2>
+    pub fn map<F, G, N2, E2>(self, mut node_map: F, mut edge_map: G) -> Cfg<'ctx, N2, E2>
     where
         F: FnMut(NodeIx, N) -> N2,
         G: FnMut(E) -> E2,
@@ -239,7 +239,11 @@ impl<N, E> Cfg<N, E> {
     /// You must provide a mapping for nodes, and one for edges. Only needs a
     /// self reference, will clone items that are needed from the original
     /// CFG. Prefer to use `map()` whenever possible.
-    pub fn map_ref<'a, F, G, N2, E2>(&'a self, mut node_map: F, mut edge_map: G) -> Cfg<N2, E2>
+    pub fn map_ref<'a, F, G, N2, E2>(
+        &'a self,
+        mut node_map: F,
+        mut edge_map: G,
+    ) -> Cfg<'ctx, N2, E2>
     where
         F: FnMut(NodeIx, &'a N) -> N2,
         G: FnMut(&'a E) -> E2,
@@ -355,7 +359,7 @@ impl<'ctx> CfgI<'ctx> {
     }
 }
 
-impl<N, E: Copy> Cfg<N, E> {
+impl<'ctx, N, E: Copy> Cfg<'ctx, N, E> {
     /// Adds a block/linked-list of nodes.
     ///
     /// Weight must be `Copy`-able. Returns the labels for each element in the
@@ -369,7 +373,7 @@ impl<N, E: Copy> Cfg<N, E> {
     }
 }
 
-impl<N, E> Default for Cfg<N, E> {
+impl<'ctx, N, E> Default for Cfg<'ctx, N, E> {
     fn default() -> Self {
         Self {
             node_map: HashMap::new(),
@@ -380,7 +384,7 @@ impl<N, E> Default for Cfg<N, E> {
     }
 }
 
-impl<N: fmt::Debug, E: fmt::Debug> fmt::Debug for Cfg<N, E> {
+impl<'ctx, N: fmt::Debug, E: fmt::Debug> fmt::Debug for Cfg<'ctx, N, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "digraph G {{")?;
         for (ix, Node { value, .. }) in &self.node_map {
@@ -393,7 +397,7 @@ impl<N: fmt::Debug, E: fmt::Debug> fmt::Debug for Cfg<N, E> {
     }
 }
 
-impl<N, E> Index<&CfgLabel> for Cfg<N, E> {
+impl<'ctx, N, E> Index<&CfgLabel> for Cfg<'ctx, N, E> {
     type Output = N;
 
     fn index(&self, index: &CfgLabel) -> &N {
@@ -401,28 +405,28 @@ impl<N, E> Index<&CfgLabel> for Cfg<N, E> {
     }
 }
 
-impl<N, E> IndexMut<&CfgLabel> for Cfg<N, E> {
+impl<'ctx, N, E> IndexMut<&CfgLabel> for Cfg<'ctx, N, E> {
     fn index_mut(&mut self, index: &CfgLabel) -> &mut N {
         &mut self.node_map.get_mut(index).unwrap().value
     }
 }
 
 /// Breadth-First Search iterator over a graph.
-pub struct Bfs<'a, N, E> {
+pub struct Bfs<'ctx, 'a, N, E> {
     /// Queue of elements to visit.
     queue: VecDeque<NodeIx>,
     /// Already visited elements.
     visited: HashSet<NodeIx>,
     /// Reference to the graph itself.
-    graph: &'a Cfg<N, E>,
+    graph: &'a Cfg<'ctx, N, E>,
     /// Take in reverse direction.
     rev_dir: bool,
 }
 
-impl<'a, N, E> Bfs<'a, N, E> {
+impl<'ctx, 'a, N, E> Bfs<'ctx, 'a, N, E> {
     /// Creates a new iterator that starts from a given label and traverses a
     /// `graph`. Set `rev_dir` to true to traverse it in reverse direction.
-    fn new(graph: &'a Cfg<N, E>, start: CfgLabel, rev_dir: bool) -> Self {
+    fn new(graph: &'a Cfg<'ctx, N, E>, start: CfgLabel, rev_dir: bool) -> Self {
         Self {
             queue: [start].into(),
             visited: HashSet::new(),
@@ -432,7 +436,7 @@ impl<'a, N, E> Bfs<'a, N, E> {
     }
 }
 
-impl<'a, N, E> Iterator for Bfs<'a, N, E> {
+impl<'ctx, 'a, N, E> Iterator for Bfs<'ctx, 'a, N, E> {
     type Item = (NodeIx, &'a N);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -453,21 +457,21 @@ impl<'a, N, E> Iterator for Bfs<'a, N, E> {
 }
 
 /// Breadth-First Search mutable iterator over a graph.
-pub struct BfsMut<'a, N, E> {
+pub struct BfsMut<'ctx, 'a, N, E> {
     /// Queue of elements to visit.
     queue: VecDeque<NodeIx>,
     /// Already visited elements.
     visited: HashSet<NodeIx>,
     /// Reference to the graph itself.
-    graph: &'a mut Cfg<N, E>,
+    graph: &'a mut Cfg<'ctx, N, E>,
     /// Take in reverse direction.
     rev_dir: bool,
 }
 
-impl<'a, N, E> BfsMut<'a, N, E> {
+impl<'ctx, 'a, N, E> BfsMut<'ctx, 'a, N, E> {
     /// Creates a new iterator that starts from a given label and traverses a
     /// `graph`. Set `rev_dir` to true to traverse it in reverse direction.
-    fn new(graph: &'a mut Cfg<N, E>, start: CfgLabel, rev_dir: bool) -> Self {
+    fn new(graph: &'a mut Cfg<'ctx, N, E>, start: CfgLabel, rev_dir: bool) -> Self {
         Self {
             queue: [start].into(),
             visited: HashSet::new(),
@@ -477,7 +481,7 @@ impl<'a, N, E> BfsMut<'a, N, E> {
     }
 }
 
-impl<'a, N, E: fmt::Debug> Iterator for BfsMut<'a, N, E> {
+impl<'ctx, 'a, N, E: fmt::Debug> Iterator for BfsMut<'ctx, 'a, N, E> {
     type Item = (NodeIx, &'a mut N);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -504,21 +508,21 @@ impl<'a, N, E: fmt::Debug> Iterator for BfsMut<'a, N, E> {
 }
 
 /// Depth-First Search iterator over a graph.
-pub struct Dfs<'a, N, E> {
+pub struct Dfs<'ctx, 'a, N, E> {
     /// Stack of elements to visit.
     stack: Vec<NodeIx>,
     /// Already visited elements.
     visited: HashSet<NodeIx>,
     /// Reference to the graph itself.
-    graph: &'a Cfg<N, E>,
+    graph: &'a Cfg<'ctx, N, E>,
     /// Take in reverse direction.
     rev_dir: bool,
 }
 
-impl<'a, N, E> Dfs<'a, N, E> {
+impl<'ctx, 'a, N, E> Dfs<'ctx, 'a, N, E> {
     /// Creates a new iterator that starts from a given label and traverses a
     /// `graph`. Set `rev_dir` to true to traverse it in reverse direction.
-    fn new(graph: &'a Cfg<N, E>, start: CfgLabel, rev_dir: bool) -> Self {
+    fn new(graph: &'a Cfg<'ctx, N, E>, start: CfgLabel, rev_dir: bool) -> Self {
         Self {
             stack: [start].into(),
             visited: HashSet::new(),
@@ -528,7 +532,7 @@ impl<'a, N, E> Dfs<'a, N, E> {
     }
 }
 
-impl<'a, N, E> Iterator for Dfs<'a, N, E> {
+impl<'ctx, 'a, N, E> Iterator for Dfs<'ctx, 'a, N, E> {
     type Item = (NodeIx, &'a N);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -555,9 +559,9 @@ impl<'a, N, E> Iterator for Dfs<'a, N, E> {
 ///
 /// Its reverse is the standard flow control linearization you would expect: it
 /// returns items in the order you would see them in a source code.
-pub struct PostOrder<'a, N, E> {
+pub struct PostOrder<'ctx, 'a, N, E> {
     /// CFG to traverse.
-    graph: &'a Cfg<N, E>,
+    graph: &'a Cfg<'ctx, N, E>,
     /// Entry label in the CFG.
     start: NodeIx,
     /// We'll store here the result of the post-order dfs search.
@@ -569,10 +573,10 @@ pub struct PostOrder<'a, N, E> {
     computed: bool,
 }
 
-impl<'a, N, E> PostOrder<'a, N, E> {
+impl<'ctx, 'a, N, E> PostOrder<'ctx, 'a, N, E> {
     /// Creates a new iterator that starts from a given label and traverses a
     /// `graph`. Set `rev_dir` to true to traverse it in reverse direction.
-    fn new(graph: &'a Cfg<N, E>, start: CfgLabel) -> Self {
+    fn new(graph: &'a Cfg<'ctx, N, E>, start: CfgLabel) -> Self {
         Self {
             graph,
             start,
@@ -586,8 +590,8 @@ impl<'a, N, E> PostOrder<'a, N, E> {
     /// Called lazily only when we consume the first element of our iterator.
     fn compute(&mut self) {
         /// Compute DFS postorder and output the result to `result`.
-        fn dfs<'a, N, E>(
-            graph: &'a Cfg<N, E>,
+        fn dfs<'ctx, 'a, N, E>(
+            graph: &'a Cfg<'ctx, N, E>,
             label: CfgLabel,
             visited: &mut HashSet<NodeIx>,
             result: &mut VecDeque<(NodeIx, &'a N)>,
@@ -606,7 +610,7 @@ impl<'a, N, E> PostOrder<'a, N, E> {
     }
 }
 
-impl<'a, N, E> Iterator for PostOrder<'a, N, E> {
+impl<'ctx, 'a, N, E> Iterator for PostOrder<'ctx, 'a, N, E> {
     type Item = (NodeIx, &'a N);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -619,7 +623,7 @@ impl<'a, N, E> Iterator for PostOrder<'a, N, E> {
     }
 }
 
-impl<'a, N, E> DoubleEndedIterator for PostOrder<'a, N, E> {
+impl<'ctx, 'a, N, E> DoubleEndedIterator for PostOrder<'ctx, 'a, N, E> {
     fn next_back(&mut self) -> Option<Self::Item> {
         // If we did not compute it, compute it now.
         if !self.computed {

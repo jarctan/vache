@@ -471,9 +471,9 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
             }
             InstrKind::Branch(cond) => {
                 if self.get_ptr_value(cond).truth() {
-                    TrueB
+                    BoolB(true)
                 } else {
-                    FalseB
+                    BoolB(false)
                 }
             }
             // Do nothing: it was a marker instruction for the liveness analysis.

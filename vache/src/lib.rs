@@ -189,9 +189,8 @@ mod steps {
     pub fn mir<'mir>(p: &'mir mut tast::Program<'_>) -> Result<mir::Program<'mir>> {
         print!("Miring...");
         std::io::stdout().flush()?;
-        let start = Instant::now();
-        let mut normalizer = Normalizer::new(p.arena);
-        let normalized = normalizer.normalize(p);
+        let start = Instant::now(); 
+        let mut normalized = Normalizer::normalize(p);
         let mut mirer = MIRer::new();
         let res = mirer.gen_mir(normalized);
         println!("\rMIR-ed [{:?}]", start.elapsed());

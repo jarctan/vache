@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::default::default;
 
 use ExprKind::*;
+use PatKind::*;
 use PlaceKind::*;
 use Stmt::*;
 
@@ -149,6 +150,33 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
                 }
             }
             HoleE => (),
+            MatchE(matched, branches) => {
+                self.visit_expr(matched);
+                for (pat, branch) in branches {
+                    self.visit_pattern(pat);
+                    self.visit_expr(branch);
+                }
+            }
+        }
+    }
+
+    /// Collects modes in a pattern.
+    ///
+    /// Note: currently, this is essentially a no-op. But this might change if
+    /// we add patterns, so we keep this no-op function as it is.
+    #[allow(clippy::only_used_in_recursion)]
+    fn visit_pattern(&mut self, pat: &Pat<'ctx>) {
+        match &pat.kind {
+            BoolM(_) | IntegerM(_) | StringM(_) | IdentM(_) => (),
+            VariantM {
+                enun: _,
+                variant: _,
+                args,
+            } => {
+                for arg in args {
+                    self.visit_pattern(arg)
+                }
+            }
         }
     }
 

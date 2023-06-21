@@ -6,26 +6,6 @@ use std::ops::{Deref, DerefMut};
 use super::*;
 use crate::utils::boxed;
 
-/// Branch = label on CFG edges.
-///
-/// A branch is label that indicates the conditions to follow that path/jump to
-/// the target node of that edge.
-///
-/// Example: an If statement has an outgoing edge to two other nodes. One of
-/// them is labeled wit [`Branch::TrueB`], the other [`Branch::FalseB`].
-///
-/// The unconditional jump is [`Branch::DefaultB`].
-#[derive(Debug, PartialEq, Eq, Default, Hash, Clone)]
-pub enum Branch {
-    /// Branch if true.
-    TrueB,
-    /// Branch if false.
-    FalseB,
-    /// Default, always branch.
-    #[default]
-    DefaultB,
-}
-
 /// Instructions in the MIR (nodes in the CFG).
 ///
 /// Instruction = scope + kind of instruction.

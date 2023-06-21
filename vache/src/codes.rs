@@ -35,3 +35,5 @@ pub const NOT_IN_LOOP_ERROR: &str = "E0015";
 pub const TUPLE_ACCESS_ERROR: &str = "E0016";
 /// Temporary: empty list error.
 pub const EMPTY_LIST_ERROR: &str = "E0100";
+/// Temporary: empty match error.
+pub const EMPTY_MATCH_ERROR: &str = "E0101";

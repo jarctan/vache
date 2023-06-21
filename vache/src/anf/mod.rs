@@ -4,6 +4,7 @@
 //! AST.
 
 pub mod block;
+pub mod branch;
 pub mod fun;
 pub mod location;
 pub mod place;
@@ -13,6 +14,7 @@ pub mod rvalue;
 pub mod stmt;
 
 pub use block::Block;
+pub use branch::Branch;
 pub use fun::Fun;
 pub use location::Loc;
 pub use place::Place;

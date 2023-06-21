@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::default::default;
 
 use itertools::Itertools;
+use num_traits::ToPrimitive;
 use ExprKind::*;
 use PatKind::*;
 use PlaceKind::*;
@@ -348,7 +349,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 self.ctx.emit(
                                     Diagnostic::error()
                                         .with_code(TUPLE_ACCESS_ERROR)
-                                        .with_message(format!("Tuple index is out of bounds"))
+                                        .with_message("Tuple index is out of bounds")
                                         .with_labels(vec![tuple.span.as_label().with_message(
                                             format!("has only {} elements", elems.len()),
                                         )]),
@@ -602,7 +603,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 self.ctx.emit(
                                     Diagnostic::error()
                                         .with_code(TUPLE_ACCESS_ERROR)
-                                        .with_message(format!("Tuple index is out of bounds"))
+                                        .with_message("Tuple index is out of bounds")
                                         .with_labels(vec![tuple.span.as_label().with_message(
                                             format!("has only {} elements", elems.len()),
                                         )]),
@@ -913,28 +914,11 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             }
             ast::expr::ExprKind::MatchE(box matched, branches) => {
                 let matched = self.visit_expr(matched, ret_ty, in_loop);
-                let enun = match matched.ty {
-                    EnumT(enun) => enun,
-                    _ => {
-                        self.ctx.emit(
-                            Diagnostic::error()
-                                .with_code(TYPE_MISMATCH_ERROR)
-                                .with_message(format!(
-                                    "expected a enumerated type, found type {}",
-                                    matched.ty
-                                ))
-                                .with_labels(vec![matched.span.as_label()])
-                                .with_notes(vec![
-                                    "you can only match on an enumerated type".to_string()
-                                ]),
-                        );
-                        return Expr::hole(span);
-                    }
-                };
 
+                // Compute the branches.
                 let mut new_branches: Vec<(Pat, Expr)> = vec![];
-                for (box pat, box expr) in branches {
-                    let pat = match self.visit_pattern(pat) {
+                for (pat, expr) in branches {
+                    let pat = match self.visit_pattern(pat, matched.ty, matched.stm) {
                         Some(pat) => pat,
                         None => return Expr::hole(span),
                     };
@@ -958,11 +942,52 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         );
                     };
                     self.push_scope();
+                    self.introduce_pat_vars(&pat);
                     let expr = self.visit_expr(expr, ret_ty, in_loop);
                     self.pop_scope().unwrap();
                     new_branches.push((pat, expr));
                 }
-                return Expr::hole(span);
+
+                // Compute the return type of the `match`
+                let ty = if !new_branches.is_empty() {
+                    // Not empty, so there is at least one expression with a type
+                    let ty = new_branches[0].1.ty;
+
+                    // Check that all branches have the same type
+                    for (_, expr) in &new_branches {
+                        if expr.ty != ty {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(TYPE_MISMATCH_ERROR)
+                                    .with_message("Branches do not have the same type")
+                                    .with_labels(vec![expr.span.as_label().with_message(format!(
+                                        "expected type {}, found type {}",
+                                        ty, expr.ty
+                                    ))]),
+                            );
+                        }
+                    }
+
+                    ty
+                } else {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(EMPTY_MATCH_ERROR)
+                            .with_message("Empty `match`es are not supported yet")
+                            .with_labels(vec![e.span.as_label()]),
+                    );
+                    HoleT
+                };
+
+                // Compute the common stm of all the branches, which is the max of the stratum
+                // of all the items
+                let common_stm = new_branches
+                    .iter()
+                    .fold(Stratum::static_stm(), |s1, (_, Expr { stm: s2, .. })| {
+                        core::cmp::max(s1, *s2)
+                    });
+
+                Expr::new(MatchE(boxed(matched), new_branches), ty, common_stm, span)
             }
         }
     }
@@ -1319,16 +1344,35 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     }
 
     /// Visits a pattern.
-    fn visit_pattern(&mut self, pat: ast::Expr<'ctx>) -> Option<Pat<'ctx>> {
+    ///
+    /// * `pat`: pattern to match
+    /// * `ty`: expected type of the pattern
+    /// * `stm`: expected stratum of the pattern
+    fn visit_pattern(
+        &mut self,
+        pat: ast::Expr<'ctx>,
+        ty: Ty<'ctx>,
+        stm: Stratum,
+    ) -> Option<Pat<'ctx>> {
         let span = pat.span;
         match pat.kind {
             ast::ExprKind::BoolE(i) => Some(Pat::new(BoolM(i), IntT, span)),
-            ast::ExprKind::IntegerE(i) => Some(Pat::new(IntegerM(i), IntT, span)),
+            ast::ExprKind::IntegerE(i) => match i.to_u64() {
+                Some(i) => Some(Pat::new(IntegerM(i), IntT, span)),
+                _ => {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_message("Integer pattern is too big")
+                            .with_labels(vec![pat.span.as_label()]),
+                    );
+                    None
+                }
+            },
             ast::ExprKind::StringE(s) => Some(Pat::new(StringM(s), IntT, span)),
             ast::ExprKind::PlaceE(place) => {
                 if let ast::PlaceKind::VarP(v) = place.kind {
                     Some(Pat::new(
-                        IdentM(VarDef::with_stratum(v.with_type(todo!()), todo!())),
+                        IdentM(VarDef::with_stratum(v.with_type(ty), stm)),
                         IntT,
                         span,
                     ))
@@ -1359,12 +1403,6 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 None
             }
             ast::ExprKind::CallE { name, args } => {
-                // Compute the pattern for the args
-                let (mut args, old_args): (Vec<_>, _) = (default(), args);
-                for arg in old_args {
-                    args.push(self.visit_pattern(arg)?);
-                }
-
                 let mut path = name.path();
                 let root = path.next().unwrap(); // Namespaced necessarily starts with something
 
@@ -1383,35 +1421,14 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         return None;
                     }
 
-                    // Check type of arguments.
-                    for (
-                        i,
-                        (
-                            Pat {
-                                ty: arg_ty, span, ..
-                            },
-                            ast::TyUse { kind: param_ty, .. },
-                        ),
-                    ) in args.iter().zip(params.iter()).enumerate()
-                    {
-                        if arg_ty != param_ty {
-                            self.ctx.emit(
-                                Diagnostic::error()
-                                    .with_code(TYPE_MISMATCH_ERROR)
-                                    .with_message(format!(
-                                        "expected type {param_ty}, found type {arg_ty}"
-                                    ))
-                                    .with_labels(vec![span.as_label()])
-                                    .with_notes(vec![format!(
-                                        "{param_ty} is the expected type for argument #{} of `{}`",
-                                        i + 1,
-                                        root
-                                    )]),
-                            );
-                        }
+
+                    // Compute the pattern for the args
+                    let (mut args, old_args): (Vec<_>, _) = (default(), args);
+                    for (arg, ast::TyUse { kind: ty, .. }) in old_args.into_iter().zip(params.iter()) {
+                        args.push(self.visit_pattern(arg, *ty, stm)?);
                     }
 
-                    Some(Pat::new(VariantM { enun: root, variant, args }, EnumT(enun.name), span))
+                    Some(Pat::new(VariantM { enun: root, variant, args }, EnumT(root), span))
                 } else {
                     self.ctx.emit(
                         Diagnostic::error()
@@ -1424,6 +1441,22 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
             }
             ast::ExprKind::NamespacedE(_) => todo!(),
+        }
+    }
+
+    fn introduce_pat_vars(&mut self, pat: &Pat<'ctx>) {
+        match &pat.kind {
+            BoolM(_) | IntegerM(_) | StringM(_) => todo!(),
+            IdentM(vardef) => self.add_var(*vardef),
+            VariantM {
+                enun: _,
+                variant: _,
+                args,
+            } => {
+                for arg in args {
+                    self.introduce_pat_vars(arg);
+                }
+            }
         }
     }
 }

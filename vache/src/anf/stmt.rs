@@ -1,6 +1,8 @@
 //! Defining statements.
 
-use super::{Block, Namespaced, Pointer, Reference, VarDef};
+use std::collections::HashMap;
+
+use super::{Block, Branch, Namespaced, Pointer, Reference, VarDef};
 use crate::mir::RValue;
 
 /// A statement.
@@ -23,6 +25,8 @@ pub enum Stmt<'ctx> {
     },
     /// An if expression.
     IfS(Reference<'ctx>, Block<'ctx>, Block<'ctx>),
+    /// A match statement.
+    MatchS(Reference<'ctx>, HashMap<Branch<'ctx>, Block<'ctx>>),
     /// A block expression.
     BlockS(Block<'ctx>),
     /// A while statement.

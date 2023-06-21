@@ -1,7 +1,5 @@
 //! Defining (pattern matching) patterns.
 
-use num_bigint::BigInt;
-
 use super::{Span, Ty, VarDef};
 
 /// Code pattern, that represents some data structure to match.
@@ -30,6 +28,21 @@ impl<'ctx> Pat<'ctx> {
             span: span.into(),
         }
     }
+
+    pub fn discriminant(&self) -> crate::anf::Branch {
+        use crate::anf::Branch::*;
+        match self.kind {
+            BoolM(b) => BoolB(b),
+            IntegerM(i) => IntB(i),
+            StringM(s) => StrB(s),
+            IdentM(_) => DefaultB,
+            VariantM {
+                enun: _,
+                variant,
+                args: _,
+            } => StrB(variant),
+        }
+    }
 }
 
 /// Pattern kinds.
@@ -40,7 +53,7 @@ pub enum PatKind<'ctx> {
     /// Boolean pattern.
     BoolM(bool),
     /// Integer pattern.
-    IntegerM(BigInt),
+    IntegerM(u64),
     /// A string.
     StringM(&'ctx str),
     /// An identifier.
@@ -55,3 +68,5 @@ pub enum PatKind<'ctx> {
         args: Vec<Pat<'ctx>>,
     },
 }
+
+use PatKind::*;

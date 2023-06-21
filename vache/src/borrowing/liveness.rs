@@ -15,7 +15,10 @@ use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Place};
 ///
 /// Returns a map of live variables at the entry and exit of each node in the
 /// CFG.
-pub fn var_liveness<'ctx>(cfg: &CfgI<'ctx>, entry_l: CfgLabel) -> Cfg<Flow<LocTree<'ctx, ()>>> {
+pub fn var_liveness<'ctx>(
+    cfg: &CfgI<'ctx>,
+    entry_l: CfgLabel,
+) -> Cfg<'ctx, Flow<LocTree<'ctx, ()>>> {
     // Bootstrap with empty environments.
     let mut var_flow: Cfg<Flow<LocTree<()>>> = cfg.map_ref(|_, _| Flow::default(), |_| ());
 
@@ -77,7 +80,7 @@ fn loan_liveness<'ctx>(
     cfg: &CfgI<'ctx>,
     entry_l: CfgLabel,
     var_flow: &Cfg<Flow<LocTree<'ctx, ()>>>,
-) -> Cfg<Flow<Ledger<'ctx>>> {
+) -> Cfg<'ctx, Flow<Ledger<'ctx>>> {
     let out_of_scope: Cfg<LocTree<()>> =
         var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
 
