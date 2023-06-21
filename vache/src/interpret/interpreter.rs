@@ -112,6 +112,19 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                 let items = items.iter().map(|item| self.display(item)).join(", ");
                 format!("({items})")
             }
+            VariantV {
+                enun: _,
+                variant,
+                args,
+            } => {
+                if !args.is_empty() {
+                    // Only display the parenthesis if we are not a unit variant
+                    let args = args.iter().map(|item| self.display(item)).join(", ");
+                    format!("{variant}({args})")
+                } else {
+                    format!("{variant}")
+                }
+            }
         }
     }
 
@@ -182,9 +195,9 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
             );
 
             // Introduce arguments in the typing context
-            for (arg, value) in f.params.iter().zip(args.iter()) {
+            for (arg, &value) in f.params.iter().zip(args.iter()) {
                 self.add_var(arg.name());
-                self.set_var(arg.name(), *value);
+                self.set_var(arg.name(), value);
             }
 
             self.visit_cfg(&f.body, f.entry_l);
@@ -218,17 +231,12 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
     }
 
     /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<Varname<'ctx>>) -> ValueRef {
+    fn get_var(&self, v: impl AsRef<Varname<'ctx>>) -> Option<ValueRef> {
         let v = v.as_ref();
         // Iterate over environments in reverse (last declared first processed)
         // order
         // Returns the first environment that has that variable declared
-        self.env
-            .iter()
-            .rev()
-            .find_map(|e| e.get_var(v))
-            .copied()
-            .unwrap_or_else(|| panic!("Runtime error: variable {} should exist", v))
+        self.env.iter().rev().find_map(|e| e.get_var(v)).copied()
     }
 
     /// Gets a mutable reference into the value of a variable.
@@ -284,41 +292,28 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
     fn get_ptr(&self, ptr: impl Into<Pointer<'ctx>>) -> ValueRef {
         let ptr = ptr.into();
         match ptr.place() {
-            VarP(var) => self.get_var(var),
-            FieldP(compound, field) => {
-                match self.get_ptr_value(compound) {
-                    StructV(_, fields) => {
-                        if let Some(var_ref) = fields.get(field) {
-                            *var_ref
-                        } else {
-                            panic!()
-                        }
-                    }
-                    TupleV(elems) => {
-                        if let Ok(elem) = field.parse::<usize>()
-                        && let Some(elem) = elems.get(elem) {
-                            *elem
-                        } else {
-                            panic!()
-                        }
-                    }
-                    _ => panic!()
+            VarP(var) => self
+                .get_var(var)
+                .unwrap_or_else(|| panic!("Runtime error: variable {} should exist", var)),
+            FieldP(compound, field) => match self.get_ptr_value(compound) {
+                StructV(_, fields) => fields[field],
+                TupleV(elems) => {
+                    let elem = field
+                        .parse::<usize>()
+                        .expect("Runtime error: array index is too big");
+                    elems[elem]
                 }
-            }
-            IndexP(array, index) => {
-                match (
-                    self.get_ptr_value(array),
-                    self.get_ptr_value(index),
-                ) {
-                    (ArrayV(array), IntV(index)) => {
-                        let index = index
-                            .to_usize()
-                            .expect("Runtime error: array index is too big");
-                        array[index]
-                    }
-                    (array, index) => panic!("Runtime error: incorrect indexing {array:?}[{index:?}]"),
+                _ => panic!(),
+            },
+            IndexP(array, index) => match (self.get_ptr_value(array), self.get_ptr_value(index)) {
+                (ArrayV(array), IntV(index)) => {
+                    let index = index
+                        .to_usize()
+                        .expect("Runtime error: array index is too big");
+                    array[index]
                 }
-            }
+                (array, index) => panic!("Runtime error: incorrect indexing {array:?}[{index:?}]"),
+            },
         }
     }
 
@@ -429,8 +424,20 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
                 let end = self.get_ptr(end);
                 self.add_value(RangeV(start, end), stratum)
             }
-            RValue::Variant { .. } => {
-                todo!()
+            RValue::Variant {
+                enun,
+                variant,
+                args,
+            } => {
+                let args = args.iter().map(|v| self.get_ptr(v)).collect();
+                self.add_value(
+                    VariantV {
+                        enun,
+                        variant,
+                        args,
+                    },
+                    stratum,
+                )
             }
         }
     }

@@ -29,6 +29,15 @@ pub enum Value<'ctx> {
     ArrayV(Vec<ValueRef>),
     /// Tuple.
     TupleV(Vec<ValueRef>),
+    /// Variant.
+    VariantV {
+        /// Enumerated type from which the variant originates.
+        enun: &'ctx str,
+        /// Variant name.
+        variant: &'ctx str,
+        /// Variant arguments.
+        args: Vec<ValueRef>,
+    },
     /// A range between `start` and `end`.
     RangeV(ValueRef, ValueRef),
 }
@@ -56,6 +65,18 @@ impl fmt::Debug for Value<'_> {
                 let mut display = f.debug_tuple("");
                 for item in items {
                     display.field(item);
+                }
+                display.finish()
+            }
+            VariantV {
+                enun,
+                variant,
+                args,
+            } => {
+                write!(f, "{enun}::")?;
+                let mut display = f.debug_tuple(variant);
+                for arg in args {
+                    display.field(arg);
                 }
                 display.finish()
             }
