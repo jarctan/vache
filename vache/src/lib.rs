@@ -190,7 +190,7 @@ mod steps {
         print!("Miring...");
         std::io::stdout().flush()?;
         let start = Instant::now();
-        let mut normalized = Normalizer::normalize(p);
+        let normalized = Normalizer::normalize(p);
         let mut mirer = MIRer::new();
         let res = mirer.gen_mir(normalized);
         println!("\rMIR-ed [{:?}]", start.elapsed());

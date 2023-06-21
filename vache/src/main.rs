@@ -9,7 +9,7 @@ use clap::{Parser, Subcommand};
 use unindent::Unindent;
 use vache_lib::{
     borrow_check, check_all, compile, config::Config, examples::parse_file, execute, farm_modes,
-    mir, typecheck, Arena, Context,
+    interpret, mir, typecheck, Arena, Context,
 };
 
 #[derive(Parser, Debug)]
@@ -34,6 +34,11 @@ enum Commands {
     },
     /// Runs a program.
     Run {
+        /// The input file to compile.
+        filename: String,
+    },
+    /// Interprets a program.
+    Interpret {
         /// The input file to compile.
         filename: String,
     },
@@ -114,6 +119,37 @@ fn main() -> anyhow::Result<()> {
                 execute(&mut context, program, "binary", &cur_dir).context("execution error")?;
             println!("{}", res);
             Ok(())
+        }
+        Commands::Interpret { ref filename } => {
+            let arena = Arena::new();
+            let cur_dir = std::env::current_dir().context("Current dir not found")?;
+            let input: &str =
+                arena.alloc(std::fs::read_to_string(filename).with_context(|| {
+                    format!("Failed to open file `{filename}` in {}", cur_dir.display())
+                })?);
+            let config = Config {
+                input,
+                filename: Some(filename),
+            };
+            let mut context = Context::new(config, &arena);
+            let program = parse_file(&mut context).context("Compilation failed")?;
+            match typecheck(&mut context, program)? {
+                Ok(mut checked) => {
+                    // Compute MIR
+                    let mir = borrow_check(mir(&mut checked)?)?;
+
+                    // Interpret
+                    let res = interpret(mir).context("interpreter error")?;
+
+                    println!("--------------------------------");
+                    println!("{}", res);
+                    Ok(())
+                }
+                Err(diagnostics) => {
+                    diagnostics.display()?;
+                    ::anyhow::bail!("Compile errors");
+                }
+            }
         }
         Commands::Modes { ref filename } => {
             let arena = Arena::new();
