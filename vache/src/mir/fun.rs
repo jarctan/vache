@@ -1,8 +1,10 @@
 //! Defining functions in the MIR.
 
+use std::collections::HashMap;
 use std::fmt;
 
-use super::{CfgI, CfgLabel, Pointer, VarDef};
+use super::{CfgI, CfgLabel, Pointer, Stratum, VarDef, Varname};
+use crate::utils::set::Set;
 
 /// A function in the parser AST.
 pub struct Fun<'ctx> {
@@ -15,6 +17,8 @@ pub struct Fun<'ctx> {
     ///
     /// If `None`, the function returns nothing.
     pub ret_v: Option<Pointer<'ctx>>,
+    /// Map between stratums and their variables.
+    pub strata: HashMap<Stratum, Set<Varname<'ctx>>>,
     /// Entry label in the CFG.
     pub entry_l: CfgLabel,
     /// Return label in the CFG.
@@ -30,6 +34,7 @@ impl<'ctx> fmt::Debug for Fun<'ctx> {
             name,
             params,
             ret_v,
+            strata,
             entry_l,
             ret_l,
             body,
@@ -42,6 +47,7 @@ impl<'ctx> fmt::Debug for Fun<'ctx> {
         }
         res.field("Entry", &entry_l)
             .field("Exit", &ret_l)
+            .field("Strata", &strata)
             .field("CFG", &body);
         res.finish()
     }

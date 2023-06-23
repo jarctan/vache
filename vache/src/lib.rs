@@ -9,6 +9,7 @@
 #![feature(iter_array_chunks)]
 #![feature(try_blocks)]
 #![feature(if_let_guard)]
+#![feature(step_trait)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 

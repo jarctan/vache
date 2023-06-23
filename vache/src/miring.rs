@@ -1,9 +1,13 @@
 //! CFG production.
 
+use std::collections::HashMap;
+use std::default::default;
+
 use Branch::*;
 
 use crate::anf;
 use crate::mir::*;
+use crate::utils::set::Set;
 
 /// ANF to MIR transformer.
 pub(crate) struct MIRer<'ctx> {
@@ -11,6 +15,8 @@ pub(crate) struct MIRer<'ctx> {
     cfg: CfgI<'ctx>,
     /// Current stratum.
     stm: Stratum,
+    /// Collect the variables in each stratum.
+    strata: HashMap<Stratum, Set<Varname<'ctx>>>,
 }
 
 impl<'ctx> MIRer<'ctx> {
@@ -19,6 +25,7 @@ impl<'ctx> MIRer<'ctx> {
         Self {
             cfg: Cfg::default(),
             stm: Stratum::static_stm(),
+            strata: default(),
         }
     }
 
@@ -121,6 +128,10 @@ impl<'ctx> MIRer<'ctx> {
     ) -> CfgLabel {
         match s {
             anf::Stmt::DeclareS(vardef) => {
+                self.strata
+                    .entry(vardef.stm)
+                    .or_default()
+                    .insert(vardef.name());
                 self.insert(self.instr(InstrKind::Declare(vardef)), [(DefaultB, dest_l)])
             }
             anf::Stmt::AssignS(ptr, rvalue) => self.insert(
@@ -223,6 +234,7 @@ impl<'ctx> MIRer<'ctx> {
             ret_l,
             ret_v: f.ret_v,
             entry_l,
+            strata: std::mem::take(&mut self.strata),
             body,
         }
     }

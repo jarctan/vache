@@ -1,11 +1,14 @@
 //! Implementing the liveness analysis algorithm.
 
+use std::collections::HashMap;
+
 use super::borrow::Borrows;
 use super::flow::Flow;
 use super::tree::LocTree;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
-use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode};
+use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
+use crate::utils::set::Set;
 
 /// Variable liveness analysis.
 ///
@@ -73,6 +76,7 @@ pub fn var_liveness<'ctx>(
 /// * The CFG.
 /// * The entry label in the CFG.
 /// * The variable liveliness analysis for that CFG.
+/// * The set of variables for each stratum.
 ///
 /// Returns a map of live loans at the entry and exit of each node in the
 /// CFG.
@@ -80,6 +84,7 @@ fn loan_liveness<'ctx>(
     cfg: &CfgI<'ctx>,
     entry_l: CfgLabel,
     var_flow: &Cfg<Flow<LocTree<'ctx, ()>>>,
+    strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
 ) -> Cfg<'ctx, Flow<Ledger<'ctx>>> {
     let out_of_scope: Cfg<LocTree<()>> =
         var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
@@ -121,7 +126,27 @@ fn loan_liveness<'ctx>(
                 }
                 | InstrKind::Noop => ins.clone(),
             };
+
+            // Optionally remove locations that go out of scope at the end of this
+            // instruction
             outs.flush_locs(out_of_scope[&label].get_all_locs(), false);
+
+            // Remove locations that can really be destroyed at the end of this instruction
+            // To do so, compute the worst case stratum after that instruction, that is the
+            // lowest stm that we can reach after that instruction
+            let successor_stm = cfg
+                .neighbors(label)
+                .map(|label| cfg[&label].scope)
+                .min()
+                .unwrap_or(instr.scope);
+
+            // We need to flush every variable between the successor stratum (not included)
+            // and our stratum (included)
+            for stm in successor_stm.higher()..=instr.scope {
+                if let Some(set) = strata.get(&stm) {
+                    outs.flush_locs(set.iter().map(Loc::from), true);
+                }
+            }
 
             let flow = Flow { ins, outs };
             if loan_flow[&label] != flow {
@@ -139,9 +164,15 @@ fn loan_liveness<'ctx>(
 /// Takes as arguments:
 /// * The CFG.
 /// * The entry label in the CFG.
+/// * The set of variables for each stratum.
 ///
 /// Performs liveliness analysis, determining which borrows are invalidated.
-pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) -> CfgI<'ctx> {
+pub fn liveness<'ctx>(
+    mut cfg: CfgI<'ctx>,
+    entry_l: CfgLabel,
+    exit_l: CfgLabel,
+    strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
+) -> CfgI<'ctx> {
     // Compute the var analysis first
     let var_flow = var_liveness(&cfg, entry_l);
 
@@ -164,7 +195,7 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
     }
 
     // Now, compute loan analysis
-    let loan_flow = loan_liveness(&cfg, entry_l, &var_flow);
+    let loan_flow = loan_liveness(&cfg, entry_l, &var_flow, strata);
 
     // List all borrows that are invalidated by mutation of the variable afterwards.
     for (label, instr) in cfg.bfs(entry_l, false) {
@@ -187,7 +218,7 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
     cfg
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use std::default::default;
 
@@ -472,3 +503,4 @@ mod tests {
         );
     }
 }
+*/

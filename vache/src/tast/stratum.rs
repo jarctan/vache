@@ -3,13 +3,37 @@
 use core::fmt;
 
 /// Stratum/scope identifier.
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct Stratum(u64);
+
+impl ::std::iter::Step for Stratum {
+    fn steps_between(start: &Self, end: &Self) -> Option<usize> {
+        start.0.checked_sub(end.0)?.try_into().ok()
+    }
+
+    fn forward_checked(start: Self, count: usize) -> Option<Self> {
+        Some(Self(start.0.checked_add(count.try_into().ok()?)?))
+    }
+
+    fn backward_checked(start: Self, count: usize) -> Option<Self> {
+        Some(Self(start.0.checked_sub(count.try_into().ok()?)?))
+    }
+}
 
 impl Stratum {
     /// The static stratum: this is always stratum `'0`.
-    pub const fn static_stm() -> Stratum {
+    pub const fn static_stm() -> Self {
         Self(0)
+    }
+
+    /// Returns the next, higher stratum.
+    pub const fn higher(self) -> Self {
+        Self(self.0 + 1)
+    }
+
+    /// Returns the preceding, lower stratum.
+    pub const fn lower(self) -> Self {
+        Self(self.0 - 1)
     }
 }
 
