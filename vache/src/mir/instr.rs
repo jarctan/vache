@@ -161,10 +161,10 @@ impl<'ctx> InstrKind<'ctx> {
     ///
     /// # Panics
     /// Panics if the instruction does not contain `to_find`.
-    pub fn force_clone(&mut self, to_find: &Place) {
+    pub fn force_clone(&mut self, to_find: &Loc<'ctx>) {
         let mut els = self
             .references_mut()
-            .filter(|reference| reference.place() == to_find)
+            .filter(|reference| reference.loc() == to_find)
             .collect::<Vec<_>>();
 
         if els.len() != 1 {

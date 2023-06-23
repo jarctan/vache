@@ -169,7 +169,7 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
     // List all borrows that are invalidated by mutation of the variable afterwards.
     for (label, instr) in cfg.bfs(entry_l, false) {
         for lhs in instr.mutated_place() {
-            for &borrow in loan_flow[&label].ins.loans(lhs) {
+            for borrow in loan_flow[&label].ins.loans(lhs.root()) {
                 invalidated.insert(borrow);
             }
         }
@@ -180,8 +180,8 @@ pub fn liveness<'ctx>(mut cfg: CfgI<'ctx>, entry_l: CfgLabel, exit_l: CfgLabel) 
     invalidated.extend(loan_flow[&exit_l].outs.invalidations());
 
     // Transform all invalidated borrows into clones
-    for Borrow { label, place, .. } in invalidated {
-        cfg[&label].force_clone(&place);
+    for Borrow { label, loc, .. } in invalidated {
+        cfg[&label].force_clone(&loc);
     }
 
     cfg

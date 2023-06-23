@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::mir::{CfgLabel, Place};
+use crate::mir::{CfgLabel, Loc};
 use crate::utils::set::Set;
 
 /// A borrow: a variable that has been borrowed.
@@ -13,14 +13,14 @@ pub struct Borrow<'ctx> {
     /// Label in which the borrow was made.
     pub label: CfgLabel,
     /// Stakeholder of the borrow.
-    pub borrower: Place<'ctx>,
-    /// Borrowed place. NOT the borrower.
-    pub place: Place<'ctx>,
+    pub borrower: Loc<'ctx>,
+    /// Borrowed location. NOT the borrower.
+    pub loc: Loc<'ctx>,
 }
 
 impl fmt::Debug for Borrow<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}{:?}", self.place, self.label)
+        write!(f, "{:?}{:?}", self.loc, self.label)
     }
 }
 
