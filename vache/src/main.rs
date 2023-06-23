@@ -27,6 +27,11 @@ enum Commands {
         /// The input file to compile.
         filename: String,
     },
+    /// Type-checks a program.
+    Check {
+        /// The input file to type-check.
+        filename: String,
+    },
     /// Compiles a program.
     Compile {
         /// The input file to compile.
@@ -84,6 +89,23 @@ fn main() -> anyhow::Result<()> {
                     bail!("Compile errors found");
                 }
             }
+        }
+        Commands::Check { ref filename } => {
+            let arena = Arena::new();
+            let cur_dir = std::env::current_dir().context("Current dir not found")?;
+            let input: &str =
+                arena.alloc(std::fs::read_to_string(filename).with_context(|| {
+                    format!("Failed to open file `{filename}` in {}", cur_dir.display())
+                })?);
+            let config = Config {
+                input,
+                filename: Some(filename),
+            };
+            let mut context = Context::new(config, &arena);
+
+            let program = parse_file(&mut context).context("Compilation failed")?;
+            check_all(&mut context, program)?;
+            Ok(())
         }
         Commands::Compile { ref filename } => {
             let arena = Arena::new();

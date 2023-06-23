@@ -590,8 +590,8 @@ impl<'ctx, 'a, N, E> PostOrder<'ctx, 'a, N, E> {
     /// Called lazily only when we consume the first element of our iterator.
     fn compute(&mut self) {
         /// Compute DFS postorder and output the result to `result`.
-        fn dfs<'ctx, 'a, N, E>(
-            graph: &'a Cfg<'ctx, N, E>,
+        fn dfs<'a, N, E>(
+            graph: &'a Cfg<'_, N, E>,
             label: CfgLabel,
             visited: &mut HashSet<NodeIx>,
             result: &mut VecDeque<(NodeIx, &'a N)>,
