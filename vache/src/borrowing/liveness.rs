@@ -5,7 +5,7 @@ use super::flow::Flow;
 use super::tree::LocTree;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
-use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Place};
+use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode};
 
 /// Variable liveness analysis.
 ///
@@ -95,23 +95,22 @@ fn loan_liveness<'ctx>(
         for (label, instr) in cfg.postorder(entry_l).rev() {
             let predecessors = cfg.preneighbors(label);
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
-            let outs: Ledger = match &instr.kind {
-                InstrKind::Declare(var) => ins.clone() - Place::from(var.name()),
+            let mut outs: Ledger = match &instr.kind {
+                InstrKind::Declare(_) => ins.clone(),
                 InstrKind::Assign(lhs, _)
                 | InstrKind::Call {
                     name: _,
                     args: _,
                     destination: Some(lhs),
                 } => {
-                    let mut ledger = ins.clone() - *lhs.place();
+                    let mut ledger = ins.clone();
+                    ledger.flush_place(lhs.place(), true);
                     if var_flow[&label].outs.contains(lhs.loc()) {
                         let borrows = instr
                             .references()
                             .map(|reference| ledger.borrow(lhs.place(), reference, label))
                             .sum::<Borrows>();
                         ledger.set_borrows(lhs.place(), borrows);
-                    } else {
-                        ledger.flush_place(lhs.place());
                     }
                     ledger
                 }
@@ -121,7 +120,8 @@ fn loan_liveness<'ctx>(
                     destination: None, ..
                 }
                 | InstrKind::Noop => ins.clone(),
-            } - out_of_scope[&label].get_all_locs();
+            };
+            outs.flush_locs(out_of_scope[&label].get_all_locs(), false);
 
             let flow = Flow { ins, outs };
             if loan_flow[&label] != flow {

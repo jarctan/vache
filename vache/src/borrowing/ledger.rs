@@ -4,7 +4,6 @@ use std::default::default;
 use std::fmt;
 use std::iter::Extend;
 use std::iter::Sum;
-use std::ops::{Add, Sub};
 
 use super::borrow::{Borrow, Borrows};
 use super::LocTree;
@@ -77,17 +76,17 @@ impl<'ctx> Ledger<'ctx> {
     /// Removes a place from the tracked locations in the ledger.
     ///
     /// Is a no-op if the place is not a location, but only part of it.
-    pub fn flush_place(&mut self, place: impl Into<Place<'ctx>>) {
+    pub fn flush_place(&mut self, place: impl Into<Place<'ctx>>, force: bool) {
         let place = place.into();
         if let Ok(loc) = Loc::try_from(place) {
-            self.flush_loc(loc);
+            self.flush_loc(loc, force);
         }
     }
 
     /// Removes a location from the tracked locations in the ledger.
     ///
     /// Returns the borrows that have been invalidated.
-    pub fn flush_loc(&mut self, loc: impl Into<Loc<'ctx>>) -> Borrows<'ctx> {
+    fn flush_loc(&mut self, loc: impl Into<Loc<'ctx>>, force: bool) -> Borrows<'ctx> {
         let loc = loc.into();
 
         let borrows: Borrows = self
@@ -105,7 +104,7 @@ impl<'ctx> Ledger<'ctx> {
             }
         }
 
-        if !borrows.is_empty() {
+        if !borrows.is_empty() || force {
             let removed_loans = self
                 .loans
                 .remove(loc)
@@ -118,7 +117,7 @@ impl<'ctx> Ledger<'ctx> {
     }
 
     /// Simultaneous removal of several locations from the ledger.
-    pub fn flush_locs(&mut self, locs: impl Iterator<Item = Loc<'ctx>>) {
+    pub fn flush_locs(&mut self, locs: impl Iterator<Item = Loc<'ctx>>, force: bool) {
         let locs: Set<_> = locs.collect();
 
         // First, remove all the borrows of the locations to flush
@@ -134,7 +133,7 @@ impl<'ctx> Ledger<'ctx> {
                 .map_or(default(), |node| node.into());
 
             if !borrows.is_empty() {
-                to_clean.insert(loc);
+                to_clean.insert(*loc);
             }
 
             for borrow in borrows.iter().copied() {
@@ -152,7 +151,7 @@ impl<'ctx> Ledger<'ctx> {
         // We need to do that in a second step because we don't want to add as
         // invalidated loans loans that were made by locations that are being
         // flushed at the same time as the loaner!
-        for loc in to_clean {
+        for loc in if force { to_clean.iter() } else { locs.iter() } {
             let removed_loans = self
                 .loans
                 .remove(loc)
@@ -183,7 +182,7 @@ impl<'ctx> Ledger<'ctx> {
         }
 
         // First, flush the place.
-        self.flush_place(place);
+        self.flush_place(place, true);
 
         // Register on the loaner side
         for &borrow in &borrows {
@@ -233,33 +232,6 @@ impl<'ctx> Ledger<'ctx> {
 impl fmt::Debug for Ledger<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.borrows.fmt(f)
-    }
-}
-
-impl<'ctx, B: Into<Borrows<'ctx>>> Add<(Place<'ctx>, B)> for Ledger<'ctx> {
-    type Output = Ledger<'ctx>;
-
-    fn add(mut self, (place, borrows): (Place<'ctx>, B)) -> Self {
-        self.set_borrows(place, borrows);
-        self
-    }
-}
-
-impl<'ctx> Sub<Place<'ctx>> for Ledger<'ctx> {
-    type Output = Ledger<'ctx>;
-
-    fn sub(mut self, place: Place<'ctx>) -> Self {
-        self.flush_place(place);
-        self
-    }
-}
-
-impl<'ctx: 'a, 'a, I: IntoIterator<Item = Loc<'ctx>>> Sub<I> for Ledger<'ctx> {
-    type Output = Ledger<'ctx>;
-
-    fn sub(mut self, locs: I) -> Self {
-        self.flush_locs(locs.into_iter());
-        self
     }
 }
 
