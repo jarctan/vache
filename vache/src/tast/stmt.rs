@@ -1,10 +1,19 @@
 //! Defining statements.
 
-use super::{Block, Expr, Place, VarDef};
+use super::{Block, Expr, Place, Span, VarDef};
 
 /// A statement.
 #[derive(Debug, Clone, Default)]
-pub enum Stmt<'ctx> {
+pub struct Stmt<'ctx> {
+    /// Statement kind.
+    pub kind: StmtKind<'ctx>,
+    /// Codespan in the source code.
+    pub span: Span,
+}
+
+/// Statement kind.
+#[derive(Debug, Clone, Default)]
+pub enum StmtKind<'ctx> {
     /// A declaration. We assign the computation
     /// of the 2nd argument to the newly created variable
     /// defined in the 1st argument.
@@ -38,4 +47,12 @@ pub enum Stmt<'ctx> {
     /// Hole statement.
     #[default]
     HoleS,
+}
+
+impl<'ctx> StmtKind<'ctx> {
+    /// Enrich the [`StmtKind`] with some [`Span`] information to get a
+    /// [`Stmt`].
+    pub(crate) fn with_span(self, span: Span) -> Stmt<'ctx> {
+        Stmt { kind: self, span }
+    }
 }

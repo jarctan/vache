@@ -10,7 +10,7 @@ use std::default::default;
 use ExprKind::*;
 use PatKind::*;
 use PlaceKind::*;
-use Stmt::*;
+use StmtKind::*;
 
 use crate::tast::*;
 use crate::Context;
@@ -84,7 +84,7 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
 
     /// Collects referencing modes in a statement.
     fn visit_stmt(&mut self, s: &Stmt<'ctx>) {
-        match s {
+        match &s.kind {
             DeclareS(_, e) | AssignS(_, e) | ExprS(e) => self.visit_expr(e),
             WhileS { cond, body } => {
                 self.visit_expr(cond);

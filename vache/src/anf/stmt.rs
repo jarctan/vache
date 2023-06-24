@@ -2,12 +2,28 @@
 
 use std::collections::HashMap;
 
-use super::{Block, Branch, Namespaced, Pointer, Reference, VarDef};
+use super::{Block, Branch, Namespaced, Pointer, Reference, Span, VarDef};
 use crate::mir::RValue;
 
 /// A statement.
 #[derive(Debug)]
-pub enum Stmt<'ctx> {
+pub struct Stmt<'ctx> {
+    /// Statement kind.
+    pub kind: StmtKind<'ctx>,
+    /// Code span in the source code.
+    pub span: Span,
+}
+
+impl<'ctx> Stmt<'ctx> {
+    /// [`Stmt`] constructor.
+    pub fn new(kind: StmtKind<'ctx>, span: Span) -> Self {
+        Self { kind, span }
+    }
+}
+
+/// A statement.
+#[derive(Debug)]
+pub enum StmtKind<'ctx> {
     /// A declaration. We assign the computation
     /// of the 2nd argument to the newly created variable
     /// defined in the 1st argument.

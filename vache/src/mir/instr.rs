@@ -12,6 +12,8 @@ use crate::utils::boxed;
 pub struct Instr<'a> {
     /// Instruction kind.
     pub kind: InstrKind<'a>,
+    /// Codespan of the instruction.
+    pub span: Span,
     /// Scope id of the instruction.
     ///
     /// This is the stratum/scope in which it is.
@@ -210,6 +212,7 @@ impl<'a> fmt::Debug for InstrKind<'a> {
 pub fn instr<'a>(kind: impl Into<InstrKind<'a>>, scope: impl Into<Stratum>) -> Instr<'a> {
     Instr {
         kind: kind.into(),
+        span: std::default::default(),
         scope: scope.into(),
     }
 }

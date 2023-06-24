@@ -21,7 +21,7 @@ pub(crate) struct MIRer<'ctx> {
 
 impl<'ctx> MIRer<'ctx> {
     /// Creates a new MIR processor.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             cfg: Cfg::default(),
             stm: Stratum::static_stm(),
@@ -34,14 +34,16 @@ impl<'ctx> MIRer<'ctx> {
     fn fresh_label(&mut self) -> CfgLabel {
         self.cfg.add_node(Instr {
             kind: InstrKind::default(),
+            span: default(),
             scope: self.stm,
         })
     }
 
     /// Generates an instruction with the right stratum.
-    fn instr<'s>(&'s self, kind: InstrKind<'ctx>) -> Instr<'ctx> {
+    fn instr<'s>(&'s self, kind: InstrKind<'ctx>, span: Span) -> Instr<'ctx> {
         Instr {
             kind,
+            span,
             scope: self.stm,
         }
     }
@@ -126,19 +128,22 @@ impl<'ctx> MIRer<'ctx> {
         exit_l: CfgLabel,
         break_l: Option<CfgLabel>,
     ) -> CfgLabel {
-        match s {
-            anf::Stmt::DeclareS(vardef) => {
+        match s.kind {
+            anf::StmtKind::DeclareS(vardef) => {
                 self.strata
                     .entry(vardef.stm)
                     .or_default()
                     .insert(vardef.name());
-                self.insert(self.instr(InstrKind::Declare(vardef)), [(DefaultB, dest_l)])
+                self.insert(
+                    self.instr(InstrKind::Declare(vardef), s.span),
+                    [(DefaultB, dest_l)],
+                )
             }
-            anf::Stmt::AssignS(ptr, rvalue) => self.insert(
-                self.instr(InstrKind::Assign(ptr, rvalue)),
+            anf::StmtKind::AssignS(ptr, rvalue) => self.insert(
+                self.instr(InstrKind::Assign(ptr, rvalue), s.span),
                 [(DefaultB, dest_l)],
             ),
-            anf::Stmt::WhileS {
+            anf::StmtKind::WhileS {
                 cond,
                 body,
                 cond_block,
@@ -152,32 +157,39 @@ impl<'ctx> MIRer<'ctx> {
 
                 // If statement
                 let if_l = self.insert(
-                    self.instr(InstrKind::Branch(cond)),
+                    self.instr(InstrKind::Branch(cond), s.span),
                     [(BoolB(true), body_l), (BoolB(false), dest_l)],
                 );
 
                 // Compute the condition.
                 let cond_l = self.visit_stmts(cond_block, if_l, exit_l, break_l);
 
-                self.insert_at(loop_l, self.instr(InstrKind::Noop), [(DefaultB, cond_l)]);
+                self.insert_at(
+                    loop_l,
+                    self.instr(InstrKind::Noop, s.span),
+                    [(DefaultB, cond_l)],
+                );
 
                 self.pop_scope();
 
                 loop_l
             }
-            anf::Stmt::CallS {
+            anf::StmtKind::CallS {
                 name,
                 args,
                 destination,
             } => self.insert(
-                self.instr(InstrKind::Call {
-                    name,
-                    args,
-                    destination,
-                }),
+                self.instr(
+                    InstrKind::Call {
+                        name,
+                        args,
+                        destination,
+                    },
+                    s.span,
+                ),
                 [(DefaultB, dest_l)],
             ),
-            anf::Stmt::IfS(cond, iftrue, iffalse) => {
+            anf::StmtKind::IfS(cond, iftrue, iffalse) => {
                 self.push_scope();
                 let iftrue = self.visit_stmts(iftrue, dest_l, exit_l, break_l);
                 self.pop_scope();
@@ -185,11 +197,11 @@ impl<'ctx> MIRer<'ctx> {
                 let iffalse = self.visit_stmts(iffalse, dest_l, exit_l, break_l);
                 self.pop_scope();
                 self.insert(
-                    self.instr(InstrKind::Branch(cond)),
+                    self.instr(InstrKind::Branch(cond), s.span),
                     [(BoolB(true), iftrue), (BoolB(false), iffalse)],
                 )
             }
-            anf::Stmt::MatchS(matched, branches) => {
+            anf::StmtKind::MatchS(matched, branches) => {
                 let branches: Vec<_> = branches
                     .into_iter()
                     .map(|(branch, stmts)| {
@@ -199,22 +211,23 @@ impl<'ctx> MIRer<'ctx> {
                         (branch, branch_l)
                     })
                     .collect();
-                self.insert(self.instr(InstrKind::Branch(matched)), branches)
+                self.insert(self.instr(InstrKind::Branch(matched), s.span), branches)
             }
-            anf::Stmt::BlockS(b) => {
+            anf::StmtKind::BlockS(b) => {
                 self.push_scope();
                 let res = self.visit_stmts(b, dest_l, exit_l, break_l);
                 self.pop_scope();
                 res
             }
-            anf::Stmt::ReturnS(ret) => {
-                self.insert(self.instr(InstrKind::Return(ret)), [(DefaultB, exit_l)])
-            }
-            anf::Stmt::BreakS => {
+            anf::StmtKind::ReturnS(ret) => self.insert(
+                self.instr(InstrKind::Return(ret), s.span),
+                [(DefaultB, exit_l)],
+            ),
+            anf::StmtKind::BreakS => {
                 let break_l = break_l.expect("break statement must be in a while loop");
-                self.insert(self.instr(InstrKind::Noop), [(DefaultB, break_l)])
+                self.insert(self.instr(InstrKind::Noop, s.span), [(DefaultB, break_l)])
             }
-            anf::Stmt::ContinueS => todo!(),
+            anf::StmtKind::ContinueS => todo!(),
         }
     }
 

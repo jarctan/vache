@@ -19,7 +19,7 @@ pub use fun::Fun;
 pub use pat::{Pat, PatKind};
 pub use place::{Place, PlaceKind};
 pub use program::Program;
-pub use stmt::Stmt;
+pub use stmt::{Stmt, StmtKind};
 pub use stratum::Stratum;
 #[cfg(test)]
 pub use var::vardef;

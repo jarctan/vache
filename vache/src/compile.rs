@@ -9,11 +9,12 @@ use string_builder::Builder as StringBuilder;
 use ExprKind::*;
 use PatKind::*;
 use PlaceKind::*;
+use StmtKind::*;
 use Ty::*;
 
 use crate::tast::{
-    Block, Enum, Expr, ExprKind, Fun, Mode, Pat, PatKind, Place, PlaceKind, Program, Stmt, Struct,
-    Ty, Varname,
+    Block, Enum, Expr, ExprKind, Fun, Mode, Pat, PatKind, Place, PlaceKind, Program, Stmt,
+    StmtKind, Struct, Ty, Varname,
 };
 use crate::Context;
 
@@ -424,8 +425,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
 
     /// Compiles a single statement.
     fn visit_stmt(&mut self, stmt: Stmt<'ctx>) -> TokenStream {
-        match stmt {
-            Stmt::DeclareS(lhs, rhs) => {
+        match stmt.kind {
+            DeclareS(lhs, rhs) => {
                 let name = format_ident!("{}", lhs.name().as_str());
                 let ty = Self::translate_type(&lhs.ty, false);
                 let rhs = self.visit_expr(rhs);
@@ -433,7 +434,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     let mut #name: #ty = #rhs;
                 }
             }
-            Stmt::AssignS(lhs, rhs) => {
+            AssignS(lhs, rhs) => {
                 assert!(matches!(lhs.mode, Mode::Assigning));
                 // Different output if we have a field at lhs
                 let is_field = matches!(lhs.kind, FieldP(..) | ElemP(..));
@@ -452,13 +453,13 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     }
                 }
             }
-            Stmt::ExprS(expr) => {
+            ExprS(expr) => {
                 let expr = self.visit_expr(expr);
                 quote! {
                     #expr;
                 }
             }
-            Stmt::WhileS { cond, body } => {
+            WhileS { cond, body } => {
                 let cond = self.visit_expr(cond);
                 let body = self.visit_block(body);
                 quote! {
@@ -466,7 +467,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             }
 
-            Stmt::ForS { item, iter, body } => {
+            ForS { item, iter, body } => {
                 let item = format_ident!("{}", item.name().as_str());
                 let iter = self.visit_expr(iter);
                 let body = self.visit_block(body);
@@ -474,10 +475,10 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     for #item in #iter #body
                 }
             }
-            Stmt::HoleS => unreachable!(),
-            Stmt::BreakS => quote!(break;),
-            Stmt::ContinueS => quote!(continue;),
-            Stmt::ReturnS(ret) => {
+            HoleS => unreachable!(),
+            BreakS => quote!(break;),
+            ContinueS => quote!(continue;),
+            ReturnS(ret) => {
                 let ret = self.visit_expr(ret);
                 quote!(return Ok(#ret);)
             }

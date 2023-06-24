@@ -216,7 +216,8 @@ pub fn liveness<'ctx>(
             reporter.emit(
                 Diagnostic::error()
                     .with_code(BORROW_ERROR)
-                    .with_message(format!("Cannot borrow `{:?}`", borrow.loc)),
+                    .with_message(format!("Cannot borrow `{:?}`", borrow.loc))
+                    .with_labels(vec![cfg[&borrow.label].span.into()]),
             );
         }
     }

@@ -8,6 +8,7 @@ use num_traits::ToPrimitive;
 use ExprKind::*;
 use PatKind::*;
 use PlaceKind::*;
+use StmtKind::*;
 use Ty::*;
 
 use crate::ast::fun::{binop_bool_sig, binop_int_sig, unop_bool_sig};
@@ -997,7 +998,6 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     /// * `ret_ty`: Return type of the function.
     /// * `in_loop`: is this statement in a loop?
     fn visit_stmt(&mut self, s: ast::Stmt<'ctx>, ret_ty: TyUse<'ctx>, in_loop: bool) -> Stmt<'ctx> {
-        use Stmt::*;
         let res: Option<Stmt> = try {
             match s.kind {
                 ast::StmtKind::DeclareS(mut vardef, expr) => {
@@ -1024,7 +1024,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                     self.add_var(vardef);
 
-                    DeclareS(VarDef::with_stratum(vardef, stm), expr)
+                    DeclareS(VarDef::with_stratum(vardef, stm), expr).with_span(s.span)
                 }
                 ast::StmtKind::AssignS(place, expr) => {
                     let rhs_span = expr.span;
@@ -1045,7 +1045,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         );
                     }
 
-                    AssignS(place, expr)
+                    AssignS(place, expr).with_span(s.span)
                 }
                 ast::StmtKind::WhileS { cond, body } => {
                     let cond = self.visit_expr(cond, ret_ty, in_loop);
@@ -1070,7 +1070,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         );
                     }
 
-                    WhileS { cond, body }
+                    WhileS { cond, body }.with_span(s.span)
                 }
                 ast::StmtKind::ForS { item, iter, body } => {
                     let stm = self.current_stratum();
@@ -1116,9 +1116,11 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 .with_labels(vec![body.span.as_label().with_message("here")]),
                         );
                     }
-                    ForS { item, iter, body }
+                    ForS { item, iter, body }.with_span(s.span)
                 }
-                ast::StmtKind::ExprS(e) => ExprS(self.visit_expr(e, ret_ty, in_loop)),
+                ast::StmtKind::ExprS(e) => {
+                    ExprS(self.visit_expr(e, ret_ty, in_loop)).with_span(s.span)
+                }
                 ast::StmtKind::BreakS => {
                     if !in_loop {
                         self.ctx.emit(
@@ -1128,7 +1130,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 .with_labels(vec![s.span.as_label()]),
                         );
                     }
-                    BreakS
+                    BreakS.with_span(s.span)
                 }
                 ast::StmtKind::ContinueS => {
                     if !in_loop {
@@ -1139,7 +1141,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 .with_labels(vec![s.span.as_label()]),
                         );
                     }
-                    ContinueS
+                    ContinueS.with_span(s.span)
                 }
                 ast::StmtKind::ReturnS(ret) => {
                     let ret = self.visit_expr(ret, ret_ty, in_loop);
@@ -1160,7 +1162,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 ]),
                         );
                     }
-                    ReturnS(ret)
+                    ReturnS(ret).with_span(s.span)
                 }
             }
         };

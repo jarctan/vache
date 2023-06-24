@@ -21,6 +21,6 @@ pub use place::Place;
 pub use pointer::{Pointer, Reference};
 pub use program::Program;
 pub use rvalue::RValue;
-pub use stmt::Stmt;
+pub use stmt::{Stmt, StmtKind};
 
 pub use crate::tast::{Enum, Mode, Namespaced, Span, Stratum, Struct, Ty, VarDef, VarUse, Varname};
