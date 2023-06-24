@@ -688,7 +688,13 @@ mod tests {
                 bail!("Typing errors found");
             }
         };
-        let mir = borrow_check(mir(&mut checked)?)?;
+        let mir = match borrow_check(mir(&mut checked)?)? {
+            Ok(mir) => mir,
+            Err(e) => {
+                e.display()?;
+                bail!("Borrow errors found");
+            }
+        };
         eprintln!("MIR: {mir:?}");
         let cfg = &mir.funs["main"].body;
 
@@ -733,7 +739,13 @@ mod tests {
                 bail!("Typing errors found");
             }
         };
-        let mir = borrow_check(mir(&mut checked)?)?;
+        let mir = match borrow_check(mir(&mut checked)?)? {
+            Ok(mir) => mir,
+            Err(e) => {
+                e.display()?;
+                bail!("Borrow errors found");
+            }
+        };
         eprintln!("MIR: {mir:?}");
         let main_fn = &mir.funs["main"];
         let dominators = main_fn.body.dominators(main_fn.entry_l);
@@ -765,7 +777,13 @@ mod tests {
                 bail!("Typing errors found");
             }
         };
-        let mir = borrow_check(mir(&mut checked)?)?;
+        let mir = match borrow_check(mir(&mut checked)?)? {
+            Ok(mir) => mir,
+            Err(e) => {
+                e.display()?;
+                bail!("Borrow errors found");
+            }
+        };
         eprintln!("MIR: {mir:?}");
         let main_fn = &mir.funs["main"];
         let dominators = main_fn.body.immediate_dominators(main_fn.entry_l);

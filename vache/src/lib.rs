@@ -70,7 +70,10 @@ pub fn compile<'ctx>(
 ) -> Result<()> {
     match typecheck(ctx, p)? {
         Ok(mut checked) => {
-            borrow_check(mir(&mut checked)?)?;
+            if let Err(diagnostics) = borrow_check(mir(&mut checked)?)? {
+                diagnostics.display()?;
+                bail!("Compile errors found");
+            }
             steps::cargo(steps::compile(ctx, checked)?, name.as_ref(), dest_dir).unwrap();
             Ok(())
         }
@@ -88,7 +91,10 @@ pub fn check_all<'ctx>(
 ) -> Result<tast::Program<'ctx>> {
     match typecheck(ctx, p)? {
         Ok(mut checked) => {
-            borrow_check(mir(&mut checked)?)?;
+            if let Err(diagnostics) = borrow_check(mir(&mut checked)?)? {
+                diagnostics.display()?;
+                bail!("Compile errors found");
+            }
             Ok(checked)
         }
         Err(diagnostics) => {
@@ -107,7 +113,10 @@ pub fn execute<'ctx>(
 ) -> Result<String> {
     match typecheck(ctx, p)? {
         Ok(mut checked) => {
-            borrow_check(mir(&mut checked)?)?;
+            if let Err(diagnostics) = borrow_check(mir(&mut checked)?)? {
+                diagnostics.display()?;
+                bail!("Compile errors found");
+            }
             let res = steps::run(ctx, checked, name, dest_dir)?;
             Ok(res)
         }
@@ -173,12 +182,15 @@ mod steps {
     ///
     /// Under the hood, this function is in charge of allocating a new
     /// `BorrowChecker` and launching it on your program.
-    pub fn borrow_check<'ctx>(p: impl Into<mir::Program<'ctx>>) -> Result<mir::Program<'ctx>> {
+    pub fn borrow_check<'ctx>(
+        p: impl Into<mir::Program<'ctx>>,
+    ) -> Result<Result<mir::Program<'ctx>, Diagnostics<'ctx>>> {
         print!("Borrow-checking...");
+        let p = p.into();
         std::io::stdout().flush()?;
         let start = Instant::now();
         let mut borrow_checker = BorrowChecker::new();
-        let res = borrow_checker.check(p.into());
+        let res = borrow_checker.check(p);
         println!("\rBorrow-checked [{:?}]", start.elapsed());
         Ok(res)
     }

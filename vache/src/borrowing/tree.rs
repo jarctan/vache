@@ -12,7 +12,7 @@ use std::ops::Sub;
 
 use Loc::*;
 
-use super::borrow::{Borrow, Borrows};
+use super::{Borrow, Borrows, Loans};
 use crate::mir::Loc;
 use crate::utils::boxed;
 
@@ -292,7 +292,63 @@ impl<'ctx> LocTreeNode<'ctx, Borrows<'ctx>> {
     /// Concatenates `self` and `other`.
     fn append(&mut self, other: Self) {
         match (&mut self.kind, other.kind) {
-            (AtomL(s), AtomL(o)) => s.extend(o.into_iter()),
+            (AtomL(s), AtomL(o)) => s.extend(o.iter().copied()),
+            (CompoundL(s), CompoundL(o)) => {
+                for (k, v) in o {
+                    s.entry(k)
+                        .or_insert(LocTreeNode {
+                            kind: default(),
+                            loc: v.loc,
+                        })
+                        .append(v);
+                }
+            }
+            (AtomL(..), CompoundL(..)) | (CompoundL(..), AtomL(..)) => panic!("Not append-able"),
+        }
+    }
+}
+
+impl<'ctx> LocTree<'ctx, Loans<'ctx>> {
+    /// Gets the `Loans` for a given path.
+    pub fn get_all<'a>(&'a self, loc: Loc<'ctx>) -> Box<dyn Iterator<Item = Borrow<'ctx>> + 'a> {
+        if let Some(node) = self.get_node(loc) {
+            node.get_all()
+        } else {
+            boxed(std::iter::empty())
+        }
+    }
+
+    /// Concatenates `self` and `other`.
+    pub fn append(&mut self, other: Self) {
+        for (var, other_tree) in other.0 {
+            match self.0.entry(var) {
+                hash_map::Entry::Occupied(mut entry) => {
+                    entry.get_mut().append(other_tree);
+                }
+                hash_map::Entry::Vacant(entry) => {
+                    entry.insert(other_tree);
+                }
+            };
+        }
+    }
+}
+
+impl<'ctx> LocTreeNode<'ctx, Loans<'ctx>> {
+    /// Gets *all* the `Borrows`.
+    fn get_all<'a>(&'a self) -> Box<dyn Iterator<Item = Borrow<'ctx>> + 'a> {
+        match &self.kind {
+            AtomL(set) => boxed(set.iter().copied()),
+            CompoundL(map) => map
+                .values()
+                .map(|v| v.get_all())
+                .fold(boxed(std::iter::empty()), |acc, set| boxed(acc.chain(set))),
+        }
+    }
+
+    /// Concatenates `self` and `other`.
+    fn append(&mut self, other: Self) {
+        match (&mut self.kind, other.kind) {
+            (AtomL(s), AtomL(o)) => s.extend(o.iter().copied()),
             (CompoundL(s), CompoundL(o)) => {
                 for (k, v) in o {
                     s.entry(k)
@@ -310,6 +366,15 @@ impl<'ctx> LocTreeNode<'ctx, Borrows<'ctx>> {
 
 impl<'ctx> From<LocTreeNode<'ctx, Borrows<'ctx>>> for Borrows<'ctx> {
     fn from(value: LocTreeNode<'ctx, Borrows<'ctx>>) -> Self {
+        match value.kind {
+            AtomL(set) => set,
+            CompoundL(map) => map.into_values().map(|v| v.into()).sum(),
+        }
+    }
+}
+
+impl<'ctx> From<LocTreeNode<'ctx, Loans<'ctx>>> for Loans<'ctx> {
+    fn from(value: LocTreeNode<'ctx, Loans<'ctx>>) -> Self {
         match value.kind {
             AtomL(set) => set,
             CompoundL(map) => map.into_values().map(|v| v.into()).sum(),

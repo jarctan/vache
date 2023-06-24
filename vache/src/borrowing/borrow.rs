@@ -16,6 +16,8 @@ pub struct Borrow<'ctx> {
     pub borrower: Loc<'ctx>,
     /// Borrowed location. NOT the borrower.
     pub loc: Loc<'ctx>,
+    /// Is it a mutable borrow?
+    pub mutable: bool,
 }
 
 impl fmt::Debug for Borrow<'_> {

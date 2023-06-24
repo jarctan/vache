@@ -7,7 +7,9 @@ use super::flow::Flow;
 use super::tree::LocTree;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
+use crate::codes::BORROW_ERROR;
 use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
+use crate::reporter::{Diagnostic, Diagnostics, Reporter};
 use crate::utils::set::Set;
 
 /// Variable liveness analysis.
@@ -110,13 +112,11 @@ fn loan_liveness<'ctx>(
                 } => {
                     let mut ledger = ins.clone();
                     ledger.flush_place(lhs.place(), true);
-                    if var_flow[&label].outs.contains(lhs.loc()) {
-                        let borrows = instr
-                            .references()
-                            .map(|reference| ledger.borrow(lhs.place(), reference, label))
-                            .sum::<Borrows>();
-                        ledger.set_borrows(lhs.place(), borrows);
-                    }
+                    let borrows = instr
+                        .references()
+                        .map(|reference| ledger.borrow(lhs.place(), reference, label))
+                        .sum::<Borrows>();
+                    ledger.set_borrows(lhs.place(), borrows);
                     ledger
                 }
                 InstrKind::Branch(_)
@@ -172,7 +172,8 @@ pub fn liveness<'ctx>(
     entry_l: CfgLabel,
     exit_l: CfgLabel,
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
-) -> CfgI<'ctx> {
+    reporter: &mut Reporter<'ctx>,
+) -> Result<CfgI<'ctx>, Diagnostics<'ctx>> {
     // Compute the var analysis first
     let var_flow = var_liveness(&cfg, entry_l);
 
@@ -210,12 +211,22 @@ pub fn liveness<'ctx>(
     // all
     invalidated.extend(loan_flow[&exit_l].outs.invalidations());
 
+    if let Some(unrecoverables) = loan_flow[&exit_l].outs.unrecoverables() {
+        for borrow in unrecoverables {
+            reporter.emit(
+                Diagnostic::error()
+                    .with_code(BORROW_ERROR)
+                    .with_message(format!("Cannot borrow `{:?}`", borrow.loc)),
+            );
+        }
+    }
+
     // Transform all invalidated borrows into clones
     for Borrow { label, loc, .. } in invalidated {
         cfg[&label].force_clone(&loc);
     }
 
-    cfg
+    Ok(cfg)
 }
 
 /*#[cfg(test)]

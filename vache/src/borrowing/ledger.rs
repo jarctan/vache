@@ -5,8 +5,7 @@ use std::fmt;
 use std::iter::Extend;
 use std::iter::Sum;
 
-use super::borrow::{Borrow, Borrows};
-use super::LocTree;
+use super::{Borrow, Borrows, Loans, LocTree};
 use crate::mir::Mode;
 use crate::mir::Reference;
 use crate::mir::{CfgLabel, Loc, Place};
@@ -22,9 +21,11 @@ pub struct Ledger<'ctx> {
     ///
     /// Invariant: `self.loans` and `self.borrows` are consistent (`Borrow`s are
     /// in both).
-    loans: LocTree<'ctx, Borrows<'ctx>>,
+    loans: LocTree<'ctx, Loans<'ctx>>,
     /// Invalidated borrows.
     invalidations: Borrows<'ctx>,
+    /// Unrecoverable invalidated borrows.
+    unrecoverables: Borrows<'ctx>,
 }
 
 impl<'ctx> Ledger<'ctx> {
@@ -38,19 +39,21 @@ impl<'ctx> Ledger<'ctx> {
     ) -> Borrows<'ctx> {
         let borrower = borrower.into().root();
         match reference.mode() {
-            Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed | Mode::SMutBorrowed => {
+            mode @ (Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed | Mode::SMutBorrowed) => {
                 // You clone their loans + the loan into the borrowed pointer
                 self.borrows(reference.place())
                     .map(|borrow| Borrow {
                         label: borrow.label,
                         borrower, // Note that we update the borrower. That's re-borrowing in action
                         loc: borrow.loc,
+                        mutable: borrow.mutable,
                     })
                     .collect::<Borrows>()
                     + Borrow {
                         loc: *reference.loc(),
                         borrower,
                         label,
+                        mutable: matches!(mode, Mode::MutBorrowed | Mode::SMutBorrowed),
                     }
             }
             Mode::Moved => {
@@ -65,6 +68,7 @@ impl<'ctx> Ledger<'ctx> {
                         label: borrow.label,
                         borrower, // Note that we update the borrower. That's re-borrowing in action
                         loc: borrow.loc,
+                        mutable: borrow.mutable,
                     })
                     .collect::<Borrows>()
             }
@@ -108,6 +112,7 @@ impl<'ctx> Ledger<'ctx> {
             let removed_loans = self
                 .loans
                 .remove(loc)
+                .map(Loans::from)
                 .map(Borrows::from)
                 .unwrap_or_default();
             self.invalidations.extend(removed_loans);
@@ -155,6 +160,7 @@ impl<'ctx> Ledger<'ctx> {
             let removed_loans = self
                 .loans
                 .remove(loc)
+                .map(Loans::from)
                 .map(Borrows::from)
                 .unwrap_or_default();
             let loans = removed_loans
@@ -174,9 +180,9 @@ impl<'ctx> Ledger<'ctx> {
     ) {
         let place = place.into();
         let loc = place.root();
+        let mut borrows = borrows.into();
 
         // Remove borrows into ourselves.
-        let mut borrows = borrows.into();
         if let Ok(loc) = place.try_into() {
             borrows.retain(|b| b.loc != loc);
         }
@@ -186,7 +192,9 @@ impl<'ctx> Ledger<'ctx> {
 
         // Register on the loaner side
         for &borrow in &borrows {
-            self.loans.get_mut_or_insert(borrow.loc).insert(borrow);
+            if !self.loans.get_mut_or_insert(borrow.loc).insert(borrow) {
+                self.unrecoverables.insert(borrow);
+            }
         }
 
         // Register on the borrower side
@@ -227,6 +235,15 @@ impl<'ctx> Ledger<'ctx> {
     pub fn invalidations<'a>(&'a self) -> impl Iterator<Item = Borrow<'ctx>> + 'a {
         self.invalidations.iter().copied()
     }
+
+    /// Get the unrecoverables invalidations.
+    pub fn unrecoverables<'a>(&'a self) -> Option<impl Iterator<Item = Borrow<'ctx>> + 'a> {
+        if self.unrecoverables.is_empty() {
+            None
+        } else {
+            Some(self.unrecoverables.iter().copied())
+        }
+    }
 }
 
 impl fmt::Debug for Ledger<'_> {
@@ -237,19 +254,22 @@ impl fmt::Debug for Ledger<'_> {
 
 impl<'ctx> Sum for Ledger<'ctx> {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        let mut loans: LocTree<'ctx, Borrows<'ctx>> = default();
+        let mut loans: LocTree<'ctx, Loans<'ctx>> = default();
         let mut borrows: LocTree<'ctx, Borrows<'ctx>> = default();
         let mut invalidations: Borrows = default();
+        let mut unrecoverables: Borrows = default();
 
         for ledger in iter {
             loans.append(ledger.loans);
             borrows.append(ledger.borrows);
             invalidations.extend(ledger.invalidations);
+            unrecoverables.extend(ledger.unrecoverables);
         }
         Self {
             loans,
             borrows,
             invalidations,
+            unrecoverables,
         }
     }
 }

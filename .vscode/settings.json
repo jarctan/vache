@@ -23,6 +23,7 @@
         "idoms",
         "iffalse",
         "iftrue",
+        "Immut",
         "itertools",
         "ivar",
         "linearization",
@@ -50,6 +51,7 @@
         "uninit",
         "unop",
         "unparse",
+        "unrecoverables",
         "vache",
         "vardef",
         "varmode"

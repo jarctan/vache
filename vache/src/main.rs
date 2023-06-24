@@ -80,7 +80,13 @@ fn main() -> anyhow::Result<()> {
             let program = parse_file(&mut context).context("Compilation failed")?;
             match typecheck(&mut context, program)? {
                 Ok(mut checked) => {
-                    let mir = borrow_check(mir(&mut checked)?)?;
+                    let mir = match borrow_check(mir(&mut checked)?)? {
+                        Ok(mir) => mir,
+                        Err(e) => {
+                            e.display()?;
+                            bail!("Borrow errors found");
+                        }
+                    };
                     println!("{:#?}", mir);
                     Ok(())
                 }
@@ -158,7 +164,13 @@ fn main() -> anyhow::Result<()> {
             match typecheck(&mut context, program)? {
                 Ok(mut checked) => {
                     // Compute MIR
-                    let mir = borrow_check(mir(&mut checked)?)?;
+                    let mir = match borrow_check(mir(&mut checked)?)? {
+                        Ok(mir) => mir,
+                        Err(e) => {
+                            e.display()?;
+                            bail!("Borrow errors found");
+                        }
+                    };
 
                     // Interpret
                     let res = interpret(mir).context("interpreter error")?;
