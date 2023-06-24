@@ -688,7 +688,7 @@ mod tests {
                 bail!("Typing errors found");
             }
         };
-        let mir = match borrow_check(mir(&mut checked)?)? {
+        let mir = match borrow_check(&mut ctx, mir(&mut checked)?)? {
             Ok(mir) => mir,
             Err(e) => {
                 e.display()?;
@@ -739,7 +739,7 @@ mod tests {
                 bail!("Typing errors found");
             }
         };
-        let mir = match borrow_check(mir(&mut checked)?)? {
+        let mir = match borrow_check(&mut ctx, mir(&mut checked)?)? {
             Ok(mir) => mir,
             Err(e) => {
                 e.display()?;
@@ -777,7 +777,7 @@ mod tests {
                 bail!("Typing errors found");
             }
         };
-        let mir = match borrow_check(mir(&mut checked)?)? {
+        let mir = match borrow_check(&mut ctx, mir(&mut checked)?)? {
             Ok(mir) => mir,
             Err(e) => {
                 e.display()?;

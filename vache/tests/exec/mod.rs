@@ -182,7 +182,13 @@ fn interpret_va(filename: &str) {
 
     match typecheck(&mut context, program)? {
         Ok(mut checked) => {
-            let mir = borrow_check(mir(&mut checked)?)?;
+            let mir = match borrow_check(&mut context, mir(&mut checked)?)? {
+                Ok(mir) => mir,
+                Err(e) => {
+                    e.display()?;
+                    bail!("Borrow errors found");
+                }
+            };
             eprintln!("MIR: {mir:?}");
 
             // Interpret

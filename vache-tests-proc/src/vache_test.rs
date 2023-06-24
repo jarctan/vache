@@ -53,7 +53,13 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let mut context = ::vache_lib::Context::new(config, &arena);
                 match ::vache_lib::typecheck(&mut context, p)? {
                     Ok(mut checked) => {
-                        let mir = ::vache_lib::borrow_check(::vache_lib::mir(&mut checked)?)?;
+                        let mir = match ::vache_lib::borrow_check(&mut context, ::vache_lib::mir(&mut checked)?)? {
+                            Ok(mir) => mir,
+                            Err(e) => {
+                                e.display()?;
+                                bail!("Borrow errors found");
+                            }
+                        };
                         let cur_dir = ::std::env::current_dir().context("Could not get current directory")?;
                         let binary_name = "test-binary";
                         assert_eq!(
@@ -81,7 +87,13 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let mut context = ::vache_lib::Context::new(config, &arena);
                 match ::vache_lib::typecheck(&mut context, p)? {
                     Ok(mut checked) => {
-                        let mir = ::vache_lib::borrow_check(::vache_lib::mir(&mut checked)?)?;
+                        let mir = match ::vache_lib::borrow_check(&mut context, ::vache_lib::mir(&mut checked)?)? {
+                            Ok(mir) => mir,
+                            Err(e) => {
+                                e.display()?;
+                                bail!("Borrow errors found");
+                            }
+                        };
                         eprintln!("MIR: {:#?}", mir);
                         assert_eq!(
                             ::vache_lib::interpret(mir)?,

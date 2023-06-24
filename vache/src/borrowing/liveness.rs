@@ -167,18 +167,18 @@ fn loan_liveness<'ctx>(
 /// * The set of variables for each stratum.
 ///
 /// Performs liveliness analysis, determining which borrows are invalidated.
-pub fn liveness<'ctx>(
-    mut cfg: CfgI<'ctx>,
+pub fn liveness<'mir, 'ctx>(
+    mut cfg: CfgI<'mir>,
     entry_l: CfgLabel,
     exit_l: CfgLabel,
-    strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
+    strata: &HashMap<Stratum, Set<Varname<'mir>>>,
     reporter: &mut Reporter<'ctx>,
-) -> Result<CfgI<'ctx>, Diagnostics<'ctx>> {
+) -> Result<CfgI<'mir>, Diagnostics<'ctx>> {
     // Compute the var analysis first
     let var_flow = var_liveness(&cfg, entry_l);
 
     // Check last variable use and replace with a move
-    let mut invalidated: Borrows<'ctx> = Borrows::new();
+    let mut invalidated: Borrows = Borrows::new();
     for (label, instr) in cfg.bfs_mut(entry_l, false) {
         let outs = &var_flow[&label].outs;
         for reference in instr.references_mut() {
@@ -216,7 +216,11 @@ pub fn liveness<'ctx>(
             reporter.emit(
                 Diagnostic::error()
                     .with_code(BORROW_ERROR)
-                    .with_message(format!("Cannot borrow `{:?}`", borrow.loc))
+                    .with_message(format!(
+                        "Cannot {} borrow `{}`",
+                        if borrow.mutable { "mutably" } else { "" },
+                        borrow.loc,
+                    ))
                     .with_labels(vec![cfg[&borrow.label].span.into()]),
             );
         }

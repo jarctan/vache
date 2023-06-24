@@ -7,11 +7,10 @@
 use std::collections::HashMap;
 use std::default::default;
 
-use codespan_reporting::files::SimpleFile;
-
 use super::liveness;
 use crate::mir::{Fun, Program};
-use crate::reporter::{Diagnostics, Reporter};
+use crate::reporter::Diagnostics;
+use crate::Context;
 
 /// The borrow-checker.
 pub struct BorrowChecker {}
@@ -23,36 +22,37 @@ impl BorrowChecker {
     }
 
     /// Borrow-checks a given program.
-    pub fn check<'ctx>(&mut self, p: Program<'ctx>) -> Result<Program<'ctx>, Diagnostics<'ctx>> {
-        self.visit_program(p)
+    pub fn check<'mir, 'ctx>(
+        &mut self,
+        ctx: &mut Context<'ctx>,
+        p: Program<'mir>,
+    ) -> Result<Program<'mir>, Diagnostics<'ctx>> {
+        self.visit_program(ctx, p)
     }
 
     /// Borrow-checks a function.
-    fn visit_fun<'ctx>(
+    fn visit_fun<'mir, 'ctx>(
         &mut self,
-        reporter: &mut Reporter<'ctx>,
-        mut f: Fun<'ctx>,
-    ) -> Result<Fun<'ctx>, Diagnostics<'ctx>> {
-        f.body = liveness(f.body, f.entry_l, f.ret_l, &f.strata, reporter)?;
+        ctx: &mut Context<'ctx>,
+        mut f: Fun<'mir>,
+    ) -> Result<Fun<'mir>, Diagnostics<'ctx>> {
+        f.body = liveness(f.body, f.entry_l, f.ret_l, &f.strata, &mut ctx.reporter)?;
         Ok(f)
     }
 
     /// Borrow-checks a program.
-    fn visit_program<'ctx>(
+    fn visit_program<'mir, 'ctx>(
         &mut self,
-        p: Program<'ctx>,
-    ) -> Result<Program<'ctx>, Diagnostics<'ctx>> {
+        ctx: &mut Context<'ctx>,
+        p: Program<'mir>,
+    ) -> Result<Program<'mir>, Diagnostics<'ctx>> {
         let mut funs: HashMap<&str, Fun> = default();
-        let files = p
-            .arena
-            .alloc(SimpleFile::new("unknown file", "unknown input"));
-        let mut reporter = Reporter::new(p.arena, files);
         for (name, f) in p.funs {
-            funs.insert(name, self.visit_fun(&mut reporter, f)?);
+            funs.insert(name, self.visit_fun(ctx, f)?);
         }
 
-        if reporter.has_errors() {
-            Err(reporter.flush())
+        if ctx.reporter.has_errors() {
+            Err(ctx.reporter.flush())
         } else {
             Ok(Program {
                 arena: p.arena,

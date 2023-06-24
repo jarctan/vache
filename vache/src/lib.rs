@@ -70,7 +70,7 @@ pub fn compile<'ctx>(
 ) -> Result<()> {
     match typecheck(ctx, p)? {
         Ok(mut checked) => {
-            if let Err(diagnostics) = borrow_check(mir(&mut checked)?)? {
+            if let Err(diagnostics) = borrow_check(ctx, mir(&mut checked)?)? {
                 diagnostics.display()?;
                 bail!("Compile errors found");
             }
@@ -91,7 +91,7 @@ pub fn check_all<'ctx>(
 ) -> Result<tast::Program<'ctx>> {
     match typecheck(ctx, p)? {
         Ok(mut checked) => {
-            if let Err(diagnostics) = borrow_check(mir(&mut checked)?)? {
+            if let Err(diagnostics) = borrow_check(ctx, mir(&mut checked)?)? {
                 diagnostics.display()?;
                 bail!("Compile errors found");
             }
@@ -111,9 +111,9 @@ pub fn execute<'ctx>(
     name: impl AsRef<str>,
     dest_dir: &Path,
 ) -> Result<String> {
-    match typecheck(ctx, p)? {
+    match typecheck(&mut *ctx, p)? {
         Ok(mut checked) => {
-            if let Err(diagnostics) = borrow_check(mir(&mut checked)?)? {
+            if let Err(diagnostics) = borrow_check(&mut *ctx, mir(&mut checked)?)? {
                 diagnostics.display()?;
                 bail!("Compile errors found");
             }
@@ -155,8 +155,8 @@ mod steps {
     ///
     /// Under the hood, this function is in charge of allocating a new `Typer`
     /// and launching it on your program.
-    pub fn typecheck<'ctx>(
-        ctx: &mut Context<'ctx>,
+    pub fn typecheck<'a, 'ctx>(
+        ctx: &'a mut Context<'ctx>,
         p: impl Into<ast::Program<'ctx>>,
     ) -> Result<Result<tast::Program<'ctx>, Diagnostics<'ctx>>> {
         print!("Type-checking...");
@@ -182,15 +182,16 @@ mod steps {
     ///
     /// Under the hood, this function is in charge of allocating a new
     /// `BorrowChecker` and launching it on your program.
-    pub fn borrow_check<'ctx>(
-        p: impl Into<mir::Program<'ctx>>,
-    ) -> Result<Result<mir::Program<'ctx>, Diagnostics<'ctx>>> {
+    pub fn borrow_check<'a, 'mir, 'ctx>(
+        ctx: &'a mut Context<'ctx>,
+        p: impl Into<mir::Program<'mir>>,
+    ) -> Result<Result<mir::Program<'mir>, Diagnostics<'ctx>>> {
         print!("Borrow-checking...");
         let p = p.into();
         std::io::stdout().flush()?;
         let start = Instant::now();
         let mut borrow_checker = BorrowChecker::new();
-        let res = borrow_checker.check(p);
+        let res = borrow_checker.check(ctx, p);
         println!("\rBorrow-checked [{:?}]", start.elapsed());
         Ok(res)
     }
