@@ -1,5 +1,6 @@
 //! Declaring here the annotations to the CFG we compute during the analysis.
 
+use std::collections::HashMap;
 use std::default::default;
 use std::fmt;
 use std::iter::Extend;
@@ -45,12 +46,12 @@ impl<'ctx> Ledger<'ctx> {
                     .map(|borrow| Borrow {
                         label: borrow.label,
                         borrower, // Note that we update the borrower. That's re-borrowing in action
-                        loc: borrow.loc,
+                        ptr: borrow.ptr,
                         mutable: borrow.mutable,
                     })
                     .collect::<Borrows>()
                     + Borrow {
-                        loc: *reference.loc(),
+                        ptr: reference.as_ptr(),
                         borrower,
                         label,
                         mutable: matches!(mode, Mode::MutBorrowed | Mode::SMutBorrowed),
@@ -67,7 +68,7 @@ impl<'ctx> Ledger<'ctx> {
                     .map(|borrow| Borrow {
                         label: borrow.label,
                         borrower, // Note that we update the borrower. That's re-borrowing in action
-                        loc: borrow.loc,
+                        ptr: borrow.ptr,
                         mutable: borrow.mutable,
                     })
                     .collect::<Borrows>()
@@ -98,13 +99,13 @@ impl<'ctx> Ledger<'ctx> {
             .remove(loc)
             .map_or(default(), |node| node.into());
 
-        for borrow in borrows.iter().copied() {
+        for borrow in borrows.iter() {
             // If the borrow is not invalidated, remove it from the loans.
-            if !self.invalidations.contains(&borrow) {
+            if !self.invalidations.contains(borrow) {
                 self.loans
-                    .get_mut(borrow.loc)
+                    .get_mut(borrow.loc())
                     .unwrap_or_else(|| panic!("Ledger error: want to free a non-invalidated borrow {borrow:?} but loaner is not alive anymore!"))
-                    .remove(&borrow);
+                    .remove(borrow);
             }
         }
 
@@ -141,13 +142,13 @@ impl<'ctx> Ledger<'ctx> {
                 to_clean.insert(*loc);
             }
 
-            for borrow in borrows.iter().copied() {
+            for borrow in borrows.iter() {
                 // If the borrow is not invalidated, remove it from the loans.
-                if !self.invalidations.contains(&borrow) {
+                if !self.invalidations.contains(borrow) {
                     self.loans
-                        .get_mut(borrow.loc)
+                        .get_mut(borrow.loc())
                         .unwrap_or_else(|| panic!("Ledger error: want to free a non-invalidated borrow {borrow:?} but loaner is not alive anymore!"))
-                        .remove(&borrow);
+                        .remove(borrow);
                 }
             }
         }
@@ -170,29 +171,41 @@ impl<'ctx> Ledger<'ctx> {
         }
     }
 
+    /// Tries to flatten/merge the list of sets of borrows into a set of
+    /// borrows, checking for consistency between borrows (we cannot merge
+    /// if we have two mutable borrows, for instance).
+    pub fn flatten(&mut self, borrows: Vec<Borrows<'ctx>>) -> Borrows<'ctx> {
+        let mut map = HashMap::new();
+        for borrows in &borrows {
+            for &borrow in borrows {
+                let loans: &mut Loans = map.entry(borrow.loc()).or_default();
+
+                if !loans.insert(borrow) {
+                    self.unrecoverables.insert(borrow);
+                }
+            }
+        }
+        borrows.into_iter().sum()
+    }
+
     /// Sets the new `borrows` of `place`.
     ///
     /// Note: will filter borrows that are made into `place` itself.
-    pub fn set_borrows(
-        &mut self,
-        place: impl Into<Place<'ctx>>,
-        borrows: impl Into<Borrows<'ctx>>,
-    ) {
+    pub fn set_borrows(&mut self, place: impl Into<Place<'ctx>>, mut borrows: Borrows<'ctx>) {
         let place = place.into();
         let loc = place.root();
-        let mut borrows = borrows.into();
-
-        // Remove borrows into ourselves.
-        if let Ok(loc) = place.try_into() {
-            borrows.retain(|b| b.loc != loc);
-        }
 
         // First, flush the place.
         self.flush_place(place, true);
 
+        // Remove borrows into ourselves.
+        if let Ok(loc) = place.try_into() {
+            borrows.retain(|b| b.loc() != loc);
+        }
+
         // Register on the loaner side
         for &borrow in &borrows {
-            if !self.loans.get_mut_or_insert(borrow.loc).insert(borrow) {
+            if !self.loans.get_mut_or_insert(borrow.loc()).insert(borrow) {
                 self.unrecoverables.insert(borrow);
             }
         }
@@ -203,7 +216,7 @@ impl<'ctx> Ledger<'ctx> {
                 if borrows.is_empty() {
                     self.borrows.remove(loc);
                 } else {
-                    *self.borrows.get_mut_or_insert(loc) = borrows;
+                    *self.borrows.get_mut_or_insert(loc) = borrows.into_iter().collect();
                 }
             }
             Err(()) => {
@@ -254,8 +267,8 @@ impl fmt::Debug for Ledger<'_> {
 
 impl<'ctx> Sum for Ledger<'ctx> {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        let mut loans: LocTree<'ctx, Loans<'ctx>> = default();
-        let mut borrows: LocTree<'ctx, Borrows<'ctx>> = default();
+        let mut loans: LocTree<Loans> = default();
+        let mut borrows: LocTree<Borrows> = default();
         let mut invalidations: Borrows = default();
         let mut unrecoverables: Borrows = default();
 

@@ -24,7 +24,7 @@ pub enum Loans<'ctx> {
     /// Only one mutable loan.
     Mut(Borrow<'ctx>),
     /// Only immutable loans.
-    Immut(Set<Borrow<'ctx>>),
+    Immut(Borrows<'ctx>),
     /// No loan.
     #[default]
     None,

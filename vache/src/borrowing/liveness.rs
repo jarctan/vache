@@ -1,6 +1,6 @@
 //! Implementing the liveness analysis algorithm.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use super::borrow::Borrows;
 use super::flow::Flow;
@@ -115,7 +115,8 @@ fn loan_liveness<'ctx>(
                     let borrows = instr
                         .references()
                         .map(|reference| ledger.borrow(lhs.place(), reference, label))
-                        .sum::<Borrows>();
+                        .collect::<Vec<_>>();
+                    let borrows = ledger.flatten(borrows);
                     ledger.set_borrows(lhs.place(), borrows);
                     ledger
                 }
@@ -178,13 +179,32 @@ pub fn liveness<'mir, 'ctx>(
     let var_flow = var_liveness(&cfg, entry_l);
 
     // Check last variable use and replace with a move
-    let mut invalidated: Borrows = Borrows::new();
+    let mut invalidated = Borrows::new();
     for (label, instr) in cfg.bfs_mut(entry_l, false) {
         let outs = &var_flow[&label].outs;
-        for reference in instr.references_mut() {
+
+        // Get all the references of that instruction.
+        let references: Vec<_> = instr.references_mut().collect();
+
+        // Get, for each reference, the set of locations that are used by any reference
+        // after that one within the same instruction
+        // For example, for `print(a, a)`, we will see that we cannot move the first
+        // `a`, since it is used by a reference after that first `a`
+        // To do that, we compute the set of locations that cannot be moved for each
+        // reference in our `references`.
+        let mut cannot_move: VecDeque<_> = VecDeque::from([Set::new()]);
+        for r in references.iter().rev() {
+            let el = cannot_move.back().unwrap().clone() + r.loc();
+            cannot_move.push_front(el);
+        }
+        cannot_move.pop_front();
+        debug_assert!(cannot_move.len() == references.len());
+
+        for (i, reference) in references.into_iter().enumerate() {
             match reference.mode() {
                 Mode::Borrowed | Mode::MutBorrowed | Mode::SMutBorrowed | Mode::SBorrowed => {
-                    if !outs.contains(reference.loc()) {
+                    let loc = reference.loc();
+                    if !outs.contains(loc) && !cannot_move[i].contains(loc) {
                         reference.set_mode(Mode::Moved);
                     }
                 }
@@ -219,16 +239,20 @@ pub fn liveness<'mir, 'ctx>(
                     .with_message(format!(
                         "Cannot {} borrow `{}`",
                         if borrow.mutable { "mutably" } else { "" },
-                        borrow.loc,
+                        borrow.loc(),
                     ))
-                    .with_labels(vec![cfg[&borrow.label].span.into()]),
+                    .with_labels(vec![cfg[&borrow.label].span.into()])
+                    .with_notes(vec![format!(
+                        "{:?} {:?} {:?}",
+                        borrow.label, borrow.borrower, borrow.ptr
+                    )]),
             );
         }
     }
 
     // Transform all invalidated borrows into clones
-    for Borrow { label, loc, .. } in invalidated {
-        cfg[&label].force_clone(&loc);
+    for Borrow { label, ptr, .. } in invalidated {
+        cfg[&label].force_clone(&ptr);
     }
 
     Ok(cfg)
