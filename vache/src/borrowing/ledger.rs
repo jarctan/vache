@@ -9,7 +9,7 @@ use std::iter::Sum;
 use super::{Borrow, Borrows, Loans, LocTree};
 use crate::mir::Mode;
 use crate::mir::Reference;
-use crate::mir::{CfgLabel, Loc, Place};
+use crate::mir::{CfgLabel, Loc, Place, Pointer};
 use crate::utils::set::Set;
 
 /// A loan ledger.
@@ -34,18 +34,19 @@ impl<'ctx> Ledger<'ctx> {
     /// the borrow of `reference` at CFG label `label`.
     pub fn borrow(
         &mut self,
-        borrower: impl Into<Place<'ctx>>,
+        borrower: Loc<'ctx>,
         reference: &Reference<'ctx>,
         label: CfgLabel,
     ) -> Borrows<'ctx> {
-        let borrower = borrower.into().root();
+        let span = reference.as_ptr().span;
         match reference.mode() {
             mode @ (Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed | Mode::SMutBorrowed) => {
                 // You clone their loans + the loan into the borrowed pointer
                 self.borrows(reference.place())
                     .map(|borrow| Borrow {
                         label: borrow.label,
-                        borrower, // Note that we update the borrower. That's re-borrowing in action
+                        borrower, // Note that we update the borrower
+                        span: borrow.span,
                         ptr: borrow.ptr,
                         mutable: borrow.mutable,
                     })
@@ -54,6 +55,7 @@ impl<'ctx> Ledger<'ctx> {
                         ptr: reference.as_ptr(),
                         borrower,
                         label,
+                        span,
                         mutable: matches!(mode, Mode::MutBorrowed | Mode::SMutBorrowed),
                     }
             }
@@ -67,7 +69,8 @@ impl<'ctx> Ledger<'ctx> {
                 self.borrows(reference.place())
                     .map(|borrow| Borrow {
                         label: borrow.label,
-                        borrower, // Note that we update the borrower. That's re-borrowing in action
+                        borrower, // Note that we update the borrower
+                        span: borrow.span,
                         ptr: borrow.ptr,
                         mutable: borrow.mutable,
                     })

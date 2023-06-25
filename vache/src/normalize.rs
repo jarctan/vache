@@ -101,15 +101,14 @@ impl<'ctx> Normalizer<'ctx> {
     /// If that variable is a pattern, we will get the pointer into what the
     /// pattern represents. Otherwise, the variable is a legit variable and
     /// we will get a new pointer into it.
-    fn get_translation_ptr(&self, var: impl Into<Varname<'ctx>>) -> Option<Pointer<'ctx>> {
-        let var = var.into();
+    fn get_translation_ptr(&self, var: VarUse<'ctx>) -> Option<Pointer<'ctx>> {
         let place = self
             .var_t9n
             .iter()
             .rev() // Search through latest env first
-            .find_map(|var_t9n| var_t9n.get(&var))
+            .find_map(|var_t9n| var_t9n.get(&var.name()))
             .copied()?;
-        Some(Pointer::new(self.arena, place))
+        Some(Pointer::new(self.arena, place, var.as_span()))
     }
 
     /// Gets the place translation of a variable name.
@@ -142,7 +141,7 @@ impl<'ctx> Normalizer<'ctx> {
                 for (i, arg) in args.iter().enumerate() {
                     let field = self.arena.alloc(format!("{}", i + 1));
                     let place = self.arena.alloc(Place::FieldP(ptr, field));
-                    let ptr = Pointer::new(self.arena, place);
+                    let ptr = Pointer::new(self.arena, place, pat.span);
                     self.introduce_pat_vars(arg, ptr);
                 }
             }
@@ -168,28 +167,28 @@ impl<'ctx> Normalizer<'ctx> {
         match &mut e.kind {
             tast::ExprKind::UnitE => {
                 let vardef = self.fresh_vardef(e.ty, e.span);
-                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
+                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
                 stmts.push(Stmt::new(DeclareS(vardef), e.span));
                 stmts.push(Stmt::new(AssignS(ptr, RValue::Unit), e.span));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::BoolE(b) => {
                 let vardef = self.fresh_vardef(e.ty, e.span);
-                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
+                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
                 stmts.push(Stmt::new(DeclareS(vardef), e.span));
                 stmts.push(Stmt::new(AssignS(ptr, RValue::Bool(*b)), e.span));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::IntegerE(i) => {
                 let vardef = self.fresh_vardef(e.ty, e.span);
-                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
+                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
                 stmts.push(Stmt::new(DeclareS(vardef), e.span));
                 stmts.push(Stmt::new(AssignS(ptr, RValue::Integer(i)), e.span));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::StringE(s) => {
                 let vardef = self.fresh_vardef(e.ty, e.span);
-                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
+                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()),  e.span);
                 stmts.push(Stmt::new(DeclareS(vardef), e.span));
                 stmts.push(Stmt::new(AssignS(ptr, RValue::String(s)), e.span));
                 Reference::new_moved(ptr)
@@ -198,7 +197,7 @@ impl<'ctx> Normalizer<'ctx> {
                 let vardef = self.fresh_vardef(e.ty, e.span);
                 let start_ptr = self.visit_expr(stmts, start, Some(Mode::Borrowed), ret_ptr);
                 let end_ptr = self.visit_expr(stmts, end, Some(Mode::Borrowed), ret_ptr);
-                let final_ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
+                let final_ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
                 stmts.push(Stmt::new(DeclareS(vardef), e.span));
                 stmts.push(Stmt::new(AssignS(final_ptr, RValue::Range(start_ptr, end_ptr)), e.span));
                 Reference::new_moved(final_ptr)
@@ -219,6 +218,7 @@ impl<'ctx> Normalizer<'ctx> {
                         let final_ptr = Pointer::new(
                             self.arena,
                             self.arena.alloc(Place::FieldP(strukt_ptr.as_ptr(), field)),
+                            place.span
                         );
 
                         // The reference into `FieldP` will depend on multiple modes: the global one,
@@ -237,6 +237,7 @@ impl<'ctx> Normalizer<'ctx> {
                         let final_ptr = Pointer::new(
                             self.arena,
                             self.arena.alloc(Place::FieldP(tuple_ptr.as_ptr(), field)),
+                            place.span
                         );
 
                         // The reference into `ElemP` will depend on multiple modes: the global one,
@@ -253,6 +254,7 @@ impl<'ctx> Normalizer<'ctx> {
                             self.arena,
                             self.arena
                                 .alloc(Place::IndexP(e_ptr.as_ptr(), ix_ptr.as_ptr())),
+                            place.span
                         );
 
                         // The reference into `IndexP` will depend on multiple modes: the global one,
@@ -273,7 +275,7 @@ impl<'ctx> Normalizer<'ctx> {
                     .collect();
 
                 let vardef = self.fresh_vardef(e.ty, e.span);
-                let destination = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
+                let destination = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
                 stmts.push(Stmt::new(DeclareS(vardef), e.span));
 
                 stmts.push(Stmt::new(CallS {
@@ -291,7 +293,7 @@ impl<'ctx> Normalizer<'ctx> {
                     .collect();
 
                 let vardef = self.fresh_vardef(e.ty, e.span);
-                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
+                let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
                 stmts.push(Stmt::new(DeclareS(vardef), e.span));
                 stmts.push(Stmt::new(AssignS(ptr, RValue::Variant { enun, variant, args }), e.span));
                 Reference::new_moved(ptr)
@@ -302,7 +304,7 @@ impl<'ctx> Normalizer<'ctx> {
 
                 // Destination
                 let dest_def = self.fresh_vardef(iftrue.ret.ty, e.span);
-                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
+                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()), e.span);
                 stmts.push(Stmt::new(DeclareS(dest_def), e.span));
 
                 // Branches
@@ -329,7 +331,7 @@ impl<'ctx> Normalizer<'ctx> {
                         // The switch variable
                         let matched = self.visit_expr(stmts, matched, Some(Mode::SBorrowed), ret_ptr);
                         let dest_def = self.fresh_vardef(e.ty, e.span);
-                        let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
+                        let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()), e.span);
 
                         // Visit the branches, compute the discriminant
                         let branches: HashMap<Branch, _> = branches.iter_mut().map(|(pattern, expr)| {
@@ -365,7 +367,7 @@ impl<'ctx> Normalizer<'ctx> {
             } => {
                 // Destination
                 let dest_def = self.fresh_vardef(e.ty, e.span);
-                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
+                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()), e.span);
                 stmts.push(Stmt::new(DeclareS(dest_def), e.span));
 
                 let field_vars = fields
@@ -386,7 +388,7 @@ impl<'ctx> Normalizer<'ctx> {
             tast::ExprKind::ArrayE(array) => {
                 // Destination
                 let dest_def = self.fresh_vardef(e.ty, e.span);
-                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
+                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()), e.span);
                 stmts.push(Stmt::new(DeclareS(dest_def), e.span));
 
                 // Visit each item in the array
@@ -403,7 +405,7 @@ impl<'ctx> Normalizer<'ctx> {
             tast::ExprKind::TupleE(items) => {
                 // Destination
                 let dest_def = self.fresh_vardef(e.ty, e.span);
-                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()));
+                let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()), e.span);
                 stmts.push(Stmt::new(DeclareS(dest_def), e.span));
 
                 // Visit each item in the tuple
@@ -464,7 +466,7 @@ impl<'ctx> Normalizer<'ctx> {
                 } else {
                     *old_vardef
                 };
-                stmts.push(Stmt::new(DeclareS(vardef), old_vardef.span));
+                stmts.push(Stmt::new(DeclareS(vardef), s.span));
                 let tmp = self.visit_expr(stmts, expr, None, ret_ptr);
 
                 // Add the translation AFTER we computed the rhs, so that the rhs may still
@@ -473,7 +475,11 @@ impl<'ctx> Normalizer<'ctx> {
 
                 stmts.push(Stmt::new(
                     AssignS(
-                        Pointer::new(self.arena, self.arena.alloc(Place::VarP(vardef.name()))),
+                        Pointer::new(
+                            self.arena,
+                            self.arena.alloc(Place::VarP(vardef.name())),
+                            old_vardef.span,
+                        ),
                         RValue::Place(tmp),
                     ),
                     s.span,
@@ -507,7 +513,7 @@ impl<'ctx> Normalizer<'ctx> {
                         Place::FieldP(tuple.as_ptr(), field)
                     }
                 };
-                let lhs = Pointer::new(self.arena, self.arena.alloc(lhs));
+                let lhs = Pointer::new(self.arena, self.arena.alloc(lhs), place.span);
                 stmts.push(Stmt::new(AssignS(lhs, RValue::Place(rhs)), s.span));
             }
             tast::StmtKind::WhileS { cond, body } => {
@@ -562,7 +568,11 @@ impl<'ctx> Normalizer<'ctx> {
     /// Visits a function.
     fn visit_fun<'tast>(&mut self, f: &'ctx mut tast::Fun<'tast>) -> Fun<'ctx> {
         let vardef = self.fresh_vardef(f.ret_ty.kind, f.body.ret.span);
-        let ret_ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()));
+        let ret_ptr = Pointer::new(
+            self.arena,
+            self.arena.alloc(vardef.name().into()),
+            f.body.ret.span,
+        );
 
         // Declare the return variable
         let mut body = vec![Stmt::new(DeclareS(vardef), vardef.span)];

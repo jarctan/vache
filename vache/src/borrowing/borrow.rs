@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::mir::{CfgLabel, Loc, Place, Pointer};
+use crate::mir::{CfgLabel, Loc, Place, Pointer, Span};
 use crate::utils::set::Set;
 
 /// A borrow: a variable that has been borrowed.
@@ -12,6 +12,8 @@ use crate::utils::set::Set;
 pub struct Borrow<'ctx> {
     /// Label in which the borrow was made.
     pub label: CfgLabel,
+    /// Span at which the borrow was made.
+    pub span: Span,
     /// Stakeholder of the borrow.
     pub borrower: Loc<'ctx>,
     /// Borrowed location. NOT the borrower.

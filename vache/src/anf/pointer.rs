@@ -5,7 +5,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::sync::atomic::AtomicU64;
 
-use super::{Loc, Mode, Place};
+use super::{Loc, Mode, Place, Span};
 use crate::Arena;
 
 /// Fresh label counter.
@@ -24,14 +24,21 @@ pub struct Pointer<'ctx> {
     pub(crate) place: &'ctx Place<'ctx>,
     /// Location pointed at by the pointer.
     pub(crate) loc: &'ctx Loc<'ctx>,
+    /// Related span in the source code.
+    pub(crate) span: Span,
 }
 
 impl<'ctx> Pointer<'ctx> {
     /// Creates a new pointer.
-    pub fn new(arena: &'ctx Arena, place: &'ctx Place<'ctx>) -> Self {
+    pub fn new(arena: &'ctx Arena, place: &'ctx Place<'ctx>, span: Span) -> Self {
         let id = LABEL_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let loc = arena.alloc(place.root());
-        Self { id, place, loc }
+        Self {
+            id,
+            place,
+            loc,
+            span,
+        }
     }
 
     /// Gets the place of the pointer.

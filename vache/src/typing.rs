@@ -526,9 +526,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ast::ExprKind::PlaceE(place) => match place.kind {
                 ast::PlaceKind::VarP(v) => match self.get_var(v) {
                     Some((vardef, stm)) => Expr::new(
-                        PlaceE(Place::var(
-                            vardef.var, vardef.ty, stm, place.mode, place.span,
-                        )),
+                        PlaceE(Place::var(v, vardef.ty, stm, place.mode, place.span)),
                         vardef.ty,
                         stm,
                         span,

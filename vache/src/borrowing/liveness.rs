@@ -114,7 +114,7 @@ fn loan_liveness<'ctx>(
                     ledger.flush_place(lhs.place(), true);
                     let borrows = instr
                         .references()
-                        .map(|reference| ledger.borrow(lhs.place(), reference, label))
+                        .map(|reference| ledger.borrow(*lhs.loc(), reference, label))
                         .collect::<Vec<_>>();
                     let borrows = ledger.flatten(borrows);
                     ledger.set_borrows(lhs.place(), borrows);
@@ -241,9 +241,9 @@ pub fn liveness<'mir, 'ctx>(
                         if borrow.mutable { "mutably" } else { "" },
                         borrow.loc(),
                     ))
-                    .with_labels(vec![cfg[&borrow.label].span.into()])
+                    .with_labels(vec![borrow.span.into()])
                     .with_notes(vec![format!(
-                        "{:?} {:?} {:?}",
+                        "Debug information: {:?} {:?} {:?}",
                         borrow.label, borrow.borrower, borrow.ptr
                     )]),
             );
