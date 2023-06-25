@@ -3,6 +3,7 @@ name = "vache"
 authors=["Jonathan ARNOULT <jonathan.arnoult@polytechnique.edu>"]
 version = "0.1.0"
 edition = "2021"
+default-run = "vache"
 
 [lib]
 name = "vache_lib"
