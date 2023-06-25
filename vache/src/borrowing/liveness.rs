@@ -236,8 +236,8 @@ pub fn liveness<'mir, 'ctx>(
             let mut labels = vec![borrow.span.into()];
             for contradicted in contradicts {
                 labels.push(contradicted.span.as_secondary_label().with_message(format!(
-                    "contradicts this {} borrow",
-                    if borrow.mutable {
+                    "contradicts this {} use",
+                    if contradicted.mutable {
                         "mutable"
                     } else {
                         "immutable"
@@ -248,9 +248,9 @@ pub fn liveness<'mir, 'ctx>(
                 Diagnostic::error()
                     .with_code(BORROW_ERROR)
                     .with_message(format!(
-                        "cannot {} borrow `{}`",
-                        if borrow.mutable { "mutably" } else { "" },
+                        "cannot use `{}`{} here",
                         borrow.loc(),
+                        if borrow.mutable { " mutably" } else { "" },
                     ))
                     .with_labels(labels)
                     .with_notes(vec![format!(
