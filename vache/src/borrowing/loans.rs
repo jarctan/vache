@@ -56,27 +56,34 @@ impl<'ctx> Loans<'ctx> {
 
     /// Inserts a borrow in the [`Loans`].
     ///
+    /// Returns the set of [`Borrow`]s that contradicts that insertion (or empty
+    /// set if there is none).
+    ///
     /// # Errors
-    /// Returns the borrows that prevents that insertion if the borrow could not
-    /// be inserted without violating the law of loans.
-    pub fn insert(&mut self, borrow: Borrow<'ctx>) -> Result<(), Vec<Borrow<'ctx>>> {
+    /// Returns an error if the insertion cannot be done in any way. In that
+    /// case, it returns the mutable borrow that contradicts the new borrow.
+    pub fn insert(&mut self, borrow: Borrow<'ctx>) -> Result<Borrows<'ctx>, Borrow<'ctx>> {
         match (borrow.mutable, &mut *self) {
             (true, Loans::None) => {
                 *self = Loans::Mut(borrow);
-                Ok(())
+                Ok(Set::new())
             }
             (false, Loans::None) => {
                 let mut set = Set::new();
                 set.insert(borrow);
                 *self = Loans::Immut(set);
-                Ok(())
+                Ok(Set::new())
             }
             (false, Loans::Immut(borrows)) => {
                 borrows.insert(borrow);
-                Ok(())
+                Ok(Set::new())
             }
-            (_, Loans::Mut(mut_borrow)) => Err(vec![*mut_borrow]),
-            (true, Loans::Immut(borrows)) => Err(borrows.iter().copied().collect()),
+            (_, Loans::Mut(mut_borrow)) => Err(*mut_borrow),
+            (true, Loans::Immut(borrows)) => {
+                let borrows = std::mem::take(borrows);
+                *self = Loans::Mut(borrow);
+                Ok(borrows.iter().copied().collect())
+            }
         }
     }
 
@@ -93,16 +100,21 @@ impl<'ctx> Loans<'ctx> {
     ///
     /// # Panics
     /// Panics if adding those loans breaks the law of loans.
-    pub fn extend<I>(&mut self, iter: I)
+    #[must_use = "Add these loans to your immutable invalidations"]
+    pub fn extend<I>(&mut self, iter: I) -> Borrows<'ctx>
     where
         I: IntoIterator<Item = Borrow<'ctx>>,
     {
+        // Collect the set of invalidation
+        let mut set = Set::new();
         for borrow in iter {
-            assert!(
-                self.insert(borrow).is_ok(),
-                "Could not extend those loans with the newly provided ones"
-            );
+            // If we have immutable invalidations, we add them
+            let borrows = self
+                .insert(borrow)
+                .expect("Reconciliating mutable borrow invalidations when merging loans is not supported yet");
+            set.extend(borrows);
         }
+        set
     }
 }
 

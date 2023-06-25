@@ -13,7 +13,7 @@ use crate::mir::{CfgLabel, Loc, Place};
 use crate::utils::set::Set;
 
 /// Borrows that cannot be recovered from.
-pub type UnrecoverableBorrows<'ctx> = HashMap<Borrow<'ctx>, Vec<Borrow<'ctx>>>;
+pub type UnrecoverableBorrows<'ctx> = HashMap<Borrow<'ctx>, Borrow<'ctx>>;
 
 /// A loan ledger.
 #[derive(Clone, PartialEq, Eq, Default)]
@@ -27,8 +27,12 @@ pub struct Ledger<'ctx> {
     /// in both).
     loans: LocTree<'ctx, Loans<'ctx>>,
     /// Invalidated borrows.
+    ///
+    /// Currently, these are only immutable invalidations.
     invalidations: Borrows<'ctx>,
     /// Unrecoverable invalidated borrows.
+    ///
+    /// Currently, these are only mutable invalidations.
     unrecoverables: UnrecoverableBorrows<'ctx>,
 }
 
@@ -186,12 +190,23 @@ impl<'ctx> Ledger<'ctx> {
             for borrow in borrows {
                 let loans: &mut Loans = map.entry(borrow.loc()).or_default();
 
+                // Depending on the result of the insertion, find who to blame
+                // We always try to invalidate immutable borrows first because
+                // that's what we can handle best afterward But
+                // if need but, we emit an unrecoverable invalidation
                 match loans.insert(borrow) {
-                    Ok(()) => {
+                    Ok(borrows) => {
+                        for borrow in borrows {
+                            self.invalidations.insert(borrow);
+                        }
                         retained.insert(borrow);
                     }
-                    Err(contradicts) => {
-                        self.unrecoverables.insert(borrow, contradicts);
+                    Err(contradiction) => {
+                        if borrow.mutable {
+                            self.unrecoverables.insert(borrow, contradiction);
+                        } else {
+                            self.invalidations.insert(borrow);
+                        }
                     }
                 }
             }
@@ -216,8 +231,19 @@ impl<'ctx> Ledger<'ctx> {
 
         // Register on the loaner side
         for &borrow in &borrows {
-            if let Err(contradicts) = self.loans.get_mut_or_insert(borrow.loc()).insert(borrow) {
-                self.unrecoverables.insert(borrow, contradicts);
+            match self.loans.get_mut_or_insert(borrow.loc()).insert(borrow) {
+                Ok(borrows) => {
+                    for borrow in borrows {
+                        self.invalidations.insert(borrow);
+                    }
+                }
+                Err(contradiction) => {
+                    if borrow.mutable {
+                        self.unrecoverables.insert(borrow, contradiction);
+                    } else {
+                        self.invalidations.insert(borrow);
+                    }
+                }
             }
         }
 
@@ -284,7 +310,7 @@ impl<'ctx> Sum for Ledger<'ctx> {
         let mut unrecoverables: UnrecoverableBorrows<'ctx> = default();
 
         for ledger in iter {
-            loans.append(ledger.loans);
+            invalidations.extend(loans.append(ledger.loans));
             borrows.append(ledger.borrows);
             invalidations.extend(ledger.invalidations);
             unrecoverables.extend(ledger.unrecoverables);

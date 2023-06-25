@@ -232,18 +232,7 @@ pub fn liveness<'mir, 'ctx>(
     invalidated.extend(loan_flow[&exit_l].outs.invalidations());
 
     if let Some(unrecoverables) = loan_flow[&exit_l].outs.unrecoverables() {
-        for (borrow, contradicts) in unrecoverables {
-            let mut labels = vec![borrow.span.into()];
-            for contradicted in contradicts {
-                labels.push(contradicted.span.as_secondary_label().with_message(format!(
-                    "contradicts this {} use",
-                    if contradicted.mutable {
-                        "mutable"
-                    } else {
-                        "immutable"
-                    },
-                )));
-            }
+        for (&borrow, &contradiction) in unrecoverables {
             reporter.emit(
                 Diagnostic::error()
                     .with_code(BORROW_ERROR)
@@ -252,7 +241,20 @@ pub fn liveness<'mir, 'ctx>(
                         borrow.loc(),
                         if borrow.mutable { " mutably" } else { "" },
                     ))
-                    .with_labels(labels)
+                    .with_labels(vec![
+                        borrow.span.into(),
+                        contradiction
+                            .span
+                            .as_secondary_label()
+                            .with_message(format!(
+                                "contradicts this {} use",
+                                if contradiction.mutable {
+                                    "mutable"
+                                } else {
+                                    "immutable"
+                                },
+                            )),
+                    ])
                     .with_notes(vec![format!(
                         "Debug information: {:?} {:?} {:?}",
                         borrow.label, borrow.borrower, borrow.ptr

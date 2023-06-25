@@ -319,17 +319,20 @@ impl<'ctx> LocTree<'ctx, Loans<'ctx>> {
     }
 
     /// Concatenates `self` and `other`.
-    pub fn append(&mut self, other: Self) {
+    #[must_use = "Add these loans to your immutable invalidations"]
+    pub fn append(&mut self, other: Self) -> Borrows<'ctx> {
+        let mut set = Borrows::new();
         for (var, other_tree) in other.0 {
             match self.0.entry(var) {
                 hash_map::Entry::Occupied(mut entry) => {
-                    entry.get_mut().append(other_tree);
+                    set.extend(entry.get_mut().append(other_tree));
                 }
                 hash_map::Entry::Vacant(entry) => {
                     entry.insert(other_tree);
                 }
             };
         }
+        set
     }
 }
 
@@ -346,18 +349,23 @@ impl<'ctx> LocTreeNode<'ctx, Loans<'ctx>> {
     }
 
     /// Concatenates `self` and `other`.
-    fn append(&mut self, other: Self) {
+    #[must_use = "Add these loans to your immutable invalidations"]
+    fn append(&mut self, other: Self) -> Borrows<'ctx> {
         match (&mut self.kind, other.kind) {
             (AtomL(s), AtomL(o)) => s.extend(o.iter().copied()),
             (CompoundL(s), CompoundL(o)) => {
+                let mut set = Borrows::new();
                 for (k, v) in o {
-                    s.entry(k)
-                        .or_insert(LocTreeNode {
-                            kind: default(),
-                            loc: v.loc,
-                        })
-                        .append(v);
+                    set.extend(
+                        s.entry(k)
+                            .or_insert(LocTreeNode {
+                                kind: default(),
+                                loc: v.loc,
+                            })
+                            .append(v),
+                    );
                 }
+                set
             }
             (AtomL(..), CompoundL(..)) | (CompoundL(..), AtomL(..)) => panic!("Not append-able"),
         }
