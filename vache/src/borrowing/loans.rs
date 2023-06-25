@@ -56,25 +56,27 @@ impl<'ctx> Loans<'ctx> {
 
     /// Inserts a borrow in the [`Loans`].
     ///
-    /// Returns `false` if the borrow could not be inserted without violating
-    /// the law of loans.
-    pub fn insert(&mut self, borrow: Borrow<'ctx>) -> bool {
+    /// # Errors
+    /// Returns the borrows that prevents that insertion if the borrow could not
+    /// be inserted without violating the law of loans.
+    pub fn insert(&mut self, borrow: Borrow<'ctx>) -> Result<(), Vec<Borrow<'ctx>>> {
         match (borrow.mutable, &mut *self) {
             (true, Loans::None) => {
                 *self = Loans::Mut(borrow);
-                true
+                Ok(())
             }
             (false, Loans::None) => {
                 let mut set = Set::new();
                 set.insert(borrow);
                 *self = Loans::Immut(set);
-                true
+                Ok(())
             }
             (false, Loans::Immut(borrows)) => {
                 borrows.insert(borrow);
-                true
+                Ok(())
             }
-            (_, _) => false,
+            (_, Loans::Mut(mut_borrow)) => Err(vec![*mut_borrow]),
+            (true, Loans::Immut(borrows)) => Err(borrows.iter().copied().collect()),
         }
     }
 
@@ -97,7 +99,7 @@ impl<'ctx> Loans<'ctx> {
     {
         for borrow in iter {
             assert!(
-                self.insert(borrow),
+                self.insert(borrow).is_ok(),
                 "Could not extend those loans with the newly provided ones"
             );
         }

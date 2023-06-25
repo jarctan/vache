@@ -9,8 +9,11 @@ use std::iter::Sum;
 use super::{Borrow, Borrows, Loans, LocTree};
 use crate::mir::Mode;
 use crate::mir::Reference;
-use crate::mir::{CfgLabel, Loc, Place, Pointer};
+use crate::mir::{CfgLabel, Loc, Place};
 use crate::utils::set::Set;
+
+/// Borrows that cannot be recovered from.
+pub type UnrecoverableBorrows<'ctx> = HashMap<Borrow<'ctx>, Vec<Borrow<'ctx>>>;
 
 /// A loan ledger.
 #[derive(Clone, PartialEq, Eq, Default)]
@@ -26,57 +29,49 @@ pub struct Ledger<'ctx> {
     /// Invalidated borrows.
     invalidations: Borrows<'ctx>,
     /// Unrecoverable invalidated borrows.
-    unrecoverables: Borrows<'ctx>,
+    unrecoverables: UnrecoverableBorrows<'ctx>,
 }
 
 impl<'ctx> Ledger<'ctx> {
     /// Returns the complete (deep, nested) list of all borrows resulting from
     /// the borrow of `reference` at CFG label `label`.
-    pub fn borrow(
-        &mut self,
+    pub fn borrow<'a>(
+        &'a mut self,
         borrower: Loc<'ctx>,
         reference: &Reference<'ctx>,
         label: CfgLabel,
-    ) -> Borrows<'ctx> {
+    ) -> Vec<Borrow<'ctx>> {
         let span = reference.as_ptr().span;
         match reference.mode() {
             mode @ (Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed | Mode::SMutBorrowed) => {
                 // You clone their loans + the loan into the borrowed pointer
-                self.borrows(reference.place())
-                    .map(|borrow| Borrow {
-                        label: borrow.label,
-                        borrower, // Note that we update the borrower
-                        span: borrow.span,
-                        ptr: borrow.ptr,
-                        mutable: borrow.mutable,
-                    })
-                    .collect::<Borrows>()
-                    + Borrow {
-                        ptr: reference.as_ptr(),
-                        borrower,
-                        label,
-                        span,
-                        mutable: matches!(mode, Mode::MutBorrowed | Mode::SMutBorrowed),
-                    }
+                vec![Borrow {
+                    ptr: reference.as_ptr(),
+                    borrower,
+                    label,
+                    span,
+                    mutable: matches!(mode, Mode::MutBorrowed | Mode::SMutBorrowed),
+                }]
             }
             Mode::Moved => {
-                // Moving invalidates all the loans of the previous place
-                let loans: Vec<_> = self.loans(*reference.loc()).collect();
-                self.invalidations.extend(loans);
-
                 // You take their entire place, so you take all their borrows!
                 // We remove the loans from that place, and
-                self.borrows(reference.place())
-                    .map(|borrow| Borrow {
+                let borrows = self
+                    .borrows(reference.place())
+                    .map(move |borrow| Borrow {
                         label: borrow.label,
                         borrower, // Note that we update the borrower
                         span: borrow.span,
                         ptr: borrow.ptr,
                         mutable: borrow.mutable,
                     })
-                    .collect::<Borrows>()
+                    .collect();
+
+                self.flush_loc(*reference.loc(), true);
+
+                borrows
             }
-            Mode::Cloned => Borrows::new(),
+            Mode::Cloned => vec![],
             Mode::Assigning => panic!("Cannot borrow a variable in an assigning mode"),
         }
     }
@@ -177,18 +172,31 @@ impl<'ctx> Ledger<'ctx> {
     /// Tries to flatten/merge the list of sets of borrows into a set of
     /// borrows, checking for consistency between borrows (we cannot merge
     /// if we have two mutable borrows, for instance).
-    pub fn flatten(&mut self, borrows: Vec<Borrows<'ctx>>) -> Borrows<'ctx> {
+    ///
+    /// Assertion: the inner sets are consistent.
+    ///
+    /// Invariant: always returns a set that does not contradict itself.
+    pub fn flatten<I1: IntoIterator<Item = Borrow<'ctx>>, I2: IntoIterator<Item = I1>>(
+        &mut self,
+        borrows: I2,
+    ) -> Borrows<'ctx> {
         let mut map = HashMap::new();
-        for borrows in &borrows {
-            for &borrow in borrows {
+        let mut retained = Set::new();
+        for borrows in borrows {
+            for borrow in borrows {
                 let loans: &mut Loans = map.entry(borrow.loc()).or_default();
 
-                if !loans.insert(borrow) {
-                    self.unrecoverables.insert(borrow);
+                match loans.insert(borrow) {
+                    Ok(()) => {
+                        retained.insert(borrow);
+                    }
+                    Err(contradicts) => {
+                        self.unrecoverables.insert(borrow, contradicts);
+                    }
                 }
             }
         }
-        borrows.into_iter().sum()
+        retained
     }
 
     /// Sets the new `borrows` of `place`.
@@ -208,8 +216,8 @@ impl<'ctx> Ledger<'ctx> {
 
         // Register on the loaner side
         for &borrow in &borrows {
-            if !self.loans.get_mut_or_insert(borrow.loc()).insert(borrow) {
-                self.unrecoverables.insert(borrow);
+            if let Err(contradicts) = self.loans.get_mut_or_insert(borrow.loc()).insert(borrow) {
+                self.unrecoverables.insert(borrow, contradicts);
             }
         }
 
@@ -253,11 +261,11 @@ impl<'ctx> Ledger<'ctx> {
     }
 
     /// Get the unrecoverables invalidations.
-    pub fn unrecoverables<'a>(&'a self) -> Option<impl Iterator<Item = Borrow<'ctx>> + 'a> {
+    pub fn unrecoverables<'a>(&'a self) -> Option<&'a UnrecoverableBorrows<'ctx>> {
         if self.unrecoverables.is_empty() {
             None
         } else {
-            Some(self.unrecoverables.iter().copied())
+            Some(&self.unrecoverables)
         }
     }
 }
@@ -273,7 +281,7 @@ impl<'ctx> Sum for Ledger<'ctx> {
         let mut loans: LocTree<Loans> = default();
         let mut borrows: LocTree<Borrows> = default();
         let mut invalidations: Borrows = default();
-        let mut unrecoverables: Borrows = default();
+        let mut unrecoverables: UnrecoverableBorrows<'ctx> = default();
 
         for ledger in iter {
             loans.append(ledger.loans);

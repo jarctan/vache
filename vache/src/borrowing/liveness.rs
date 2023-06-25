@@ -116,7 +116,7 @@ fn loan_liveness<'ctx>(
                         .references()
                         .map(|reference| ledger.borrow(*lhs.loc(), reference, label))
                         .collect::<Vec<_>>();
-                    let borrows = ledger.flatten(borrows);
+                    let borrows = ledger.flatten(borrows.into_iter());
                     ledger.set_borrows(lhs.place(), borrows);
                     ledger
                 }
@@ -232,16 +232,27 @@ pub fn liveness<'mir, 'ctx>(
     invalidated.extend(loan_flow[&exit_l].outs.invalidations());
 
     if let Some(unrecoverables) = loan_flow[&exit_l].outs.unrecoverables() {
-        for borrow in unrecoverables {
+        for (borrow, contradicts) in unrecoverables {
+            let mut labels = vec![borrow.span.into()];
+            for contradicted in contradicts {
+                labels.push(contradicted.span.as_secondary_label().with_message(format!(
+                    "contradicts this {} borrow",
+                    if borrow.mutable {
+                        "mutable"
+                    } else {
+                        "immutable"
+                    },
+                )));
+            }
             reporter.emit(
                 Diagnostic::error()
                     .with_code(BORROW_ERROR)
                     .with_message(format!(
-                        "Cannot {} borrow `{}`",
+                        "cannot {} borrow `{}`",
                         if borrow.mutable { "mutably" } else { "" },
                         borrow.loc(),
                     ))
-                    .with_labels(vec![borrow.span.into()])
+                    .with_labels(labels)
                     .with_notes(vec![format!(
                         "Debug information: {:?} {:?} {:?}",
                         borrow.label, borrow.borrower, borrow.ptr
