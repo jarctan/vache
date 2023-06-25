@@ -1,7 +1,8 @@
 [workspace]
 members = [
   "vache",
-  "vache-tests-proc"
+  "vache-tests-proc",
+  "vache-vscode-extension"
 ]
 resolver = "2"
 

@@ -94,7 +94,7 @@ pub struct Cfg<'ctx, N, E = ()> {
 }
 
 /// A CFG with instructions as nodes.
-pub type CfgI<'ctx> = Cfg<'ctx, Instr<'ctx>>;
+pub type CfgI<'mir, 'ctx> = Cfg<'ctx, Instr<'mir, 'ctx>>;
 
 impl<'ctx, N, E> Cfg<'ctx, N, E> {
     /// Starting from a node, takes a given branch/path. Returns the target
@@ -283,7 +283,7 @@ impl<'ctx, N, E> Cfg<'ctx, N, E> {
     }
 }
 
-impl<'ctx> CfgI<'ctx> {
+impl<'mir, 'ctx> CfgI<'mir, 'ctx> {
     /// Returns the set of dominators for each node.
     ///
     /// Dominators for node `n` are the set of nodes through which you MUST pass

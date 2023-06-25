@@ -64,8 +64,8 @@ impl<'a, 'ctx> From<&'a VarUse<'ctx>> for Loc<'ctx> {
     }
 }
 
-impl<'a, 'ctx> From<&'a Reference<'ctx>> for Loc<'ctx> {
-    fn from(reference: &'a Reference<'ctx>) -> Self {
+impl<'a, 'mir, 'ctx> From<&'a Reference<'mir, 'ctx>> for Loc<'ctx> {
+    fn from(reference: &'a Reference<'mir, 'ctx>) -> Self {
         *reference.loc()
     }
 }

@@ -30,7 +30,7 @@ pub struct Pointer<'ctx> {
 
 impl<'ctx> Pointer<'ctx> {
     /// Creates a new pointer.
-    pub fn new(arena: &'ctx Arena, place: &'ctx Place<'ctx>, span: Span) -> Self {
+    pub fn new(arena: &'ctx Arena<'ctx>, place: &'ctx Place<'ctx>, span: Span) -> Self {
         let id = LABEL_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let loc = arena.alloc(place.root());
         Self {
@@ -60,8 +60,8 @@ impl<'ctx> Pointer<'ctx> {
     }
 }
 
-impl<'a, 'ctx> From<&'a Reference<'ctx>> for Pointer<'ctx> {
-    fn from(value: &'a Reference<'ctx>) -> Self {
+impl<'a, 'mir, 'ctx> From<&'a Reference<'mir, 'ctx>> for Pointer<'ctx> {
+    fn from(value: &'a Reference<'mir, 'ctx>) -> Self {
         value.as_ptr()
     }
 }
@@ -78,7 +78,7 @@ impl<'a, 'ctx> From<&'a Pointer<'ctx>> for Pointer<'ctx> {
 /// reference mode in the typed AST, so we can change this mode. Although if
 /// `mode` is `None`, then the reference is moved and is a MIR-introduced one.
 #[derive(PartialEq, Eq, Hash)]
-pub struct Reference<'ctx> {
+pub struct Reference<'mir, 'ctx: 'mir> {
     /// Pointer into the location.
     pointer: Pointer<'ctx>,
     /// Addressing/referencing mode.
@@ -87,12 +87,12 @@ pub struct Reference<'ctx> {
     /// multiple [`Mode`]s in the typed AST. The invariant is that they will
     /// always share the same mode, and modifying the mode of the [`Reference`]
     /// will modify the mode of all the `&'ctx mut Mode` in the vector.
-    modes: Vec<&'ctx mut Mode>,
+    modes: Vec<&'mir mut Mode>,
 }
 
-impl<'ctx> Reference<'ctx> {
+impl<'mir, 'ctx: 'mir> Reference<'mir, 'ctx> {
     /// Creates a new [`Reference`], with its pointer and mode.
-    pub fn new(ptr: Pointer<'ctx>, mode: &'ctx mut Mode) -> Self {
+    pub fn new(ptr: Pointer<'ctx>, mode: &'mir mut Mode) -> Self {
         Self {
             pointer: ptr,
             modes: vec![mode],
@@ -101,7 +101,7 @@ impl<'ctx> Reference<'ctx> {
 
     /// Creates a new [`Reference`], with multiple referencing modes at the same
     /// time.
-    pub fn new_multi_modes(ptr: Pointer<'ctx>, modes: Vec<&'ctx mut Mode>) -> Self {
+    pub fn new_multi_modes(ptr: Pointer<'ctx>, modes: Vec<&'mir mut Mode>) -> Self {
         Self {
             pointer: ptr,
             modes,
@@ -124,7 +124,7 @@ impl<'ctx> Reference<'ctx> {
     /// Returns the addressing modes of that [`Reference`], consuming `self`.
     ///
     /// Used so that modes from one [`Reference`] may go
-    pub fn into_modes_mut(self) -> Vec<&'ctx mut Mode> {
+    pub fn into_modes_mut(self) -> Vec<&'mir mut Mode> {
         self.modes
     }
 
@@ -144,7 +144,7 @@ impl<'ctx> Reference<'ctx> {
     }
 }
 
-impl<'ctx> Deref for Reference<'ctx> {
+impl<'mir, 'ctx: 'mir> Deref for Reference<'mir, 'ctx> {
     type Target = Pointer<'ctx>;
 
     fn deref(&self) -> &Self::Target {
@@ -152,7 +152,7 @@ impl<'ctx> Deref for Reference<'ctx> {
     }
 }
 
-impl fmt::Debug for Reference<'_> {
+impl<'mir, 'ctx: 'mir> fmt::Debug for Reference<'mir, 'ctx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}{:?}", self.mode(), self.pointer)
     }

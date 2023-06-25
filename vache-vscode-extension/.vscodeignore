@@ -1,5 +1,10 @@
 .gitignore
-.vscode-test/**
 .vscode/**
 rust.tmLanguage.yaml
-vsc-extension-quickstart.md
+node_modules
+out/
+src/
+tsconfig.json
+webpack.config.js
+client/**
+target

@@ -25,8 +25,8 @@ impl BorrowChecker {
     pub fn check<'mir, 'ctx>(
         &mut self,
         ctx: &mut Context<'ctx>,
-        p: Program<'mir>,
-    ) -> Result<Program<'mir>, Diagnostics<'ctx>> {
+        p: Program<'mir, 'ctx>,
+    ) -> Result<Program<'mir, 'ctx>, Diagnostics<'ctx>> {
         self.visit_program(ctx, p)
     }
 
@@ -34,8 +34,8 @@ impl BorrowChecker {
     fn visit_fun<'mir, 'ctx>(
         &mut self,
         ctx: &mut Context<'ctx>,
-        mut f: Fun<'mir>,
-    ) -> Result<Fun<'mir>, Diagnostics<'ctx>> {
+        mut f: Fun<'mir, 'ctx>,
+    ) -> Result<Fun<'mir, 'ctx>, Diagnostics<'ctx>> {
         f.body = liveness(f.body, f.entry_l, f.ret_l, &f.strata, &mut ctx.reporter)?;
         Ok(f)
     }
@@ -44,8 +44,8 @@ impl BorrowChecker {
     fn visit_program<'mir, 'ctx>(
         &mut self,
         ctx: &mut Context<'ctx>,
-        p: Program<'mir>,
-    ) -> Result<Program<'mir>, Diagnostics<'ctx>> {
+        p: Program<'mir, 'ctx>,
+    ) -> Result<Program<'mir, 'ctx>, Diagnostics<'ctx>> {
         let mut funs: HashMap<&str, Fun> = default();
         for (name, f) in p.funs {
             funs.insert(name, self.visit_fun(ctx, f)?);
@@ -55,7 +55,6 @@ impl BorrowChecker {
             Err(ctx.reporter.flush())
         } else {
             Ok(Program {
-                arena: p.arena,
                 funs,
                 structs: p.structs,
                 enums: p.enums,

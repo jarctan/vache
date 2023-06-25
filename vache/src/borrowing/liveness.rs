@@ -21,7 +21,7 @@ use crate::utils::set::Set;
 /// Returns a map of live variables at the entry and exit of each node in the
 /// CFG.
 pub fn var_liveness<'ctx>(
-    cfg: &CfgI<'ctx>,
+    cfg: &CfgI<'_, 'ctx>,
     entry_l: CfgLabel,
 ) -> Cfg<'ctx, Flow<LocTree<'ctx, ()>>> {
     // Bootstrap with empty environments.
@@ -83,7 +83,7 @@ pub fn var_liveness<'ctx>(
 /// Returns a map of live loans at the entry and exit of each node in the
 /// CFG.
 fn loan_liveness<'ctx>(
-    cfg: &CfgI<'ctx>,
+    cfg: &CfgI<'_, 'ctx>,
     entry_l: CfgLabel,
     var_flow: &Cfg<Flow<LocTree<'ctx, ()>>>,
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
@@ -169,12 +169,12 @@ fn loan_liveness<'ctx>(
 ///
 /// Performs liveliness analysis, determining which borrows are invalidated.
 pub fn liveness<'mir, 'ctx>(
-    mut cfg: CfgI<'mir>,
+    mut cfg: CfgI<'mir, 'ctx>,
     entry_l: CfgLabel,
     exit_l: CfgLabel,
-    strata: &HashMap<Stratum, Set<Varname<'mir>>>,
+    strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
     reporter: &mut Reporter<'ctx>,
-) -> Result<CfgI<'mir>, Diagnostics<'ctx>> {
+) -> Result<CfgI<'mir, 'ctx>, Diagnostics<'ctx>> {
     // Compute the var analysis first
     let var_flow = var_liveness(&cfg, entry_l);
 

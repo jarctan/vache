@@ -4,14 +4,14 @@ use codespan_reporting::files::SimpleFile;
 
 use crate::config::Config;
 use crate::reporter::{Diagnostic, Reporter};
-use crate::utils::arena::Arena;
+use crate::utils::arena::{Arena, Arenable};
 
 /// Compiler context.
 pub struct Context<'ctx> {
     /// Compiler configuration.
     pub config: Config<'ctx>,
     /// Compiler arena.
-    pub arena: &'ctx Arena,
+    pub arena: &'ctx Arena<'ctx>,
     /// Error reporter.
     pub reporter: Reporter<'ctx>,
     /// File representation, in part for diagnostic reporting.
@@ -20,7 +20,7 @@ pub struct Context<'ctx> {
 
 impl<'ctx> Context<'ctx> {
     /// Creates a new compiler context.
-    pub fn new(config: Config<'ctx>, arena: &'ctx Arena) -> Self {
+    pub fn new(config: Config<'ctx>, arena: &'ctx Arena<'ctx>) -> Self {
         let files = arena.alloc(SimpleFile::new(
             config.filename.unwrap_or("unknown file"),
             config.input,
@@ -34,12 +34,12 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Allocates an element in the compiler arena.
-    pub fn alloc<T>(&self, t: T) -> &'ctx T {
+    pub fn alloc<T: Arenable<'ctx>>(&self, t: T) -> &'ctx T {
         self.arena.alloc(t)
     }
 
     /// Allocates an element in the compiler arena.
-    pub fn alloc_mut<T>(&self, t: T) -> &'ctx mut T {
+    pub fn alloc_mut<T: Arenable<'ctx>>(&self, t: T) -> &'ctx mut T {
         self.arena.alloc_mut(t)
     }
 

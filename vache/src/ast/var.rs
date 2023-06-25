@@ -8,7 +8,6 @@ use pest::iterators::Pair;
 
 use super::{Context, Parsable, Span, Ty, TyUse};
 use crate::grammar::*;
-use crate::utils::boxed;
 use crate::Arena;
 
 /// Fresh variable counter.
@@ -83,7 +82,7 @@ impl<'ctx> VarUse<'ctx> {
     /// followed by a unique numeral ID.
     pub(crate) fn fresh(arena: &'ctx Arena, span: Span) -> VarUse<'ctx> {
         let number = VAR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let name: &str = arena.alloc(boxed(format!("時{number:?}")));
+        let name: &str = arena.alloc(format!("時{number:?}"));
         VarUse {
             name: name.into(),
             span,

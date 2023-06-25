@@ -29,7 +29,7 @@ impl<'ctx> Pat<'ctx> {
         }
     }
 
-    pub fn discriminant(&self) -> crate::anf::Branch {
+    pub fn discriminant(&self) -> crate::anf::Branch<'ctx> {
         use crate::anf::Branch::*;
         match self.kind {
             BoolM(b) => BoolB(b),

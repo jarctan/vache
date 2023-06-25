@@ -10,16 +10,16 @@ use crate::mir::*;
 use crate::utils::set::Set;
 
 /// ANF to MIR transformer.
-pub(crate) struct MIRer<'ctx> {
+pub(crate) struct MIRer<'mir, 'ctx> {
     /// The WIP CFG for the current function.
-    cfg: CfgI<'ctx>,
+    cfg: CfgI<'mir, 'ctx>,
     /// Current stratum.
     stm: Stratum,
     /// Collect the variables in each stratum.
     strata: HashMap<Stratum, Set<Varname<'ctx>>>,
 }
 
-impl<'ctx> MIRer<'ctx> {
+impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
     /// Creates a new MIR processor.
     pub(crate) fn new() -> Self {
         Self {
@@ -40,7 +40,7 @@ impl<'ctx> MIRer<'ctx> {
     }
 
     /// Generates an instruction with the right stratum.
-    fn instr<'s>(&'s self, kind: InstrKind<'ctx>, span: Span) -> Instr<'ctx> {
+    fn instr<'s>(&'s self, kind: InstrKind<'mir, 'ctx>, span: Span) -> Instr<'mir, 'ctx> {
         Instr {
             kind,
             span,
@@ -52,7 +52,7 @@ impl<'ctx> MIRer<'ctx> {
     #[must_use]
     fn insert<'s>(
         &'s mut self,
-        instr: Instr<'ctx>,
+        instr: Instr<'mir, 'ctx>,
         branches: impl IntoIterator<Item = (Branch<'ctx>, CfgLabel)>,
     ) -> CfgLabel {
         let from = self.cfg.add_node(instr);
@@ -69,7 +69,7 @@ impl<'ctx> MIRer<'ctx> {
     fn insert_at<'s>(
         &'s mut self,
         label: CfgLabel,
-        instr: Instr<'ctx>,
+        instr: Instr<'mir, 'ctx>,
         branches: impl IntoIterator<Item = (Branch<'ctx>, CfgLabel)>,
     ) {
         self.cfg[&label] = instr;
@@ -89,7 +89,7 @@ impl<'ctx> MIRer<'ctx> {
     }
 
     /// Computes the MIR output of a typed program using that processor.
-    pub fn gen_mir(&mut self, p: anf::Program<'ctx>) -> Program<'ctx> {
+    pub fn gen_mir(&mut self, p: anf::Program<'mir, 'ctx>) -> Program<'mir, 'ctx> {
         self.visit_program(p)
     }
 
@@ -104,7 +104,7 @@ impl<'ctx> MIRer<'ctx> {
     /// * The map of structures declarations.
     fn visit_stmts(
         &mut self,
-        b: anf::Block<'ctx>,
+        b: anf::Block<'mir, 'ctx>,
         dest_l: CfgLabel,
         exit_l: CfgLabel,
         break_l: Option<CfgLabel>,
@@ -123,7 +123,7 @@ impl<'ctx> MIRer<'ctx> {
     /// * A map of structures declarations.
     fn visit_stmt(
         &mut self,
-        s: anf::Stmt<'ctx>,
+        s: anf::Stmt<'mir, 'ctx>,
         dest_l: CfgLabel,
         exit_l: CfgLabel,
         break_l: Option<CfgLabel>,
@@ -232,7 +232,7 @@ impl<'ctx> MIRer<'ctx> {
     }
 
     /// Visits a function.
-    fn visit_fun(&mut self, f: anf::Fun<'ctx>) -> Fun<'ctx> {
+    fn visit_fun(&mut self, f: anf::Fun<'mir, 'ctx>) -> Fun<'mir, 'ctx> {
         let ret_l = self.fresh_label();
 
         self.push_scope();
@@ -253,12 +253,11 @@ impl<'ctx> MIRer<'ctx> {
     }
 
     /// Visits a program, recursively producing CFGs for each function.
-    fn visit_program(&mut self, p: anf::Program<'ctx>) -> Program<'ctx> {
+    fn visit_program(&mut self, p: anf::Program<'mir, 'ctx>) -> Program<'mir, 'ctx> {
         let anf::Program {
             funs,
             structs,
             enums,
-            arena,
         } = p;
 
         // Note: order is important.
@@ -268,7 +267,6 @@ impl<'ctx> MIRer<'ctx> {
                 .into_iter()
                 .map(|(name, f)| (name, self.visit_fun(f)))
                 .collect(),
-            arena,
             structs,
             enums,
         }

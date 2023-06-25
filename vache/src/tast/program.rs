@@ -12,7 +12,7 @@ use crate::Arena;
 #[derive(Clone)]
 pub struct Program<'ctx> {
     /// AST arena.
-    pub arena: &'ctx Arena,
+    pub arena: &'ctx Arena<'ctx>,
     /// Collection of functions defined in the program, indexed by their names.
     pub funs: HashMap<&'ctx str, Fun<'ctx>>,
     /// Collection of structures defined in the program, indexed by their names.

@@ -7,7 +7,7 @@ use super::{CfgI, CfgLabel, Pointer, Stratum, VarDef, Varname};
 use crate::utils::set::Set;
 
 /// A function in the parser AST.
-pub struct Fun<'ctx> {
+pub struct Fun<'mir, 'ctx> {
     /// Name of that function.
     pub name: &'ctx str,
     /// Parameters to that function, with their types
@@ -25,10 +25,10 @@ pub struct Fun<'ctx> {
     pub ret_l: CfgLabel,
     /// Body of the function: a list of statements and
     /// a final expression.
-    pub body: CfgI<'ctx>,
+    pub body: CfgI<'mir, 'ctx>,
 }
 
-impl<'ctx> fmt::Debug for Fun<'ctx> {
+impl<'mir, 'ctx> fmt::Debug for Fun<'mir, 'ctx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
             name,

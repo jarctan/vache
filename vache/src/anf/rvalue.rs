@@ -9,32 +9,32 @@ use super::*;
 
 /// Possible right values in the CFG.
 #[derive(PartialEq, Eq)]
-pub enum RValue<'ctx> {
+pub enum RValue<'mir, 'ctx> {
     /// Unit expression, that does nothing.
     Unit,
     /// A boolean.
     Bool(bool),
     /// An unbounded integer.
-    Integer(&'ctx BigInt),
+    Integer(&'mir BigInt),
     /// A string.
     String(&'ctx str),
     /// A place.
-    Place(Reference<'ctx>),
+    Place(Reference<'mir, 'ctx>),
     /// Structure instantiation.
     Struct {
         /// Name of the structure to instantiate.
         name: &'ctx str,
         /// Value for each field.
-        fields: HashMap<&'ctx str, Reference<'ctx>>,
+        fields: HashMap<&'ctx str, Reference<'mir, 'ctx>>,
     },
     /// Arrays.
-    Array(Vec<Reference<'ctx>>),
+    Array(Vec<Reference<'mir, 'ctx>>),
     /// Tuples.
-    Tuple(Vec<Reference<'ctx>>),
+    Tuple(Vec<Reference<'mir, 'ctx>>),
     /// Range.
     ///
     /// Format: `Range(start, end).`
-    Range(Reference<'ctx>, Reference<'ctx>),
+    Range(Reference<'mir, 'ctx>, Reference<'mir, 'ctx>),
     /// Enum variant.
     Variant {
         /// Enumerated type from which the variant originates.
@@ -42,11 +42,11 @@ pub enum RValue<'ctx> {
         /// Variant name.
         variant: &'ctx str,
         /// Variant arguments.
-        args: Vec<Reference<'ctx>>,
+        args: Vec<Reference<'mir, 'ctx>>,
     },
 }
 
-impl<'ctx> fmt::Debug for RValue<'ctx> {
+impl<'mir, 'ctx> fmt::Debug for RValue<'mir, 'ctx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use RValue::*;
         match self {
@@ -94,19 +94,19 @@ impl<'ctx> fmt::Debug for RValue<'ctx> {
     }
 }
 
-impl<'ctx> From<()> for RValue<'ctx> {
+impl<'mir, 'ctx> From<()> for RValue<'mir, 'ctx> {
     fn from(_: ()) -> Self {
         Self::Unit
     }
 }
 
-impl<'ctx> From<&'ctx BigInt> for RValue<'ctx> {
+impl<'mir, 'ctx> From<&'ctx BigInt> for RValue<'mir, 'ctx> {
     fn from(value: &'ctx BigInt) -> Self {
         Self::Integer(value)
     }
 }
 
-impl<'ctx> From<&'ctx str> for RValue<'ctx> {
+impl<'mir, 'ctx> From<&'ctx str> for RValue<'mir, 'ctx> {
     fn from(value: &'ctx str) -> Self {
         Self::String(value)
     }

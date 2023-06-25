@@ -4,7 +4,7 @@ use super::{Block, Pointer, VarDef};
 
 /// A function in the typed AST.
 #[derive(Debug)]
-pub struct Fun<'ctx> {
+pub struct Fun<'mir, 'ctx> {
     /// Name of that function.
     pub name: &'ctx str,
     /// Parameters to that function, with their types
@@ -16,5 +16,5 @@ pub struct Fun<'ctx> {
     pub ret_v: Option<Pointer<'ctx>>,
     /// Body of the function: a list of statements and
     /// a final expression.
-    pub body: Block<'ctx>,
+    pub body: Block<'mir, 'ctx>,
 }

@@ -9,9 +9,9 @@ use crate::utils::boxed;
 /// Instructions in the MIR (nodes in the CFG).
 ///
 /// Instruction = scope + kind of instruction.
-pub struct Instr<'a> {
+pub struct Instr<'mir, 'ctx> {
     /// Instruction kind.
-    pub kind: InstrKind<'a>,
+    pub kind: InstrKind<'mir, 'ctx>,
     /// Codespan of the instruction.
     pub span: Span,
     /// Scope id of the instruction.
@@ -20,20 +20,20 @@ pub struct Instr<'a> {
     pub scope: Stratum,
 }
 
-impl<'a> Deref for Instr<'a> {
-    type Target = InstrKind<'a>;
+impl<'mir, 'ctx> Deref for Instr<'mir, 'ctx> {
+    type Target = InstrKind<'mir, 'ctx>;
 
     fn deref(&self) -> &Self::Target {
         &self.kind
     }
 }
-impl<'a> DerefMut for Instr<'a> {
+impl<'mir, 'ctx> DerefMut for Instr<'mir, 'ctx> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.kind
     }
 }
 
-impl<'a> fmt::Debug for Instr<'a> {
+impl<'mir, 'ctx> fmt::Debug for Instr<'mir, 'ctx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?} // scope {:?}", self.kind, self.scope)
     }
@@ -41,26 +41,26 @@ impl<'a> fmt::Debug for Instr<'a> {
 
 /// Instructions in the MIR (nodes in the CFG).
 #[derive(Default)]
-pub enum InstrKind<'ctx> {
+pub enum InstrKind<'mir, 'ctx> {
     /// No-op instruction.
     #[default]
     Noop,
     /// Declare a new, uninitialized variable.
     Declare(VarDef<'ctx>),
     /// Assigns a variable.
-    Assign(Pointer<'ctx>, RValue<'ctx>),
+    Assign(Pointer<'ctx>, RValue<'mir, 'ctx>),
     /// Performs a call to `name(args)`, putting the result in variable
     /// `destination`.
     Call {
         /// Name of the function to call.
         name: Namespaced<'ctx>,
         /// Arguments to that function.
-        args: Vec<Reference<'ctx>>,
+        args: Vec<Reference<'mir, 'ctx>>,
         /// Destination variable to hold the result.
         destination: Option<Pointer<'ctx>>,
     },
     /// Asks for the truthiness of the first argument.
-    Branch(Reference<'ctx>),
+    Branch(Reference<'mir, 'ctx>),
     /// Return the value.
     ///
     /// Dummy instruction to pinpoint the liveness of the return value at the
@@ -68,7 +68,7 @@ pub enum InstrKind<'ctx> {
     Return(Pointer<'ctx>),
 }
 
-impl<'ctx> InstrKind<'ctx> {
+impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
     /// If this instruction mutates some variables, returns them.
     /// Otherwise, returns [`None`].
     pub fn mutated_place<'a>(&'a self) -> Box<dyn Iterator<Item = Place<'ctx>> + 'a> {
@@ -95,7 +95,7 @@ impl<'ctx> InstrKind<'ctx> {
     /// Returns mutable borrows into the references of this [`InstrKind`].
     pub fn references_mut<'a>(
         &'a mut self,
-    ) -> Box<dyn Iterator<Item = &'a mut Reference<'ctx>> + 'a> {
+    ) -> Box<dyn Iterator<Item = &'a mut Reference<'mir, 'ctx>> + 'a> {
         match self {
             InstrKind::Noop
             | InstrKind::Declare(_)
@@ -127,7 +127,7 @@ impl<'ctx> InstrKind<'ctx> {
     }
 
     /// Returns the references of this [`InstrKind`].
-    pub fn references<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Reference<'ctx>> + 'a> {
+    pub fn references<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Reference<'mir, 'ctx>> + 'a> {
         match self {
             InstrKind::Noop
             | InstrKind::Declare(_)
@@ -181,7 +181,7 @@ impl<'ctx> InstrKind<'ctx> {
     }
 }
 
-impl<'a> fmt::Debug for InstrKind<'a> {
+impl<'mir, 'ctx> fmt::Debug for InstrKind<'mir, 'ctx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             InstrKind::Noop => write!(f, "()"),
@@ -209,7 +209,10 @@ impl<'a> fmt::Debug for InstrKind<'a> {
 
 /// Shortcut to create a instruction of a given kind and scope.
 #[cfg(test)]
-pub fn instr<'a>(kind: impl Into<InstrKind<'a>>, scope: impl Into<Stratum>) -> Instr<'a> {
+pub fn instr<'mir, 'ctx>(
+    kind: impl Into<InstrKind<'mir, 'ctx>>,
+    scope: impl Into<Stratum>,
+) -> Instr<'mir, 'ctx> {
     Instr {
         kind: kind.into(),
         span: std::default::default(),

@@ -19,16 +19,16 @@ use crate::mir::{Branch, CfgI, CfgLabel, Fun, InstrKind, Mode, Place, Pointer, R
 use crate::tast::Stratum;
 
 /// Interpreter for our language.
-pub(crate) struct Interpreter<'a, 'ctx> {
+pub(crate) struct Interpreter<'a, 'mir, 'ctx> {
     /// The execution environment stack.
     pub env: Vec<Env<'ctx>>,
     /// Map between function names and their definition.
-    pub fun_env: &'a HashMap<&'ctx str, Fun<'ctx>>,
+    pub fun_env: &'a HashMap<&'ctx str, Fun<'mir, 'ctx>>,
     /// Standard output, as a growable string.
     pub stdout: StringBuilder,
 }
 
-impl<'a, 'ctx> Interpreter<'a, 'ctx> {
+impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     /// Shortcut to produce the result of a call to an integer binop operation
     /// `f` that takes two integers and returns a value.
     fn int_binop(
@@ -397,7 +397,7 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
     }
 
     /// Visit a right-value.
-    fn visit_rvalue(&mut self, rvalue: &RValue<'ctx>, stratum: Stratum) -> ValueRef {
+    fn visit_rvalue(&mut self, rvalue: &RValue<'mir, 'ctx>, stratum: Stratum) -> ValueRef {
         match rvalue {
             RValue::Unit => self.add_value(UnitV, stratum),
             RValue::Bool(b) => self.add_value(BoolV(*b), stratum),
@@ -444,7 +444,7 @@ impl<'a, 'ctx> Interpreter<'a, 'ctx> {
 
     /// Executes an expression, returning the first label that do not exist in
     /// the CFG. Often, this is the return/exit label.
-    fn visit_cfg(&mut self, cfg: &CfgI<'ctx>, label: CfgLabel) {
+    fn visit_cfg(&mut self, cfg: &CfgI<'mir, 'ctx>, label: CfgLabel) {
         let branch = match &cfg[&label].kind {
             InstrKind::Noop => DefaultB,
             InstrKind::Declare(v) => {

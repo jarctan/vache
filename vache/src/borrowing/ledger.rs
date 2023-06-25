@@ -39,10 +39,10 @@ pub struct Ledger<'ctx> {
 impl<'ctx> Ledger<'ctx> {
     /// Returns the complete (deep, nested) list of all borrows resulting from
     /// the borrow of `reference` at CFG label `label`.
-    pub fn borrow<'a>(
-        &'a mut self,
+    pub fn borrow<'mir>(
+        &mut self,
         borrower: Loc<'ctx>,
-        reference: &Reference<'ctx>,
+        reference: &Reference<'mir, 'ctx>,
         label: CfgLabel,
     ) -> Vec<Borrow<'ctx>> {
         let span = reference.as_ptr().span;

@@ -184,8 +184,8 @@ mod steps {
     /// `BorrowChecker` and launching it on your program.
     pub fn borrow_check<'a, 'mir, 'ctx>(
         ctx: &'a mut Context<'ctx>,
-        p: impl Into<mir::Program<'mir>>,
-    ) -> Result<Result<mir::Program<'mir>, Diagnostics<'ctx>>> {
+        p: impl Into<mir::Program<'mir, 'ctx>>,
+    ) -> Result<Result<mir::Program<'mir, 'ctx>, Diagnostics<'ctx>>> {
         print!("Borrow-checking...");
         let p = p.into();
         std::io::stdout().flush()?;
@@ -200,7 +200,7 @@ mod steps {
     ///
     /// Under the hood, in charge of allocating a new `MIRer` and launching it
     /// on your program.
-    pub fn mir<'mir>(p: &'mir mut tast::Program<'_>) -> Result<mir::Program<'mir>> {
+    pub fn mir<'ctx, 'mir>(p: &'mir mut tast::Program<'ctx>) -> Result<mir::Program<'mir, 'ctx>> {
         print!("Miring...");
         std::io::stdout().flush()?;
         let start = Instant::now();
@@ -234,7 +234,7 @@ mod steps {
     /// Under the hood, it will allocate a new `Interpreter` and launch it on
     /// your program. It will call the function `main` within your program
     /// and return the standard output of your program.
-    pub fn interpret<'ctx>(p: impl Into<mir::Program<'ctx>>) -> Result<String> {
+    pub fn interpret<'mir, 'ctx: 'mir>(p: impl Into<mir::Program<'mir, 'ctx>>) -> Result<String> {
         Ok(interpret::interpret(p.into()))
     }
 

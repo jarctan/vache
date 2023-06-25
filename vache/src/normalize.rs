@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::default::default;
+use std::marker::PhantomData;
 
 use StmtKind::*;
 
@@ -10,9 +11,11 @@ use crate::tast;
 use crate::Arena;
 
 /// Typed AST to ANF transformer.
-pub(crate) struct Normalizer<'ctx> {
+pub(crate) struct Normalizer<'mir, 'ctx> {
+    /// Phantom reference to the `'mir` lifetime.
+    mir_lifetime: PhantomData<&'mir ()>,
     /// Compiler arena.
-    arena: &'ctx Arena,
+    arena: &'ctx Arena<'ctx>,
     /// Current stratum.
     stm: Stratum,
     /// Variable translation between pattern identifiers and the places they
@@ -22,9 +25,9 @@ pub(crate) struct Normalizer<'ctx> {
     var_t9n: Vec<HashMap<Varname<'ctx>, &'ctx Place<'ctx>>>,
 }
 
-impl<'ctx> Normalizer<'ctx> {
+impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
     /// Normalize a given program.
-    pub fn normalize<'tast>(p: &'ctx mut tast::Program<'tast>) -> Program<'ctx> {
+    pub fn normalize(p: &'mir mut tast::Program<'ctx>) -> Program<'mir, 'ctx> {
         let tast::Program {
             funs,
             structs,
@@ -33,7 +36,8 @@ impl<'ctx> Normalizer<'ctx> {
         } = p;
 
         let mut normalizer = Self {
-            arena: *arena,
+            mir_lifetime: PhantomData,
+            arena,
             stm: Stratum::static_stm(),
             var_t9n: vec![default()],
         };
@@ -43,7 +47,6 @@ impl<'ctx> Normalizer<'ctx> {
                 .iter_mut()
                 .map(|(name, f)| (*name, normalizer.visit_fun(f)))
                 .collect(),
-            arena,
             structs,
             enums,
         }
@@ -157,13 +160,13 @@ impl<'ctx> Normalizer<'ctx> {
     ///   expression.
     /// * `mode`: Overriding mode, if any.
     /// * The map of structures declarations.
-    fn visit_expr<'tast>(
-        &mut self,
-        stmts: &mut Vec<Stmt<'ctx>>,
-        e: &'ctx mut tast::Expr<'tast>,
+    fn visit_expr<'a>(
+        &'a mut self,
+        stmts: &'a mut Vec<Stmt<'mir, 'ctx>>,
+        e: &'mir mut tast::Expr<'ctx>,
         mode: Option<Mode>,
         ret_ptr: Pointer<'ctx>,
-    ) -> Reference<'ctx> {
+    ) -> Reference<'mir, 'ctx> {
         match &mut e.kind {
             tast::ExprKind::UnitE => {
                 let vardef = self.fresh_vardef(e.ty, e.span);
@@ -430,11 +433,11 @@ impl<'ctx> Normalizer<'ctx> {
     /// * The block itself (as a parser AST node)
     /// * The map of structures declarations.
     /// * The _function_ return pointer.
-    fn visit_block<'tast>(
+    fn visit_block(
         &mut self,
-        b: &'ctx mut tast::Block<'tast>,
+        b: &'mir mut tast::Block<'ctx>,
         ret_ptr: Pointer<'ctx>,
-    ) -> (Reference<'ctx>, Block<'ctx>) {
+    ) -> (Reference<'mir, 'ctx>, Block<'mir, 'ctx>) {
         let mut stmts: Block = default();
         self.push_scope();
         for stmt in &mut b.stmts {
@@ -452,10 +455,10 @@ impl<'ctx> Normalizer<'ctx> {
     /// * The statement to visit.
     /// * The label to jump at in the CFG after the execution of the statement.
     /// * A map of structures declarations.
-    fn visit_stmt<'tast>(
-        &mut self,
-        s: &'ctx mut tast::Stmt<'tast>,
-        stmts: &mut Vec<Stmt<'ctx>>,
+    fn visit_stmt<'a>(
+        &'a mut self,
+        s: &'mir mut tast::Stmt<'ctx>,
+        stmts: &'a mut Vec<Stmt<'mir, 'ctx>>,
         ret_ptr: Pointer<'ctx>,
     ) {
         match &mut s.kind {
@@ -558,7 +561,9 @@ impl<'ctx> Normalizer<'ctx> {
             tast::StmtKind::BreakS => stmts.push(Stmt::new(BreakS, s.span)),
             tast::StmtKind::ContinueS => stmts.push(Stmt::new(ContinueS, s.span)),
             tast::StmtKind::ReturnS(ret) => {
-                let ret = self.visit_expr(stmts, ret, Some(Mode::Moved), ret_ptr);
+                let stmts: &'a mut std::vec::Vec<Stmt<'mir, 'ctx>> = stmts;
+                let ret: Reference<'mir, 'ctx> =
+                    self.visit_expr(stmts, ret, Some(Mode::Moved), ret_ptr);
                 stmts.push(Stmt::new(AssignS(ret_ptr, RValue::Place(ret)), s.span));
                 stmts.push(Stmt::new(ReturnS(ret_ptr), s.span));
             }
@@ -566,7 +571,7 @@ impl<'ctx> Normalizer<'ctx> {
     }
 
     /// Visits a function.
-    fn visit_fun<'tast>(&mut self, f: &'ctx mut tast::Fun<'tast>) -> Fun<'ctx> {
+    fn visit_fun(&mut self, f: &'mir mut tast::Fun<'ctx>) -> Fun<'mir, 'ctx> {
         let vardef = self.fresh_vardef(f.ret_ty.kind, f.body.ret.span);
         let ret_ptr = Pointer::new(
             self.arena,
