@@ -1,3 +1,5 @@
+//! Defining LHS modes.
+
 use std::fmt;
 
 /// Variable addressing modality.

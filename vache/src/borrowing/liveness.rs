@@ -228,6 +228,8 @@ pub fn liveness<'mir, 'ctx>(
     // all
     invalidated.extend(loan_flow[&exit_l].outs.invalidations());
 
+    // If there are some unrecoverables loan issues in the final ledger, emit the
+    // corresponding warnings.
     if let Some(unrecoverables) = loan_flow[&exit_l].outs.unrecoverables() {
         for (&borrow, &contradiction) in unrecoverables {
             reporter.emit(
@@ -239,23 +241,41 @@ pub fn liveness<'mir, 'ctx>(
                         if borrow.mutable { " mutably" } else { "" },
                     ))
                     .with_labels(vec![
-                        borrow.span.into(),
-                        contradiction
-                            .span
-                            .as_secondary_label()
-                            .with_message(format!(
-                                "contradicts this {} use",
-                                if contradiction.mutable {
-                                    "mutable"
-                                } else {
-                                    "immutable"
-                                },
-                            )),
+                        borrow.span.as_label().with_message(
+                            if borrow.mutable && contradiction.mutable {
+                                "second mutable use but L0 is still active"
+                            } else {
+                                "immutable use but mutable use L0 is still active"
+                            },
+                        ),
+                        contradiction.span.as_secondary_label().with_message(
+                            if borrow.mutable && contradiction.mutable {
+                                "first mutable use L0"
+                            } else {
+                                "mutable use L0"
+                            },
+                        ),
                     ])
-                    .with_notes(vec![format!(
-                        "Debug information: {:?} {:?} {:?}",
-                        borrow.label, borrow.borrower, borrow.ptr
-                    )]),
+                    .with_notes(vec![
+                        if borrow.mutable && contradiction.mutable {
+                            "remember: there cannot be two simultaneously active mutable uses at any line"
+                                .to_string()
+                        } else {
+                            "remember: there cannot be any immutable use while a mutable use is active"
+                                .to_string()
+                        },
+                        if borrow.mutable && contradiction.mutable {
+                            "help: consider removing one of the two mutable uses, or shorten the lifetime of the first one"
+                                .to_string()
+                        } else {
+                            "help: consider not mutably borrowing, or remove the immutable uses while the mutable use is active"
+                                .to_string()
+                        },
+                        format!(
+                            "Debug information: {:?} {:?} {:?}",
+                            borrow.label, borrow.borrower, borrow.ptr
+                        ),
+                    ]),
             );
         }
     }
