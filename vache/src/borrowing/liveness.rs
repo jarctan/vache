@@ -87,6 +87,8 @@ fn loan_liveness<'ctx>(
     var_flow: &Cfg<Flow<LocTree<'ctx, ()>>>,
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
 ) -> Cfg<'ctx, Flow<Ledger<'ctx>>> {
+    println!("{:?}", cfg);
+    println!("{:?}", var_flow);
     let out_of_scope: Cfg<LocTree<()>> =
         var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
 
@@ -96,9 +98,11 @@ fn loan_liveness<'ctx>(
     let mut updated = true;
 
     while updated {
+        println!("TRRRRRRRRRRRRRYYYYYY\n\n\n\n");
         updated = false;
 
         for (label, instr) in cfg.postorder(entry_l).rev() {
+            println!("{:?}", instr);
             let predecessors = cfg.preneighbors(label);
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
             let mut outs: Ledger = match &instr.kind {
@@ -109,13 +113,16 @@ fn loan_liveness<'ctx>(
                     destination: Some(lhs),
                 } => {
                     let mut ledger = ins.clone();
-                    ledger.flush_place(lhs.place(), true);
                     let borrows = instr
                         .references()
                         .map(|reference| ledger.borrow(*lhs.loc(), reference, label))
                         .collect::<Vec<_>>();
                     let borrows = ledger.flatten(borrows.into_iter());
-                    ledger.set_borrows(lhs.place(), borrows);
+                    if var_flow[&label].outs.contains(lhs.loc()) {
+                        ledger.set_borrows(lhs.place(), borrows);
+                    } else {
+                        ledger.flush_place(lhs.place(), true);
+                    }
                     ledger
                 }
                 InstrKind::Branch(_)
@@ -214,11 +221,13 @@ pub fn liveness<'mir, 'ctx>(
 
     // Now, compute loan analysis
     let loan_flow = loan_liveness(&cfg, entry_l, &var_flow, strata);
+    println!("{:?}", loan_flow);
 
     // List all borrows that are invalidated by mutation of the variable afterwards.
     for (label, instr) in cfg.bfs(entry_l, false) {
         for lhs in instr.mutated_place() {
             for borrow in loan_flow[&label].ins.loans(lhs.root()) {
+                debug_assert!(!borrow.mutable);
                 invalidated.insert(borrow);
             }
         }
@@ -281,7 +290,14 @@ pub fn liveness<'mir, 'ctx>(
     }
 
     // Transform all invalidated borrows into clones
-    for Borrow { label, ptr, .. } in invalidated {
+    for Borrow {
+        label,
+        ptr,
+        mutable,
+        ..
+    } in invalidated
+    {
+        debug_assert!(!mutable);
         cfg[&label].force_clone(&ptr);
     }
 

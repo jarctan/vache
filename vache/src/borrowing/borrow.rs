@@ -34,7 +34,7 @@ impl<'ctx> Borrow<'ctx> {
 
 impl fmt::Debug for Borrow<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}{:?}", self.ptr, self.label)
+        write!(f, "{:?}{:?}%{}", self.ptr, self.label, self.borrower)
     }
 }
 

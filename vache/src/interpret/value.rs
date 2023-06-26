@@ -6,7 +6,11 @@ use std::fmt;
 use crate::tast::Stratum;
 
 /// Values in our language.
+#[derive(Default)]
 pub enum Value<'ctx> {
+    /// Uninit value.
+    #[default]
+    UninitV,
     /// Unit value.
     UnitV,
     /// Integer value.
@@ -43,6 +47,7 @@ use Value::*;
 impl fmt::Debug for Value<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            UninitV => write!(f, "!"),
             UnitV => write!(f, "()"),
             IntV(i) => fmt::Display::fmt(i, f),
             StrV(s) => write!(f, "\"{s}\""),
@@ -91,10 +96,16 @@ impl Value<'_> {
 }
 
 /// A reference to a value.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct ValueRef {
     /// Stratum/ environment number in which the value resides.
     pub stratum: Stratum,
     /// Key in the slab of that environment.
     pub key: usize,
+}
+
+impl fmt::Debug for ValueRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}#{}", self.stratum, self.key)
+    }
 }

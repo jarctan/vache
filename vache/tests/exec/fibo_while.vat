@@ -29,5 +29,5 @@ fn main() {
 144
 ################################
 11:18:Moved // reassign n2
-12:18:Borrowed // borrow n2?
+12:18:Cloned // clone because we reassign to n2 afterward (in the next iteration of the loop)
 12:23:Moved // reassign n1

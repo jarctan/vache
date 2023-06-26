@@ -100,6 +100,12 @@ impl<'ctx> Ledger<'ctx> {
             .remove(loc)
             .map_or(default(), |node| node.into());
 
+        println!(
+            "Flushing {:?}{} with borrows {borrows:?}",
+            loc,
+            if force { " forcefully" } else { "" }
+        );
+
         for borrow in borrows.iter() {
             // If the borrow is not invalidated, remove it from the loans.
             if !self.invalidations.contains(borrow) {
@@ -117,6 +123,15 @@ impl<'ctx> Ledger<'ctx> {
                 .map(Loans::from)
                 .map(Borrows::from)
                 .unwrap_or_default();
+            debug_assert!(
+                removed_loans.iter().all(|borrow| !borrow.mutable),
+                "Not all loans are immutable: {:?} when flushing loc {:?}",
+                removed_loans,
+                loc,
+            );
+            if !removed_loans.is_empty() {
+                println!("Invalidated ici with {:?}", removed_loans);
+            }
             self.invalidations.extend(removed_loans);
         }
 
@@ -126,6 +141,11 @@ impl<'ctx> Ledger<'ctx> {
     /// Simultaneous removal of several locations from the ledger.
     pub fn flush_locs(&mut self, locs: impl Iterator<Item = Loc<'ctx>>, force: bool) {
         let locs: Set<_> = locs.collect();
+        println!(
+            "Flushing {:?}{}",
+            locs,
+            if force { " forcefully" } else { "" }
+        );
 
         // First, remove all the borrows of the locations to flush
         // We store at the same time the locations we really want to remove from the
@@ -165,10 +185,17 @@ impl<'ctx> Ledger<'ctx> {
                 .map(Loans::from)
                 .map(Borrows::from)
                 .unwrap_or_default();
-            let loans = removed_loans
-                .iter()
-                .filter(|loan| !locs.contains(&loan.borrower));
-            self.invalidations.extend(loans);
+            let removed_loans: Borrows = removed_loans
+                .into_iter()
+                .filter(|loan| !locs.contains(&loan.borrower))
+                .collect();
+            if !removed_loans.is_empty() {
+                println!(
+                    "Invalidated apoi with {:?} (only {locs:?} allowed)",
+                    removed_loans
+                );
+            }
+            self.invalidations.extend(removed_loans);
         }
     }
 
@@ -196,6 +223,7 @@ impl<'ctx> Ledger<'ctx> {
                 match loans.insert(borrow) {
                     Ok(borrows) => {
                         for borrow in borrows {
+                            debug_assert!(!borrow.mutable);
                             self.invalidations.insert(borrow);
                         }
                         retained.insert(borrow);
@@ -204,6 +232,7 @@ impl<'ctx> Ledger<'ctx> {
                         if borrow.mutable {
                             self.unrecoverables.insert(borrow, contradiction);
                         } else {
+                            debug_assert!(!borrow.mutable);
                             self.invalidations.insert(borrow);
                         }
                     }
@@ -220,6 +249,8 @@ impl<'ctx> Ledger<'ctx> {
         let place = place.into();
         let loc = place.root();
 
+        println!("Adding {place:?} with {borrows:?}");
+
         // First, flush the place.
         self.flush_place(place, true);
 
@@ -232,7 +263,11 @@ impl<'ctx> Ledger<'ctx> {
         for &borrow in &borrows {
             match self.loans.get_mut_or_insert(borrow.loc()).insert(borrow) {
                 Ok(borrows) => {
+                    if !borrows.is_empty() {
+                        println!("Mutable borrow {borrow:?} invalidates {borrows:?}");
+                    }
                     for borrow in borrows {
+                        debug_assert!(!borrow.mutable);
                         self.invalidations.insert(borrow);
                     }
                 }
@@ -240,6 +275,8 @@ impl<'ctx> Ledger<'ctx> {
                     if borrow.mutable {
                         self.unrecoverables.insert(borrow, contradiction);
                     } else {
+                        debug_assert!(!borrow.mutable);
+                        println!("Invalidated there");
                         self.invalidations.insert(borrow);
                     }
                 }
@@ -252,7 +289,10 @@ impl<'ctx> Ledger<'ctx> {
                 if borrows.is_empty() {
                     self.borrows.remove(loc);
                 } else {
+                    println!("Registering borrows");
                     *self.borrows.get_mut_or_insert(loc) = borrows.into_iter().collect();
+                    let borrows: Vec<Borrow> = self.borrows.get_all(loc).collect();
+                    println!("Registered {borrows:?}");
                 }
             }
             Err(()) => {

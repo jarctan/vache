@@ -85,6 +85,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     fn display(&self, value: &ValueRef) -> String {
         let value = self.get_value(*value);
         match value {
+            UninitV => unreachable!(),
             UnitV => "()".to_string(),
             IntV(i) => format!("{i}"),
             StrV(s) => format!("{s}"),
@@ -241,16 +242,35 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     }
 
     /// Declares a new variable in the context.
-    fn add_var(&mut self, name: impl Into<Varname<'ctx>>, val_ref: impl Into<ValueRef>) {
-        self.env
-            .last_mut()
-            .unwrap()
-            .add_var(name.into(), val_ref.into());
+    fn add_var(&mut self, name: impl Into<Varname<'ctx>>, r: impl Into<ValueRef>) {
+        let name = name.into();
+        let r = r.into();
+        self.env.last_mut().unwrap().add_var(name, r);
+
+        // Keep it, useful for debugging
+        eprintln!(
+            "[{:?} : {:?} = {:?} i.e. {}]",
+            name,
+            r,
+            self.get_value(r),
+            self.display(&r)
+        );
     }
 
     /// Assigns `*ptr`.
     fn set_at_ptr(&mut self, ptr: impl Into<Pointer<'ctx>>, value: impl Into<Value<'ctx>>) {
-        self.set_value(self.get_ptr(ptr), value.into());
+        let ptr = ptr.into();
+        let value = value.into();
+        let r = self.get_ptr(ptr);
+        self.set_value(r, value);
+        // Keep it, useful for debugging
+        eprintln!(
+            "[{:?} : {:?} = {:?} i.e. {}]",
+            ptr.place(),
+            r,
+            self.get_value(r),
+            self.display(&r)
+        );
     }
 
     /// Adds a value to the dynamic store/slab.
@@ -305,15 +325,10 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     }
 
     /// Gets the value reference at a given pointer.
-    #[allow(clippy::let_and_return)] // Because we have this debug statement in comments
     fn get_ptr(&self, ptr: impl Into<Pointer<'ctx>>) -> ValueRef {
         let ptr = ptr.into();
-        let r = self
-            .get_ptr_opt(ptr)
-            .unwrap_or_else(|| panic!("Runtime error: variable {:?} should exist", ptr.place()));
-        // Keep it, useful for debugging
-        // eprintln!("[{:?} = {}]", ptr.place(), self.display(&r));
-        r
+        self.get_ptr_opt(ptr)
+            .unwrap_or_else(|| panic!("Runtime error: variable {:?} should exist", ptr.place()))
     }
 
     /// Gets the value at a given pointer location.
@@ -331,6 +346,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     fn clone(&mut self, val_ref: ValueRef, stm: Stratum) -> ValueRef {
         let value = self.get_value(val_ref);
         let new_value = match value {
+            UninitV => unreachable!(),
             UnitV => UnitV,
             IntV(i) => IntV(i.clone()),
             StrV(s) => StrV(s.clone()),
@@ -384,13 +400,21 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
         self.add_value(new_value, stm)
     }
 
+    /// Moves the value out of its original location, leaving an uninitialized
+    /// ([`Value::UninitV`]) value at the value reference, and move the
+    /// value to a new [`ValueRef`]. It will return the new [`ValueRef`] that
+    /// stores that [`Value`].
+    fn move_out(&mut self, val_ref: ValueRef, stm: Stratum) -> ValueRef {
+        let value = self.env[usize::from(val_ref.stratum)].move_out(val_ref.key);
+        self.add_value(value, stm)
+    }
+
     /// Visits a reference, optionally choosing to clone the value.
     pub fn visit_reference(&mut self, r: &Reference<'mir, 'ctx>, stratum: Stratum) -> ValueRef {
         let v_ref = self.get_ptr(r.as_ptr());
         match r.mode() {
-            Mode::Cloned | Mode::Moved | Mode::Borrowed | Mode::SBorrowed => {
-                self.clone(v_ref, stratum)
-            }
+            Mode::Cloned | Mode::Borrowed | Mode::SBorrowed => self.clone(v_ref, stratum),
+            Mode::Moved => self.move_out(v_ref, stratum),
             Mode::SMutBorrowed | Mode::MutBorrowed => {
                 debug_assert!(
                     stratum >= v_ref.stratum,
@@ -411,20 +435,29 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
             RValue::String(s) => self.add_value(StrV(s.to_string()), stratum),
             RValue::Place(place) => self.visit_reference(place, stratum),
             RValue::Struct { name, fields } => {
-                let fields = fields.iter().map(|(&k, v)| (k, self.get_ptr(v))).collect();
+                let fields = fields
+                    .iter()
+                    .map(|(&k, r)| (k, self.visit_reference(r, stratum)))
+                    .collect();
                 self.add_value(StructV(name, fields), stratum)
             }
             RValue::Array(array) => {
-                let array = array.iter().map(|v| self.get_ptr(v)).collect();
+                let array = array
+                    .iter()
+                    .map(|r| self.visit_reference(r, stratum))
+                    .collect();
                 self.add_value(ArrayV(array), stratum)
             }
             RValue::Tuple(items) => {
-                let items = items.iter().map(|v| self.get_ptr(v)).collect();
+                let items = items
+                    .iter()
+                    .map(|r| self.visit_reference(r, stratum))
+                    .collect();
                 self.add_value(TupleV(items), stratum)
             }
             RValue::Range(start, end) => {
-                let start = self.get_ptr(start);
-                let end = self.get_ptr(end);
+                let start = self.visit_reference(start, stratum);
+                let end = self.visit_reference(end, stratum);
                 self.add_value(RangeV(start, end), stratum)
             }
             RValue::Variant {
@@ -432,7 +465,10 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                 variant,
                 args,
             } => {
-                let args = args.iter().map(|v| self.get_ptr(v)).collect();
+                let args = args
+                    .iter()
+                    .map(|r| self.visit_reference(r, stratum))
+                    .collect();
                 self.add_value(
                     VariantV {
                         enun,
@@ -448,6 +484,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     /// Executes an expression, returning the first label that do not exist in
     /// the CFG. Often, this is the return/exit label.
     fn visit_cfg(&mut self, cfg: &CfgI<'mir, 'ctx>, label: CfgLabel) {
+        eprintln!("{:?}", cfg[&label].kind);
         let branch = match &cfg[&label].kind {
             InstrKind::Noop => DefaultB,
             InstrKind::Assign(ptr, rvalue) => {
@@ -475,10 +512,13 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                 args,
                 destination: Some(destination),
             } => {
-                let args = args.iter().map(|v| self.get_ptr(v)).collect();
                 match destination.mode() {
                     LhsMode::Assigning => {
                         let stratum = self.get_ptr(destination.as_ptr()).stratum;
+                        let args = args
+                            .iter()
+                            .map(|r| self.visit_reference(r, stratum))
+                            .collect();
                         let call_result = self.call(name.name, args, stratum).expect(
                             "if the destination is set, then the function should return a value",
                         );
@@ -487,6 +527,10 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                     }
                     LhsMode::Declaring => {
                         let stratum = self.current_stratum();
+                        let args = args
+                            .iter()
+                            .map(|r| self.visit_reference(r, stratum))
+                            .collect();
                         let call_result = self.call(name.name, args, stratum).expect(
                             "if the destination is set, then the function should return a value",
                         );
@@ -502,8 +546,8 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                 DefaultB
             }
             InstrKind::Call {
-                name,
-                args,
+                name: _,
+                args: _,
                 destination: None,
             } => todo!(),
             InstrKind::Branch(cond) => {

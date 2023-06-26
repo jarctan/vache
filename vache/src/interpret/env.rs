@@ -34,7 +34,12 @@ impl<'ctx> Env<'ctx> {
 
     /// Gets a value from the environment, based on the key in the slab.
     pub fn get_value(&self, key: usize) -> Option<&Value<'ctx>> {
-        self.slab.get(key)
+        let value = self.slab.get(key)?;
+        debug_assert!(
+            !matches!(value, Value::UninitV),
+            "Runtime error: getting an uninitialized value at key {key}"
+        );
+        Some(value)
     }
 
     /// Adds a value to that environment, returning the key to it in the slab.
@@ -62,7 +67,18 @@ impl<'ctx> Env<'ctx> {
     /// # Panics
     /// Panics if the key corresponds to no value.
     pub fn remove_value(&mut self, key: usize) -> Value<'ctx> {
-        self.slab.remove(key)
+        let value = self.slab.remove(key);
+        debug_assert!(
+            !matches!(value, Value::UninitV),
+            "Runtime error: getting an uninitialized value at key {key}"
+        );
+        value
+    }
+
+    /// Moves a [`Value`] out of the store indexed by `key`, leaving a
+    /// [`Value::UninitV`] at this place. Returns the removed [`Value`].
+    pub fn move_out(&mut self, key: usize) -> Value<'ctx> {
+        std::mem::take(&mut self.slab[key])
     }
 
     /// Gets the definition of a variable.
@@ -92,7 +108,7 @@ impl<'ctx> Env<'ctx> {
     pub fn close(mut self, value: ValueRef) -> Option<Value<'ctx>> {
         assert!(value.stratum <= self.stratum);
         if value.stratum == self.stratum {
-            Some(self.slab.remove(value.key))
+            Some(self.remove_value(value.key))
         } else {
             None
         }
