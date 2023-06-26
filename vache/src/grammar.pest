@@ -65,7 +65,7 @@ call_postfix = { lp ~ (expr ~ (cma ~ expr)*)? ~ rp }
 
 range_postfix = { rg ~ expr }
 
-struct_instance = { ident ~ lcb ~ (ident ~ cln ~ expr ~ cma)* ~ rcb }
+struct_instance = { ident ~ lcb ~ (ident ~ cln ~ expr ~ (cma ~ ident ~ cln ~ expr)* ~ cma?)? ~ rcb }
 
 integer = @{ '0'..'9' ~ ('0'..'9' | "_")* }
 
