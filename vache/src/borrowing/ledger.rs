@@ -76,7 +76,6 @@ impl<'ctx> Ledger<'ctx> {
                 borrows
             }
             Mode::Cloned => vec![],
-            Mode::Assigning => panic!("Cannot borrow a variable in an assigning mode"),
         }
     }
 

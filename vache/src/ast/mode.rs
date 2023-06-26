@@ -26,21 +26,19 @@ pub enum Mode {
     ///
     /// Is only safe when the original value is not used afterwards!
     Moved,
-    /// Assigning to a variable.
-    Assigning,
 }
+use Mode::*;
 
 impl Mode {
     /// Is this a borrowing mode?
     pub fn is_borrowing(&self) -> bool {
-        use Mode::*;
         // Note: we state all cases explicitly to force an error if we were to add new
         // variants.
         match self {
             Borrowed | MutBorrowed => true,
             SBorrowed | SMutBorrowed => false, /* Note: a shallow borrow is not considered */
             // borrowing.
-            Cloned | Moved | Assigning => false,
+            Cloned | Moved => false,
         }
     }
 }
@@ -55,7 +53,6 @@ impl fmt::Display for Mode {
             SMutBorrowed => write!(f, "&mut "),
             Cloned => write!(f, "^"),
             Moved => write!(f, "!"),
-            Assigning => write!(f, "@"),
         }
     }
 }

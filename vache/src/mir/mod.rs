@@ -24,8 +24,8 @@ pub use instr::{Instr, InstrKind};
 pub use program::Program;
 
 pub use crate::anf::{
-    Branch, Enum, Loc, Mode, Namespaced, Place, Pointer, RValue, Reference, Span, Stratum, Struct,
-    Ty, VarDef, VarUse, Varname,
+    Branch, Enum, LhsMode, LhsRef, Loc, Mode, Namespaced, Place, Pointer, RValue, Reference, Span,
+    Stratum, Struct, Ty, VarDef, VarUse, Varname,
 };
 #[cfg(test)]
 pub use crate::tast::vardef;

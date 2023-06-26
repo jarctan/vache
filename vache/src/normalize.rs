@@ -171,29 +171,25 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
             tast::ExprKind::UnitE => {
                 let vardef = self.fresh_vardef(e.ty, e.span);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
-                stmts.push(Stmt::new(DeclareS(vardef), e.span));
-                stmts.push(Stmt::new(AssignS(ptr, RValue::Unit), e.span));
+                stmts.push(Stmt::new(AssignS(LhsRef::declare(ptr), RValue::Unit), e.span));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::BoolE(b) => {
                 let vardef = self.fresh_vardef(e.ty, e.span);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
-                stmts.push(Stmt::new(DeclareS(vardef), e.span));
-                stmts.push(Stmt::new(AssignS(ptr, RValue::Bool(*b)), e.span));
+                stmts.push(Stmt::new(AssignS(LhsRef::declare(ptr), RValue::Bool(*b)), e.span));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::IntegerE(i) => {
                 let vardef = self.fresh_vardef(e.ty, e.span);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
-                stmts.push(Stmt::new(DeclareS(vardef), e.span));
-                stmts.push(Stmt::new(AssignS(ptr, RValue::Integer(i)), e.span));
+                stmts.push(Stmt::new(AssignS(LhsRef::declare(ptr), RValue::Integer(i)), e.span));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::StringE(s) => {
                 let vardef = self.fresh_vardef(e.ty, e.span);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()),  e.span);
-                stmts.push(Stmt::new(DeclareS(vardef), e.span));
-                stmts.push(Stmt::new(AssignS(ptr, RValue::String(s)), e.span));
+                stmts.push(Stmt::new(AssignS(LhsRef::declare(ptr), RValue::String(s)), e.span));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::RangeE(start, end) => {
@@ -201,8 +197,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 let start_ptr = self.visit_expr(stmts, start, Some(Mode::Borrowed), ret_ptr);
                 let end_ptr = self.visit_expr(stmts, end, Some(Mode::Borrowed), ret_ptr);
                 let final_ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
-                stmts.push(Stmt::new(DeclareS(vardef), e.span));
-                stmts.push(Stmt::new(AssignS(final_ptr, RValue::Range(start_ptr, end_ptr)), e.span));
+                stmts.push(Stmt::new(AssignS(LhsRef::declare(final_ptr), RValue::Range(start_ptr, end_ptr)), e.span));
                 Reference::new_moved(final_ptr)
             }
             tast::ExprKind::PlaceE(place) => {
@@ -279,12 +274,11 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
 
                 let vardef = self.fresh_vardef(e.ty, e.span);
                 let destination = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
-                stmts.push(Stmt::new(DeclareS(vardef), e.span));
 
                 stmts.push(Stmt::new(CallS {
                     name: *name,
                     args: arg_vars,
-                    destination: Some(destination),
+                    destination: Some(LhsRef::declare(destination)),
                 }, e.span));
 
                 Reference::new_moved(destination)
@@ -297,8 +291,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
 
                 let vardef = self.fresh_vardef(e.ty, e.span);
                 let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
-                stmts.push(Stmt::new(DeclareS(vardef), e.span));
-                stmts.push(Stmt::new(AssignS(ptr, RValue::Variant { enun, variant, args }), e.span));
+                stmts.push(Stmt::new(AssignS(LhsRef::declare(ptr), RValue::Variant { enun, variant, args }), e.span));
                 Reference::new_moved(ptr)
             }
             tast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
@@ -308,16 +301,15 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 // Destination
                 let dest_def = self.fresh_vardef(iftrue.ret.ty, e.span);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()), e.span);
-                stmts.push(Stmt::new(DeclareS(dest_def), e.span));
 
                 // Branches
                 let span = iftrue.span;
                 let (iftrue_ptr, mut iftrue) = self.visit_block(iftrue, ret_ptr);
-                iftrue.push(Stmt::new(AssignS(destination, RValue::Place(iftrue_ptr)), span));
+                iftrue.push(Stmt::new(AssignS(LhsRef::declare(destination), RValue::Place(iftrue_ptr)), span));
 
                 let span = iffalse.span;
                 let (iffalse_ptr, mut iffalse) = self.visit_block(iffalse, ret_ptr);
-                iffalse.push(Stmt::new(AssignS(destination, RValue::Place(iffalse_ptr)), span));
+                iffalse.push(Stmt::new(AssignS(LhsRef::declare(destination), RValue::Place(iffalse_ptr)), span));
 
                 // If condition
                 stmts.push(Stmt::new(IfS(cond, iftrue, iffalse), e.span));
@@ -331,7 +323,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                     Ty::IntT => todo!(),
                     Ty::StrT => todo!(),
                     Ty::EnumT(_) => {
-                        // The switch variable
+                        /*// The switch variable
                         let matched = self.visit_expr(stmts, matched, Some(Mode::SBorrowed), ret_ptr);
                         let dest_def = self.fresh_vardef(e.ty, e.span);
                         let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()), e.span);
@@ -341,7 +333,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                             let mut branch_stmts = vec![];
                             self.push_scope();
                             self.introduce_pat_vars(pattern, matched.as_ptr());
-                            self.visit_expr(&mut branch_stmts,expr,  Some(Mode::Moved),destination);
+                            self.visit_expr(&mut branch_stmts,expr,  Some(Mode::Moved),ret_ptr);
                             self.pop_scope();
                             (pattern.discriminant(), branch_stmts)
                         }).collect();
@@ -352,7 +344,8 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                         // If condition
                         stmts.push(Stmt::new(MatchS(matched, branches), e.span));
 
-                        Reference::new_moved(destination)
+                        Reference::new_moved(destination)*/
+                        todo!()
                     },
                     Ty::TupleT(_) => todo!(),
                     _ => unreachable!()
@@ -371,7 +364,6 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 // Destination
                 let dest_def = self.fresh_vardef(e.ty, e.span);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()), e.span);
-                stmts.push(Stmt::new(DeclareS(dest_def), e.span));
 
                 let field_vars = fields
                     .iter_mut()
@@ -379,7 +371,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                     .collect();
 
                 stmts.push(Stmt::new(AssignS(
-                    destination,
+                    LhsRef::declare(destination),
                     RValue::Struct {
                         name: s_name,
                         fields: field_vars,
@@ -392,7 +384,6 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 // Destination
                 let dest_def = self.fresh_vardef(e.ty, e.span);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()), e.span);
-                stmts.push(Stmt::new(DeclareS(dest_def), e.span));
 
                 // Visit each item in the array
                 let array_vars = array
@@ -401,7 +392,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                     .collect();
 
                 // Finally, assign the array to the destination
-                stmts.push(Stmt::new(AssignS(destination, RValue::Array(array_vars)), e.span));
+                stmts.push(Stmt::new(AssignS(LhsRef::declare(destination), RValue::Array(array_vars)), e.span));
 
                 Reference::new_moved(destination)
             }
@@ -409,7 +400,6 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 // Destination
                 let dest_def = self.fresh_vardef(e.ty, e.span);
                 let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()), e.span);
-                stmts.push(Stmt::new(DeclareS(dest_def), e.span));
 
                 // Visit each item in the tuple
                 let items_vars = items
@@ -418,7 +408,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                     .collect();
 
                 // Finally, assign the tuple to the destination
-                stmts.push(Stmt::new(AssignS(destination, RValue::Tuple(items_vars)), e.span));
+                stmts.push(Stmt::new(AssignS(LhsRef::declare(destination), RValue::Tuple(items_vars)), e.span));
 
                 Reference::new_moved(destination)
             }
@@ -462,36 +452,28 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
         ret_ptr: Pointer<'ctx>,
     ) {
         match &mut s.kind {
-            tast::StmtKind::DeclareS(old_vardef, expr) => {
-                // Check if the variable already exists, if so create a new binding.
-                let vardef = if self.get_translation_place(*old_vardef).is_some() {
-                    self.fresh_vardef(old_vardef.ty, old_vardef.span)
-                } else {
-                    *old_vardef
-                };
-                stmts.push(Stmt::new(DeclareS(vardef), s.span));
-                let tmp = self.visit_expr(stmts, expr, None, ret_ptr);
-
-                // Add the translation AFTER we computed the rhs, so that the rhs may still
-                // refer to the old value
-                self.add_translation(*old_vardef, self.arena.alloc(Place::from(vardef)));
-
-                stmts.push(Stmt::new(
-                    AssignS(
-                        Pointer::new(
-                            self.arena,
-                            self.arena.alloc(Place::VarP(vardef.name())),
-                            old_vardef.span,
-                        ),
-                        RValue::Place(tmp),
-                    ),
-                    s.span,
-                ));
-            }
             tast::StmtKind::AssignS(place, expr) => {
                 let rhs = self.visit_expr(stmts, expr, None, ret_ptr);
                 let lhs = match &mut place.kind {
-                    tast::PlaceKind::VarP(ref var) => self.get_translation_place(*var).expect(""),
+                    tast::PlaceKind::VarP(ref var) => {
+                        match place.mode {
+                            LhsMode::Assigning => self.get_translation_place(*var).expect(""),
+                            LhsMode::Declaring => {
+                                // Check if the variable already exists, if so create a new binding.
+                                let place = if self.get_translation_place(*var).is_some() {
+                                    let vardef = self.fresh_vardef(place.ty, place.span);
+                                    Place::VarP(vardef.name())
+                                } else {
+                                    Place::VarP(var.name())
+                                };
+
+                                // Add the translation AFTER we computed the rhs, so that the rhs
+                                // may still refer to the old value
+                                self.add_translation(*var, self.arena.alloc(place));
+                                place
+                            }
+                        }
+                    }
                     tast::PlaceKind::IndexP(box array, box ix) => {
                         let array =
                             self.visit_expr(stmts, array, Some(Mode::SMutBorrowed), ret_ptr);
@@ -517,7 +499,8 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                     }
                 };
                 let lhs = Pointer::new(self.arena, self.arena.alloc(lhs), place.span);
-                stmts.push(Stmt::new(AssignS(lhs, RValue::Place(rhs)), s.span));
+                let lhs_ref = LhsRef::new(lhs, &mut place.mode);
+                stmts.push(Stmt::new(AssignS(lhs_ref, RValue::Place(rhs)), s.span));
             }
             tast::StmtKind::WhileS { cond, body } => {
                 let mut cond_block = vec![];
@@ -564,7 +547,10 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 let stmts: &'a mut std::vec::Vec<Stmt<'mir, 'ctx>> = stmts;
                 let ret: Reference<'mir, 'ctx> =
                     self.visit_expr(stmts, ret, Some(Mode::Moved), ret_ptr);
-                stmts.push(Stmt::new(AssignS(ret_ptr, RValue::Place(ret)), s.span));
+                stmts.push(Stmt::new(
+                    AssignS(LhsRef::declare(ret_ptr), RValue::Place(ret)),
+                    s.span,
+                ));
                 stmts.push(Stmt::new(ReturnS(ret_ptr), s.span));
             }
         }
@@ -579,9 +565,6 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
             f.body.ret.span,
         );
 
-        // Declare the return variable
-        let mut body = vec![Stmt::new(DeclareS(vardef), vardef.span)];
-
         // Body scope
         self.push_scope();
         for &param in &f.params {
@@ -591,12 +574,11 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
         let body_ret_span = f.body.ret.span;
 
         // Compute the body
-        let (ret, inner_body) = self.visit_block(&mut f.body, ret_ptr);
-        body.extend(inner_body);
+        let (ret, mut body) = self.visit_block(&mut f.body, ret_ptr);
 
         // Move the result of the body into the final return value
         body.push(Stmt::new(
-            AssignS(ret_ptr, RValue::Place(ret)),
+            AssignS(LhsRef::declare(ret_ptr), RValue::Place(ret)),
             body_ret_span,
         ));
         body.push(Stmt::new(ReturnS(ret_ptr), body_ret_span));

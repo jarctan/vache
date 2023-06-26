@@ -700,7 +700,7 @@ mod tests {
 
         // Check that label of the entry of the loop has two preneighbors: before the
         // loop and the end of the loop.
-        let loop_entry_l = NodeIx(7);
+        let loop_entry_l = NodeIx(5);
         let edges = cfg.node_map[&loop_entry_l]
             .ins
             .keys()
@@ -710,12 +710,12 @@ mod tests {
             edges,
             [
                 &Edge {
-                    from: NodeIx(22),
+                    from: NodeIx(14),
                     to: loop_entry_l,
                     weight: ()
                 },
                 &Edge {
-                    from: NodeIx(8),
+                    from: NodeIx(6),
                     to: loop_entry_l,
                     weight: ()
                 }
@@ -752,7 +752,7 @@ mod tests {
 
         // Dominators of the label _after_ the if statement are only the labels _before_
         // the if statement.
-        let above_if: Vec<NodeIx> = (17..=25).map(NodeIx).collect();
+        let above_if: Vec<NodeIx> = (11..=14).map(NodeIx).collect();
         assert_eq!(
             dominators[&NodeIx(2)],
             std::iter::once(NodeIx(2))
@@ -791,7 +791,7 @@ mod tests {
         // The immediate of the label _after_ the if statement can only be the one
         // just before the if statement. Confer the CFG of that function for
         // details.
-        let bef_if_label = NodeIx(17);
+        let bef_if_label = NodeIx(11);
         assert_eq!(dominators[&NodeIx(2)], bef_if_label);
         Ok(())
     }

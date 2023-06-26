@@ -1,15 +1,15 @@
 //! Defining places in the typed AST.
 
-use super::{Expr, Mode, Span, Stratum, Ty, VarUse};
+use super::{Expr, LhsMode, Mode, Span, Stratum, Ty, VarUse};
 
 /// A place in the AST: allowed left hand side expressions.
 #[derive(Debug, Clone)]
 pub struct Place<'ctx> {
     /// The kind of place.
     pub kind: PlaceKind<'ctx>,
-    /// Type of the expression.
+    /// Type of the place.
     pub ty: Ty<'ctx>,
-    /// Stratum of the expression.
+    /// Stratum of the place.
     pub stm: Stratum,
     /// Do we transfer ownership or take by reference?
     pub mode: Mode,
@@ -24,6 +24,40 @@ impl<'ctx> Place<'ctx> {
         ty: impl Into<Ty<'ctx>>,
         stm: Stratum,
         mode: Mode,
+        span: impl Into<Span>,
+    ) -> Self {
+        Self {
+            kind: PlaceKind::VarP(var),
+            ty: ty.into(),
+            stm,
+            mode,
+            span: span.into(),
+        }
+    }
+}
+
+/// A lhs place in the AST: allowed left hand side expressions.
+#[derive(Debug, Clone)]
+pub struct LhsPlace<'ctx> {
+    /// The kind of place.
+    pub kind: PlaceKind<'ctx>,
+    /// Type of the place.
+    pub ty: Ty<'ctx>,
+    /// Stratum of the place.
+    pub stm: Stratum,
+    /// Declaring or assigning?
+    pub mode: LhsMode,
+    /// Codespan.
+    pub span: Span,
+}
+
+impl<'ctx> LhsPlace<'ctx> {
+    /// Shortcut to create a place that is a variable.
+    pub fn var(
+        var: VarUse<'ctx>,
+        ty: impl Into<Ty<'ctx>>,
+        stm: Stratum,
+        mode: LhsMode,
         span: impl Into<Span>,
     ) -> Self {
         Self {

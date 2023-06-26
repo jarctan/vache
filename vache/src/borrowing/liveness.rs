@@ -39,7 +39,6 @@ pub fn var_liveness<'ctx>(
             let outs: LocTree<()> = successors.map(|x| var_flow[&x].ins.clone()).sum();
             let ins: LocTree<()> = match &instr.kind {
                 InstrKind::Noop => outs.clone(),
-                InstrKind::Declare(_) => outs.clone(),
                 InstrKind::Assign(lhs, _)
                 | InstrKind::Call {
                     name: _,
@@ -103,7 +102,6 @@ fn loan_liveness<'ctx>(
             let predecessors = cfg.preneighbors(label);
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
             let mut outs: Ledger = match &instr.kind {
-                InstrKind::Declare(_) => ins.clone(),
                 InstrKind::Assign(lhs, _)
                 | InstrKind::Call {
                     name: _,
@@ -210,7 +208,6 @@ pub fn liveness<'mir, 'ctx>(
                 }
                 Mode::Cloned => (), // We clone, there's a reason fot that. So you can't move
                 Mode::Moved => (),  // already moved
-                Mode::Assigning => (), // assigning modes can't be moved
             }
         }
     }

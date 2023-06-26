@@ -6,6 +6,7 @@
 pub mod block;
 pub mod expr;
 pub mod fun;
+pub mod mode;
 pub mod pat;
 pub mod place;
 pub mod program;
@@ -16,8 +17,9 @@ pub mod var;
 pub use block::Block;
 pub use expr::{Expr, ExprKind};
 pub use fun::Fun;
+pub use mode::LhsMode;
 pub use pat::{Pat, PatKind};
-pub use place::{Place, PlaceKind};
+pub use place::{LhsPlace, Place, PlaceKind};
 pub use program::Program;
 pub use stmt::{Stmt, StmtKind};
 pub use stratum::Stratum;

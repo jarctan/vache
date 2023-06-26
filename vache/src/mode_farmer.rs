@@ -85,7 +85,7 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
     /// Collects referencing modes in a statement.
     fn visit_stmt(&mut self, s: &Stmt<'ctx>) {
         match &s.kind {
-            DeclareS(_, e) | AssignS(_, e) | ExprS(e) => self.visit_expr(e),
+            AssignS(_, e) | ExprS(e) => self.visit_expr(e),
             WhileS { cond, body } => {
                 self.visit_expr(cond);
                 self.visit_block(body);

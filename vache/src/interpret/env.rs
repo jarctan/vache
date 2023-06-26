@@ -21,47 +21,20 @@ pub struct Env<'ctx> {
     var_env: HashMap<Varname<'ctx>, ValueRef>,
     /// Stratum id for this environment.
     stratum: Stratum,
-    /// Reference to the dummy value for uninitialized variables.
-    uninit: ValueRef,
 }
 impl<'ctx> Env<'ctx> {
     /// Creates a new, empty environment.
     pub fn new(stratum: Stratum) -> Self {
-        let mut slab = Slab::new();
-
-        // Add the uninitialized value.
-        let uninit = slab.insert(Value::default());
-
         Self {
-            slab,
+            slab: Slab::new(),
             var_env: HashMap::new(),
             stratum,
-            uninit: ValueRef {
-                stratum,
-                key: uninit,
-            },
         }
     }
 
     /// Gets a value from the environment, based on the key in the slab.
     pub fn get_value(&self, key: usize) -> Option<&Value<'ctx>> {
-        let value = self.slab.get(key)?;
-        assert!(
-            !matches!(value, Value::UninitV),
-            "Runtime error: getting an uninitialized value"
-        );
-        Some(value)
-    }
-
-    /// Gets a mutable reference to a value from the environment, based on the
-    /// key in the slab.
-    pub fn get_value_mut(&mut self, key: usize) -> Option<&mut Value<'ctx>> {
-        let value = self.slab.get_mut(key)?;
-        assert!(
-            !matches!(value, Value::UninitV),
-            "Runtime error: getting an uninitialized value"
-        );
-        Some(value)
+        self.slab.get(key)
     }
 
     /// Adds a value to that environment, returning the key to it in the slab.
@@ -72,14 +45,29 @@ impl<'ctx> Env<'ctx> {
         }
     }
 
+    /// Sets a value in the environment.
+    ///
+    /// # Panics
+    /// The value must already exist.
+    pub fn set_value(&mut self, val_ref: ValueRef, rvalue: Value<'ctx>) {
+        assert_eq!(
+            val_ref.stratum, self.stratum,
+            "Runtime error: not in the right stratum"
+        );
+        self.slab[val_ref.key] = rvalue;
+    }
+
+    /// Removes a value from the environment.
+    ///
+    /// # Panics
+    /// Panics if the key corresponds to no value.
+    pub fn remove_value(&mut self, key: usize) -> Value<'ctx> {
+        self.slab.remove(key)
+    }
+
     /// Gets the definition of a variable.
     pub fn get_var(&self, v: impl AsRef<Varname<'ctx>>) -> Option<&ValueRef> {
         self.var_env.get(v.as_ref())
-    }
-
-    /// Gets a mutable reference into the definition of a variable.
-    pub fn get_var_mut(&mut self, v: impl AsRef<Varname<'ctx>>) -> Option<&mut ValueRef> {
-        self.var_env.get_mut(v.as_ref())
     }
 
     /// Declares a new variable in the context.
@@ -88,8 +76,8 @@ impl<'ctx> Env<'ctx> {
     /// Panics if the var is not stated as declared in that stratum/environment.
     /// You should only add a var definition in the stratum in which it is
     /// tied to.
-    pub fn add_var(&mut self, name: impl Into<Varname<'ctx>>) {
-        self.var_env.insert(name.into(), self.uninit);
+    pub fn add_var(&mut self, name: impl Into<Varname<'ctx>>, val_ref: ValueRef) {
+        self.var_env.insert(name.into(), val_ref);
     }
 
     /// Closes the environment, returning one final value from the slab.

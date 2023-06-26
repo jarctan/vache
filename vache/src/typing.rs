@@ -14,6 +14,7 @@ use Ty::*;
 use crate::ast::fun::{binop_bool_sig, binop_int_sig, unop_bool_sig};
 use crate::codes::*;
 use crate::reporter::Diagnostic;
+use crate::tast::place::LhsPlace;
 use crate::tast::*;
 use crate::utils::{boxed, keys_match};
 use crate::{ast, Context};
@@ -230,11 +231,17 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         place: ast::Place<'ctx>,
         ret_ty: TyUse<'ctx>,
         in_loop: bool,
-    ) -> Option<Place<'ctx>> {
+    ) -> Option<LhsPlace<'ctx>> {
         match place.kind {
             ast::PlaceKind::VarP(var) => {
                 if let Some((vardef, stm)) = self.get_var(var) {
-                    Some(Place::var(var, vardef.ty, stm, Mode::Assigning, place.span))
+                    Some(LhsPlace::var(
+                        var,
+                        vardef.ty,
+                        stm,
+                        LhsMode::Assigning,
+                        place.span,
+                    ))
                 } else {
                     self.ctx.emit(
                         Diagnostic::error()
@@ -251,11 +258,11 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 match (e.ty.as_array(), ix.ty.is_int()) {
                     (Some(ty), true) => {
                         let e_stm = e.stm; // Needed now because we move e after
-                        Some(Place {
+                        Some(LhsPlace {
                             kind: IndexP(boxed(e), boxed(ix)),
                             ty,
                             stm: e_stm,
-                            mode: Mode::Assigning,
+                            mode: LhsMode::Assigning,
                             span: place.span,
                         })
                     }
@@ -313,18 +320,18 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             }
                         };
 
-                        Some(Place {
+                        Some(LhsPlace {
                             stm: s.stm,
                             kind: FieldP(boxed(s), field),
-                            mode: Mode::Assigning,
+                            mode: LhsMode::Assigning,
                             ty,
                             span: place.span,
                         })
                     }
-                    HoleT => Some(Place {
+                    HoleT => Some(LhsPlace {
                         stm: s.stm,
                         kind: FieldP(boxed(s), field),
-                        mode: Mode::Assigning,
+                        mode: LhsMode::Assigning,
                         ty: HoleT,
                         span: place.span,
                     }),
@@ -359,18 +366,18 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             }
                         };
 
-                        Some(Place {
+                        Some(LhsPlace {
                             stm: tuple.stm,
                             kind: ElemP(boxed(tuple), elem),
-                            mode: Mode::Assigning,
+                            mode: LhsMode::Assigning,
                             ty,
                             span: place.span,
                         })
                     }
-                    HoleT => Some(Place {
+                    HoleT => Some(LhsPlace {
                         stm: tuple.stm,
                         kind: ElemP(boxed(tuple), elem),
-                        mode: Mode::Assigning,
+                        mode: LhsMode::Assigning,
                         ty: HoleT,
                         span: place.span,
                     }),
@@ -1022,7 +1029,11 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                     self.add_var(vardef);
 
-                    DeclareS(VarDef::with_stratum(vardef, stm), expr).with_span(s.span)
+                    AssignS(
+                        LhsPlace::var(vardef.var, vardef.ty, stm, LhsMode::Declaring, vardef.span),
+                        expr,
+                    )
+                    .with_span(s.span)
                 }
                 ast::StmtKind::AssignS(place, expr) => {
                     let rhs_span = expr.span;

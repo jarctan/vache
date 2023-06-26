@@ -45,10 +45,8 @@ pub enum InstrKind<'mir, 'ctx> {
     /// No-op instruction.
     #[default]
     Noop,
-    /// Declare a new, uninitialized variable.
-    Declare(VarDef<'ctx>),
     /// Assigns a variable.
-    Assign(Pointer<'ctx>, RValue<'mir, 'ctx>),
+    Assign(LhsRef<'mir, 'ctx>, RValue<'mir, 'ctx>),
     /// Performs a call to `name(args)`, putting the result in variable
     /// `destination`.
     Call {
@@ -57,7 +55,7 @@ pub enum InstrKind<'mir, 'ctx> {
         /// Arguments to that function.
         args: Vec<Reference<'mir, 'ctx>>,
         /// Destination variable to hold the result.
-        destination: Option<Pointer<'ctx>>,
+        destination: Option<LhsRef<'mir, 'ctx>>,
     },
     /// Asks for the truthiness of the first argument.
     Branch(Reference<'mir, 'ctx>),
@@ -74,7 +72,6 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
     pub fn mutated_place<'a>(&'a self) -> Box<dyn Iterator<Item = Place<'ctx>> + 'a> {
         match self {
             InstrKind::Noop | InstrKind::Branch(_) => boxed([].into_iter()),
-            InstrKind::Declare(..) => boxed([].into_iter()),
             InstrKind::Call {
                 destination: Some(v),
                 ..
@@ -97,10 +94,9 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut Reference<'mir, 'ctx>> + 'a> {
         match self {
-            InstrKind::Noop
-            | InstrKind::Declare(_)
-            | InstrKind::Branch(_)
-            | InstrKind::Return(_) => boxed(std::iter::empty()),
+            InstrKind::Noop | InstrKind::Branch(_) | InstrKind::Return(_) => {
+                boxed(std::iter::empty())
+            }
             InstrKind::Assign(_, RValue::Place(place)) => boxed(std::iter::once(place)),
             InstrKind::Assign(_, RValue::Array(items)) => boxed(items.iter_mut()),
             InstrKind::Assign(_, RValue::Tuple(items)) => boxed(items.iter_mut()),
@@ -129,10 +125,9 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
     /// Returns the references of this [`InstrKind`].
     pub fn references<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Reference<'mir, 'ctx>> + 'a> {
         match self {
-            InstrKind::Noop
-            | InstrKind::Declare(_)
-            | InstrKind::Branch(_)
-            | InstrKind::Return(_) => boxed(std::iter::empty()),
+            InstrKind::Noop | InstrKind::Branch(_) | InstrKind::Return(_) => {
+                boxed(std::iter::empty())
+            }
             InstrKind::Assign(_, RValue::Place(place)) => boxed(std::iter::once(place)),
             InstrKind::Assign(_, RValue::Array(items)) => boxed(items.iter()),
             InstrKind::Assign(_, RValue::Tuple(items)) => boxed(items.iter()),
@@ -185,7 +180,6 @@ impl<'mir, 'ctx> fmt::Debug for InstrKind<'mir, 'ctx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             InstrKind::Noop => write!(f, "()"),
-            InstrKind::Declare(x) => write!(f, "new {x:?}"),
             InstrKind::Assign(lhs, rhs) => write!(f, "{lhs:?} = {rhs:?}"),
             InstrKind::Call {
                 name,

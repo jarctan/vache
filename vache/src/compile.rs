@@ -13,8 +13,8 @@ use StmtKind::*;
 use Ty::*;
 
 use crate::tast::{
-    Block, Enum, Expr, ExprKind, Fun, Mode, Pat, PatKind, Place, PlaceKind, Program, Stmt,
-    StmtKind, Struct, Ty, Varname,
+    Block, Enum, Expr, ExprKind, Fun, LhsMode, LhsPlace, Mode, Pat, PatKind, Place, PlaceKind,
+    Program, Stmt, StmtKind, Struct, Ty, Varname,
 };
 use crate::Context;
 
@@ -130,6 +130,48 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         quote!(#ident)
     }
 
+    /// Compiles a left-hand side place.
+    fn visit_lhs_place(&mut self, place: LhsPlace<'ctx>) -> TokenStream {
+        match place.kind {
+            VarP(var) => {
+                let var = self.visit_var(var);
+                let ty = Self::translate_type(&place.ty, false);
+                match place.mode {
+                    LhsMode::Assigning => quote!(#var),
+                    LhsMode::Declaring => quote!(let mut #var: #ty),
+                }
+            }
+            IndexP(box array, box index) => {
+                let (line, col) = index.span.line_col(self.ctx.files);
+                let filename = self.ctx.files.name();
+                let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
+                let array = self.visit_expr(array);
+                let index = self.visit_expr(index);
+                let index = quote!((#index).to_usize().unwrap());
+                match place.mode {
+                    LhsMode::Assigning => quote!((*(#array).get_mut(#index).context(#codespan)?)),
+                    LhsMode::Declaring => unreachable!(),
+                }
+            }
+            FieldP(box strukt, field) => {
+                let strukt = self.visit_expr(strukt);
+                let field = format_ident!("{}", field);
+                match place.mode {
+                    LhsMode::Assigning => quote!((#strukt).#field),
+                    LhsMode::Declaring => unreachable!(),
+                }
+            }
+            ElemP(box tuple, elem) => {
+                let tuple = self.visit_expr(tuple);
+                let elem = syn::Index::from(elem);
+                match place.mode {
+                    LhsMode::Assigning => quote!((#tuple).#elem),
+                    LhsMode::Declaring => unreachable!(),
+                }
+            }
+        }
+    }
+
     /// Compiles a place.
     fn visit_place(&mut self, place: Place<'ctx>) -> TokenStream {
         match place.kind {
@@ -142,7 +184,6 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     Mode::MutBorrowed => quote!(__borrow_mut(&mut #var)),
                     Mode::SMutBorrowed => quote!(#var),
                     Mode::Moved => quote!(#var),
-                    Mode::Assigning => quote!(#var),
                 }
             }
             IndexP(box array, box index) => {
@@ -167,7 +208,6 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     }
                     Mode::Cloned => quote!((#array).get(#index).context(#codespan)?.clone()),
                     Mode::Moved => quote!((#array).remove(#index).context(#codespan)?),
-                    Mode::Assigning => quote!((*(#array).get_mut(#index).context(#codespan)?)),
                 }
             }
             FieldP(box strukt, field) => {
@@ -180,7 +220,6 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     Mode::SMutBorrowed => unimplemented!(),
                     Mode::Cloned => quote!((#strukt).#field.clone().take()),
                     Mode::Moved => quote!((#strukt).#field.take()),
-                    Mode::Assigning => quote!((#strukt).#field),
                 }
             }
             ElemP(box tuple, elem) => {
@@ -193,7 +232,6 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     Mode::SMutBorrowed => unimplemented!(),
                     Mode::Cloned => quote!((#tuple).#elem.clone().take()),
                     Mode::Moved => quote!((#tuple).#elem.take()),
-                    Mode::Assigning => quote!((#tuple).#elem),
                 }
             }
         }
@@ -426,20 +464,11 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     /// Compiles a single statement.
     fn visit_stmt(&mut self, stmt: Stmt<'ctx>) -> TokenStream {
         match stmt.kind {
-            DeclareS(lhs, rhs) => {
-                let name = format_ident!("{}", lhs.name().as_str());
-                let ty = Self::translate_type(&lhs.ty, false);
-                let rhs = self.visit_expr(rhs);
-                quote! {
-                    let mut #name: #ty = #rhs;
-                }
-            }
             AssignS(lhs, rhs) => {
-                assert!(matches!(lhs.mode, Mode::Assigning));
                 // Different output if we have a field at lhs
                 let is_field = matches!(lhs.kind, FieldP(..) | ElemP(..));
 
-                let lhs = self.visit_place(lhs);
+                let lhs = self.visit_lhs_place(lhs);
                 let rhs = self.visit_expr(rhs);
 
                 // For fields, add a `Field` wrapper

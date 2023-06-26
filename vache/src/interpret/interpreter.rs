@@ -15,7 +15,10 @@ use Value::*;
 
 use super::env::Env;
 use super::value::{Value, ValueRef};
-use crate::mir::{Branch, CfgI, CfgLabel, Fun, InstrKind, Mode, Place, Pointer, RValue, Varname};
+use crate::mir::{
+    Branch, CfgI, CfgLabel, Fun, InstrKind, LhsMode, Mode, Place, Pointer, RValue, Reference,
+    Varname,
+};
 use crate::tast::Stratum;
 
 /// Interpreter for our language.
@@ -82,7 +85,6 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     fn display(&self, value: &ValueRef) -> String {
         let value = self.get_value(*value);
         match value {
-            UninitV => panic!("Runtime error: Requested to display an uninitialized value"),
             UnitV => "()".to_string(),
             IntV(i) => format!("{i}"),
             StrV(s) => format!("{s}"),
@@ -196,8 +198,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
 
             // Introduce arguments in the typing context
             for (arg, &value) in f.params.iter().zip(args.iter()) {
-                self.add_var(arg.name());
-                self.set_var(arg.name(), value);
+                self.add_var(arg.name(), value);
             }
 
             self.visit_cfg(&f.body, f.entry_l);
@@ -239,39 +240,29 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
         self.env.iter().rev().find_map(|e| e.get_var(v)).copied()
     }
 
-    /// Gets a mutable reference into the value of a variable.
-    fn get_var_mut(&mut self, v: impl AsRef<Varname<'ctx>>) -> &mut ValueRef {
-        // Iterate over environments in reverse (last declared first processed)
-        // order
-        // Returns the first environment that has that variable declared
-        let v = v.as_ref();
-        self.env
-            .iter_mut()
-            .rev()
-            .find_map(|e| e.get_var_mut(v))
-            .unwrap_or_else(|| panic!("Runtime error: variable {} should exist", v))
-    }
-
     /// Declares a new variable in the context.
-    fn add_var(&mut self, name: impl Into<Varname<'ctx>>) {
-        self.env.last_mut().unwrap().add_var(name.into());
-    }
-
-    /// Assigns a variable.
-    fn set_var(&mut self, name: impl AsRef<Varname<'ctx>>, value: impl Into<ValueRef>) {
-        let name = name.as_ref();
-        *self.get_var_mut(name) = value.into();
+    fn add_var(&mut self, name: impl Into<Varname<'ctx>>, val_ref: impl Into<ValueRef>) {
+        self.env
+            .last_mut()
+            .unwrap()
+            .add_var(name.into(), val_ref.into());
     }
 
     /// Assigns `*ptr`.
-    fn set_at_ptr(&mut self, ptr: impl Into<Pointer<'ctx>>, value: impl Into<ValueRef>) {
-        *self.get_ptr_mut(ptr) = value.into();
+    fn set_at_ptr(&mut self, ptr: impl Into<Pointer<'ctx>>, value: impl Into<Value<'ctx>>) {
+        self.set_value(self.get_ptr(ptr), value.into());
     }
 
     /// Adds a value to the dynamic store/slab.
     fn add_value(&mut self, value: Value<'ctx>, stratum: Stratum) -> ValueRef {
         let stratum: usize = stratum.into();
         self.env[stratum].add_value(value)
+    }
+
+    /// Sets a value in the dynamic store/slab.
+    pub fn set_value(&mut self, val_ref: ValueRef, rvalue: Value<'ctx>) {
+        let stratum = usize::from(val_ref.stratum);
+        self.env[stratum].set_value(val_ref, rvalue);
     }
 
     /// Gets a value from the dynamic store/slab.
@@ -282,26 +273,22 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     }
 
     /// Gets a value from the dynamic store/slab.
-    fn get_value_mut(&mut self, value: ValueRef) -> &mut Value<'ctx> {
-        self.env[usize::from(value.stratum)]
-            .get_value_mut(value.key)
-            .unwrap()
+    fn retrieve_value(&mut self, value: ValueRef) -> Value<'ctx> {
+        self.env[usize::from(value.stratum)].remove_value(value.key)
     }
 
     /// Gets the value reference at a given pointer.
-    fn get_ptr(&self, ptr: impl Into<Pointer<'ctx>>) -> ValueRef {
+    fn get_ptr_opt(&self, ptr: impl Into<Pointer<'ctx>>) -> Option<ValueRef> {
         let ptr = ptr.into();
         match ptr.place() {
-            VarP(var) => self
-                .get_var(var)
-                .unwrap_or_else(|| panic!("Runtime error: variable {} should exist", var)),
+            VarP(var) => self.get_var(var),
             FieldP(compound, field) => match self.get_ptr_value(compound) {
-                StructV(_, fields) => fields[field],
+                StructV(_, fields) => Some(fields[field]),
                 TupleV(elems) => {
                     let elem = field
                         .parse::<usize>()
                         .expect("Runtime error: array index is too big");
-                    elems[elem]
+                    Some(elems[elem])
                 }
                 _ => panic!(),
             },
@@ -310,53 +297,23 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                     let index = index
                         .to_usize()
                         .expect("Runtime error: array index is too big");
-                    array[index]
+                    Some(array[index])
                 }
                 (array, index) => panic!("Runtime error: incorrect indexing {array:?}[{index:?}]"),
             },
         }
     }
 
-    /// Mutably gets the value reference to a given location.
-    fn get_ptr_mut(&mut self, ptr: impl Into<Pointer<'ctx>>) -> &mut ValueRef {
+    /// Gets the value reference at a given pointer.
+    #[allow(clippy::let_and_return)] // Because we have this debug statement in comments
+    fn get_ptr(&self, ptr: impl Into<Pointer<'ctx>>) -> ValueRef {
         let ptr = ptr.into();
-        match ptr.place() {
-            VarP(var) => self.get_var_mut(var),
-            FieldP(compound, field) => {
-                match self.get_ptr_value_mut(compound) {
-                    StructV(_, fields) => {
-                        if let Some(var_ref) = fields.get_mut(field) {
-                            var_ref
-                        } else {
-                            panic!()
-                        }
-                    }
-                    TupleV(elems) => {
-                        if let Ok(elem) = field.parse::<usize>()
-                        && let Some(elem) = elems.get_mut(elem) {
-                            elem
-                        } else {
-                            panic!()
-                        }
-                    }
-                    _ => panic!(),
-                }
-            }
-            IndexP(array, index) => {
-                if let IntV(index) = self.get_ptr_value(index) {
-                    let index = index
-                        .to_usize()
-                        .expect("Runtime error: array index is too big");
-                    if let ArrayV(array) = self.get_ptr_value_mut(array) {
-                        &mut array[index]
-                    } else {
-                        panic!("Runtime error: incorrect indexing")
-                    }
-                } else {
-                    panic!("Runtime error: incorrect indexing")
-                }
-            }
-        }
+        let r = self
+            .get_ptr_opt(ptr)
+            .unwrap_or_else(|| panic!("Runtime error: variable {:?} should exist", ptr.place()));
+        // Keep it, useful for debugging
+        // eprintln!("[{:?} = {}]", ptr.place(), self.display(&r));
+        r
     }
 
     /// Gets the value at a given pointer location.
@@ -364,34 +321,83 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
         self.get_value(self.get_ptr(ptr))
     }
 
-    /// Mutably gets the value at a given pointer location.
-    fn get_ptr_value_mut(&mut self, ptr: impl Into<Pointer<'ctx>>) -> &mut Value<'ctx> {
-        self.get_value_mut(self.get_ptr(ptr))
-    }
-
     /// Returns the final standard output of the execution of the program.
     pub fn stdout(self) -> String {
         self.stdout.string().unwrap()
     }
 
-    /// Gets a variable, possibly cloning it if its addressing mode and stratum
-    /// require so.
-    ///
-    /// No-op if we decide not to clone, otherwise returns the identifier of the
-    /// location of the cloned variable.
-    pub fn opt_clone(&mut self, mode: &Mode, v_ref: ValueRef, stratum: Stratum) -> ValueRef {
-        match mode {
-            Mode::Cloned | Mode::Moved => self.add_value(self.get_value(v_ref).clone(), stratum),
-            Mode::Borrowed | Mode::SBorrowed | Mode::SMutBorrowed | Mode::MutBorrowed => {
+    /// Clones the value behind a value reference, retuning the value reference
+    /// of the cloned value.
+    fn clone(&mut self, val_ref: ValueRef, stm: Stratum) -> ValueRef {
+        let value = self.get_value(val_ref);
+        let new_value = match value {
+            UnitV => UnitV,
+            IntV(i) => IntV(i.clone()),
+            StrV(s) => StrV(s.clone()),
+            BoolV(b) => BoolV(*b),
+            StructV(name, fields) => {
+                let fields: HashMap<_, _> =
+                    fields.iter().map(|(name, field)| (*name, *field)).collect();
+                StructV(
+                    name,
+                    fields
+                        .into_iter()
+                        .map(|(name, field)| (name, self.clone(field, stm)))
+                        .collect(),
+                )
+            }
+            ArrayV(items) => {
+                let items: Vec<_> = items.to_vec();
+                ArrayV(
+                    items
+                        .into_iter()
+                        .map(|item| self.clone(item, stm))
+                        .collect(),
+                )
+            }
+            TupleV(elems) => {
+                let elems: Vec<_> = elems.to_vec();
+                TupleV(
+                    elems
+                        .into_iter()
+                        .map(|elem| self.clone(elem, stm))
+                        .collect(),
+                )
+            }
+            VariantV {
+                enun,
+                variant,
+                args,
+            } => {
+                let args: Vec<_> = args.to_vec();
+                VariantV {
+                    enun,
+                    variant,
+                    args: args.into_iter().map(|arg| self.clone(arg, stm)).collect(),
+                }
+            }
+            RangeV(start, end) => {
+                let (start, end) = (*start, *end);
+                RangeV(self.clone(start, stm), self.clone(end, stm))
+            }
+        };
+        self.add_value(new_value, stm)
+    }
+
+    /// Visits a reference, optionally choosing to clone the value.
+    pub fn visit_reference(&mut self, r: &Reference<'mir, 'ctx>, stratum: Stratum) -> ValueRef {
+        let v_ref = self.get_ptr(r.as_ptr());
+        match r.mode() {
+            Mode::Cloned | Mode::Moved | Mode::Borrowed | Mode::SBorrowed => {
+                self.clone(v_ref, stratum)
+            }
+            Mode::SMutBorrowed | Mode::MutBorrowed => {
                 debug_assert!(
                     stratum >= v_ref.stratum,
                     "Runtime error: borrowing value {:?} out of scope",
                     self.get_value(v_ref)
                 );
                 v_ref
-            }
-            Mode::Assigning => {
-                panic!("Runtime error: expected cloning mode, but got assigning mode")
             }
         }
     }
@@ -403,10 +409,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
             RValue::Bool(b) => self.add_value(BoolV(*b), stratum),
             RValue::Integer(i) => self.add_value(IntV((*i).clone()), stratum),
             RValue::String(s) => self.add_value(StrV(s.to_string()), stratum),
-            RValue::Place(place) => {
-                let v_ref = self.get_ptr(place.as_ptr());
-                self.opt_clone(&place.mode(), v_ref, stratum)
-            }
+            RValue::Place(place) => self.visit_reference(place, stratum),
             RValue::Struct { name, fields } => {
                 let fields = fields.iter().map(|(&k, v)| (k, self.get_ptr(v))).collect();
                 self.add_value(StructV(name, fields), stratum)
@@ -447,35 +450,62 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     fn visit_cfg(&mut self, cfg: &CfgI<'mir, 'ctx>, label: CfgLabel) {
         let branch = match &cfg[&label].kind {
             InstrKind::Noop => DefaultB,
-            InstrKind::Declare(v) => {
-                self.add_var(v.name());
-                DefaultB
-            }
             InstrKind::Assign(ptr, rvalue) => {
-                let value = self.visit_rvalue(rvalue, self.get_ptr(ptr).stratum);
-                self.set_at_ptr(*ptr, value);
+                match ptr.mode() {
+                    LhsMode::Assigning => {
+                        let val_ref = self.visit_rvalue(rvalue, self.get_ptr(ptr.as_ptr()).stratum);
+                        let value = self.retrieve_value(val_ref);
+                        self.set_at_ptr(ptr.as_ptr(), value);
+                    }
+                    LhsMode::Declaring => {
+                        let val_ref = self.visit_rvalue(rvalue, self.current_stratum());
+                        if let VarP(var) = ptr.place() {
+                            self.add_var(var, val_ref);
+                        } else {
+                            panic!(
+                                "Can only declare variables. Consider removing the declare mode"
+                            );
+                        }
+                    }
+                }
                 DefaultB
             }
             InstrKind::Call {
                 name,
                 args,
-                destination,
+                destination: Some(destination),
             } => {
                 let args = args.iter().map(|v| self.get_ptr(v)).collect();
-                let stratum = destination
-                    .as_ref()
-                    .map_or(self.current_stratum(), |dest| self.get_ptr(dest).stratum);
-                let call_result = self.call(name.name, args, stratum);
-                if let Some(destination) = destination {
-                    self.set_at_ptr(
-                        destination,
-                        call_result.expect(
+                match destination.mode() {
+                    LhsMode::Assigning => {
+                        let stratum = self.get_ptr(destination.as_ptr()).stratum;
+                        let call_result = self.call(name.name, args, stratum).expect(
                             "if the destination is set, then the function should return a value",
-                        ),
-                    );
+                        );
+                        let value = self.retrieve_value(call_result);
+                        self.set_at_ptr(destination.as_ptr(), value);
+                    }
+                    LhsMode::Declaring => {
+                        let stratum = self.current_stratum();
+                        let call_result = self.call(name.name, args, stratum).expect(
+                            "if the destination is set, then the function should return a value",
+                        );
+                        if let VarP(var) = destination.place() {
+                            self.add_var(var, call_result);
+                        } else {
+                            panic!(
+                                "Can only declare variables. Consider removing the declare mode"
+                            );
+                        }
+                    }
                 }
                 DefaultB
             }
+            InstrKind::Call {
+                name,
+                args,
+                destination: None,
+            } => todo!(),
             InstrKind::Branch(cond) => {
                 if self.get_ptr_value(cond).truth() {
                     BoolB(true)

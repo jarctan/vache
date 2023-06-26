@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use super::{Block, Branch, Namespaced, Pointer, Reference, Span, VarDef};
+use super::{Block, Branch, LhsRef, Namespaced, Pointer, Reference, Span};
 use crate::mir::RValue;
 
 /// A statement.
@@ -24,12 +24,8 @@ impl<'mir, 'ctx> Stmt<'mir, 'ctx> {
 /// A statement.
 #[derive(Debug)]
 pub enum StmtKind<'mir, 'ctx> {
-    /// A declaration. We assign the computation
-    /// of the 2nd argument to the newly created variable
-    /// defined in the 1st argument.
-    DeclareS(VarDef<'ctx>),
     /// An assignment.
-    AssignS(Pointer<'ctx>, RValue<'mir, 'ctx>),
+    AssignS(LhsRef<'mir, 'ctx>, RValue<'mir, 'ctx>),
     /// A function call.
     CallS {
         /// Name of the function to call.
@@ -37,7 +33,7 @@ pub enum StmtKind<'mir, 'ctx> {
         /// Arguments to that function.
         args: Vec<Reference<'mir, 'ctx>>,
         /// Destination variable to hold the result.
-        destination: Option<Pointer<'ctx>>,
+        destination: Option<LhsRef<'mir, 'ctx>>,
     },
     /// An if expression.
     IfS(Reference<'mir, 'ctx>, Block<'mir, 'ctx>, Block<'mir, 'ctx>),

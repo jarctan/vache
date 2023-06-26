@@ -10,6 +10,7 @@ pub mod location;
 pub mod place;
 pub mod pointer;
 pub mod program;
+pub mod reference;
 pub mod rvalue;
 pub mod stmt;
 
@@ -18,9 +19,10 @@ pub use branch::Branch;
 pub use fun::Fun;
 pub use location::Loc;
 pub use place::Place;
-pub use pointer::{Pointer, Reference};
+pub use pointer::Pointer;
 pub use program::Program;
+pub use reference::{LhsRef, Reference};
 pub use rvalue::RValue;
 pub use stmt::{Stmt, StmtKind};
 
-pub use crate::tast::{Enum, Mode, Namespaced, Span, Stratum, Struct, Ty, VarDef, VarUse, Varname};
+pub use crate::tast::{Enum, Mode, Namespaced, Span, Stratum, Struct, Ty, VarDef, VarUse, Varname, LhsMode};

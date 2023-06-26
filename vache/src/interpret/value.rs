@@ -6,11 +6,7 @@ use std::fmt;
 use crate::tast::Stratum;
 
 /// Values in our language.
-#[derive(Default, Clone)]
 pub enum Value<'ctx> {
-    /// Uninit value.
-    #[default]
-    UninitV,
     /// Unit value.
     UnitV,
     /// Integer value.
@@ -47,7 +43,6 @@ use Value::*;
 impl fmt::Debug for Value<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            UninitV => write!(f, "!"),
             UnitV => write!(f, "()"),
             IntV(i) => fmt::Display::fmt(i, f),
             StrV(s) => write!(f, "\"{s}\""),

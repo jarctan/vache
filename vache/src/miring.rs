@@ -129,20 +129,17 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
         break_l: Option<CfgLabel>,
     ) -> CfgLabel {
         match s.kind {
-            anf::StmtKind::DeclareS(vardef) => {
-                self.strata
-                    .entry(vardef.stm)
-                    .or_default()
-                    .insert(vardef.name());
+            anf::StmtKind::AssignS(ptr, rvalue) => {
+                if ptr.mode() == LhsMode::Declaring {
+                    if let Place::VarP(var) = *ptr.place() {
+                        self.strata.entry(self.stm).or_default().insert(var);
+                    }
+                }
                 self.insert(
-                    self.instr(InstrKind::Declare(vardef), s.span),
+                    self.instr(InstrKind::Assign(ptr, rvalue), s.span),
                     [(DefaultB, dest_l)],
                 )
             }
-            anf::StmtKind::AssignS(ptr, rvalue) => self.insert(
-                self.instr(InstrKind::Assign(ptr, rvalue), s.span),
-                [(DefaultB, dest_l)],
-            ),
             anf::StmtKind::WhileS {
                 cond,
                 body,
