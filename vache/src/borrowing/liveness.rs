@@ -268,7 +268,7 @@ pub fn liveness<'mir, 'ctx>(
     Ok(cfg)
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use std::default::default;
 
@@ -286,22 +286,21 @@ mod tests {
 
         // Variables
         let x = VarUse::from("x");
-        let x_def = vardef("x", Ty::IntT, stm);
-        let x_ptr = Pointer::new(&arena, arena.alloc(x.into()));
+        let x_ptr = Pointer::new(&arena, arena.alloc(x.into()), default());
+        let x_ref = LhsRef::declare(x_ptr);
+
         let y = VarUse::from("y");
-        let y_def = vardef("y", Ty::IntT, stm);
-        let y_ptr = Pointer::new(&arena, arena.alloc(y.into()));
+        let y_ptr = Pointer::new(&arena, arena.alloc(y.into()), default());
+        let y_ref = LhsRef::declare(y_ptr);
 
         let mut y_mode = default();
 
         // CFG
         let l = cfg.add_block(
             [
-                instr(InstrKind::Declare(y_def), stm),
-                instr(InstrKind::Assign(y_ptr, RValue::Integer(&forty_two)), stm),
-                instr(InstrKind::Declare(x_def), stm),
+                instr(InstrKind::Assign(y_ref, RValue::Integer(&forty_two)), stm),
                 instr(
-                    InstrKind::Assign(x_ptr, RValue::Place(Reference::new(y_ptr, &mut y_mode))),
+                    InstrKind::Assign(x_ref, RValue::Place(Reference::new(y_ptr, &mut y_mode))),
                     stm,
                 ),
                 instr(InstrKind::Noop, stm),
@@ -313,244 +312,19 @@ mod tests {
 
         // Entry and exit are trivial
         assert!(analysis[&l[0]].ins.get_all_locs().next().is_none());
-        assert!(analysis[&l[4]].ins.get_all_locs().next().is_none());
-        assert!(analysis[&l[4]].outs.get_all_locs().next().is_none());
+        assert!(analysis[&l[2]].ins.get_all_locs().next().is_none());
+        assert!(analysis[&l[2]].outs.get_all_locs().next().is_none());
 
-        // During l2, we still need y
+        // At the end of L0, we still need y
         assert_eq!(
-            analysis[&l[2]].outs.get_all_locs().collect::<Vec<_>>(),
-            [y.into()]
-        );
-        assert_eq!(
-            analysis[&l[2]].ins.get_all_locs().collect::<Vec<_>>(),
+            analysis[&l[0]].outs.get_all_locs().collect::<Vec<_>>(),
             [y.into()]
         );
 
-        // During l3, we still need y but not afterwards anymore
+        // At the start of L1, we still need y
         assert_eq!(
-            analysis[&l[3]].ins.get_all_locs().collect::<Vec<_>>(),
+            analysis[&l[1]].ins.get_all_locs().collect::<Vec<_>>(),
             [y.into()]
-        );
-        assert!(analysis[&l[3]].outs.get_all_locs().next().is_none());
-    }
-
-    /// Checks with a simple example that we clone values when there is a
-    /// loan invalidation.
-    #[test]
-    fn test_clone_on_invalidation() {
-        let mut cfg = Cfg::default();
-        let stm = Stratum::static_stm();
-        let arena = Arena::new();
-
-        // Constants
-        let forty_two = 42.into();
-
-        // Variables
-        let x = VarUse::from("x");
-        let x_def = vardef("x", Ty::IntT, stm);
-        let x_ptr = Pointer::new(&arena, arena.alloc(x.into()));
-        let y = VarUse::from("y");
-        let y_def = vardef("y", Ty::IntT, stm);
-        let y_ptr = Pointer::new(&arena, arena.alloc(y.into()));
-
-        let mut x_mode1 = default();
-        let mut y_mode1 = default();
-        let mut y_mode2 = default();
-        let mut y_mode3 = default();
-
-        // CFG
-        let l =
-            cfg.add_block(
-                [
-                    instr(InstrKind::Declare(y_def), stm),
-                    instr(InstrKind::Assign(y_ptr, RValue::Integer(&forty_two)), stm),
-                    instr(InstrKind::Declare(x_def), stm),
-                    instr(
-                        InstrKind::Assign(
-                            x_ptr,
-                            RValue::Place(Reference::new(y_ptr, &mut y_mode1)),
-                        ), // We assign y to x
-                        stm,
-                    ),
-                    instr(
-                        InstrKind::Call {
-                            name: "+".into(),
-                            args: vec![
-                                Reference::new(y_ptr, &mut y_mode2),
-                                Reference::new(y_ptr, &mut y_mode3),
-                            ], /* We mutate y
-                                * afterwards,
-                                * invalidating
-                                * the loan because we also... */
-                            destination: Some(y_ptr),
-                        },
-                        stm,
-                    ),
-                    instr(
-                        InstrKind::Call {
-                            name: "print".into(),
-                            args: vec![Reference::new(x_ptr, &mut x_mode1)], /* ...use x after so
-                                                                              * x is live */
-                            destination: None,
-                        },
-                        stm,
-                    ),
-                    instr(InstrKind::Noop, stm),
-                ],
-                (),
-            );
-
-        let cfg = liveness(cfg, l[0], l[l.len() - 1]);
-        assert!(
-            matches!(
-                cfg[&l[3]].kind,
-                InstrKind::Assign(
-                    _,
-                    RValue::Place(ref rhs)
-                )  if rhs.mode() == Mode::Cloned,
-            ),
-            "y should be cloned here"
-        );
-    }
-
-    /// Checks with a simple example that we DON'T clone if the value is not
-    /// live afterwards.
-    #[test]
-    fn test_no_clone_if_not_live() {
-        let mut cfg = Cfg::default();
-        let stm = Stratum::static_stm();
-        let arena = Arena::new();
-
-        // Constants
-        let forty_two = 42.into();
-
-        // Variables
-        let x = VarUse::from("x");
-        let x_def = vardef("x", Ty::IntT, stm);
-        let x_ptr = Pointer::new(&arena, arena.alloc(x.into()));
-        let y = VarUse::from("y");
-        let y_def = vardef("y", Ty::IntT, stm);
-        let y_ptr = Pointer::new(&arena, arena.alloc(y.into()));
-
-        let mut x_mode1 = default();
-        let mut y_mode1 = default();
-        let mut y_mode2 = default();
-        let mut y_mode3 = default();
-
-        // CFG
-        let l =
-            cfg.add_block(
-                [
-                    instr(InstrKind::Declare(y_def), stm),
-                    instr(InstrKind::Assign(y_ptr, RValue::Integer(&forty_two)), stm),
-                    instr(InstrKind::Declare(x_def), stm),
-                    instr(
-                        InstrKind::Assign(
-                            x_ptr,
-                            RValue::Place(Reference::new(y_ptr, &mut y_mode1)),
-                        ), /* We assign y to x */
-                        stm,
-                    ),
-                    instr(
-                        // We then use x non mutably so that we do not optimize away the assignment
-                        // of x.
-                        InstrKind::Call {
-                            name: "print".into(),
-                            args: vec![Reference::new(x_ptr, &mut x_mode1)],
-                            destination: None,
-                        },
-                        stm,
-                    ),
-                    instr(
-                        InstrKind::Call {
-                            name: "+".into(),
-                            args: vec![
-                                Reference::new(y_ptr, &mut y_mode2),
-                                Reference::new(y_ptr, &mut y_mode3),
-                            ], /* We mutate y
-                                * afterwards,
-                                * invalidating
-                                * BUT don't invalidate since x
-                                * is not live
-                                * anymore. */
-                            destination: Some(y_ptr),
-                        },
-                        stm,
-                    ),
-                ],
-                (),
-            );
-
-        let cfg = liveness(cfg, l[0], l[l.len() - 1]);
-        assert!(
-            matches!(
-                cfg[&l[3]].kind,
-                InstrKind::Assign(
-                    _,
-                    RValue::Place(ref rhs)
-                ) if rhs.mode() == Mode::Borrowed,
-            ),
-            "y should be taken by reference here"
-        );
-    }
-
-    /// Checks with a simple example that we move the value if not used
-    /// afterwards.
-    #[test]
-    fn test_move_if_not_live() {
-        let mut cfg = Cfg::default();
-        let stm = Stratum::static_stm();
-        let arena = Arena::new();
-
-        // Constants
-        let forty_two = 42.into();
-        let thirty_six = 36.into();
-
-        // Variables
-        let x = VarUse::from("x");
-        let x_def = vardef("x", Ty::IntT, stm);
-        let x_ptr = Pointer::new(&arena, arena.alloc(x.into()));
-        let y = VarUse::from("y");
-        let y_def = vardef("y", Ty::IntT, stm);
-        let y_ptr = Pointer::new(&arena, arena.alloc(y.into()));
-
-        let mut x_mode1 = default();
-        let mut y_mode1 = default();
-
-        // CFG
-        let l = cfg.add_block(
-            [
-                instr(InstrKind::Declare(y_def), stm),
-                instr(
-                    InstrKind::Assign(y_ptr, RValue::Integer(&forty_two)),
-                    stm,
-                ),
-                instr(InstrKind::Declare(x_def), stm),
-                instr(
-                    InstrKind::Assign(x_ptr, RValue::Place(Reference::new(y_ptr, &mut y_mode1))), /* We assign y to x */
-                    stm,
-                ),
-                instr(InstrKind::Assign(y_ptr, RValue::Integer(&thirty_six)), stm), /* We mutate y
-                                                                               * but we don't
-                                                                               * need y,
-                                                                               * so x can own it */
-                instr(InstrKind::Call { name: "print".into(), args: vec![Reference::new(x_ptr, &mut x_mode1)], destination: None }, stm),
-            ],
-            (),
-        );
-
-        let cfg = liveness(cfg, l[0], l[l.len() - 1]);
-        assert!(
-            matches!(
-                cfg[&l[3]].kind,
-                InstrKind::Assign(
-                    _,
-                    RValue::Place(ref rhs)
-                ) if rhs.mode() == Mode::Moved,
-            ),
-            "y should be moved here (instead it is {:?})",
-            cfg[&l[3]].kind
         );
     }
 }
-*/

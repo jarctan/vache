@@ -1,0 +1,12 @@
+fn main() {
+    var y: int = 42;
+    var x: int = y;
+    // Then, we use x non mutably so that we do not optimize away the assignment of x
+    print(x);
+    // We mutate y afterwards, invalidating BUT we don't invalidate since x is not live anymore
+    y = y + y; 
+}
+################################
+42
+################################
+3:18:Borrowed // do NOT clone y in x = y

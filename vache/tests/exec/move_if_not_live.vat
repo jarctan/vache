@@ -1,0 +1,11 @@
+fn main() {
+    var y: int = 42;
+    var x: int = y;
+    // We mutate y but we don't need y, so x can own it
+    y = 36; 
+    print(x);
+}
+################################
+42
+################################
+3:18:Moved // do NOT clone y in x = y

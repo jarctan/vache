@@ -1,0 +1,10 @@
+fn main() {
+    var y: int = 42;
+    var x: int = y;
+    y = y + y; // We mutate y afterwards, invalidating the loan because we also...
+    print(x); //...use x after so x is live 
+}
+################################
+42
+################################
+3:18:Cloned // clone y in x = y
