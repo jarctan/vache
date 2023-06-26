@@ -1,0 +1,11 @@
+fn incr(a: int) {
+    a = a + 1;
+}
+
+fn main() {
+    var a: int = 830198309123808;
+    incr(@a); // in place update
+    print(a);
+}
+################################
+830198309123809

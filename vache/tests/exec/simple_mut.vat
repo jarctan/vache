@@ -1,0 +1,9 @@
+fn main() {
+    var a: int = 830198309123808;
+    var b: int = @a;
+    b = 12; // Modifies b and a
+    b = b + 1; // Modifies b and a
+    print(a, b);
+}
+################################
+13 13

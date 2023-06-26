@@ -1,0 +1,23 @@
+fn collatz(n: int) -> int {
+    if n == 1 {
+        1
+    } else {
+        if n % 2 == 0 {
+        collatz(n / 2)
+        } else {
+            collatz(3 * n + 1)
+        }
+    }
+}
+
+fn main() {
+    print(collatz(12));
+    print(collatz(6));
+    print(collatz(9));
+    print(collatz(11));
+}
+################################
+1
+1
+1
+1

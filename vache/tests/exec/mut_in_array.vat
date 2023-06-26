@@ -1,0 +1,10 @@
+fn main() {
+    var a: int = 830198309123808;
+    var z: [int] = [@a];
+    z[0] = 1; // With aliasing, modifying a and z at the same time
+    print(a);
+    print(z);
+}
+################################
+1
+[1]
