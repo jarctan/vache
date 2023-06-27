@@ -104,14 +104,19 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
     /// If that variable is a pattern, we will get the pointer into what the
     /// pattern represents. Otherwise, the variable is a legit variable and
     /// we will get a new pointer into it.
-    fn get_translation_ptr(&self, var: VarUse<'ctx>) -> Option<Pointer<'ctx>> {
+    ///
+    /// * Span: span of the use of that pointer/variable. Might be bigger than
+    ///   the span of `var`
+    /// if we have some mode operator on it, for instance `@`. We want to
+    /// capture the span of `@a`, not just `a`.
+    fn get_translation_ptr(&self, var: VarUse<'ctx>, span: Span) -> Option<Pointer<'ctx>> {
         let place = self
             .var_t9n
             .iter()
             .rev() // Search through latest env first
             .find_map(|var_t9n| var_t9n.get(&var.name()))
             .copied()?;
-        Some(Pointer::new(self.arena, place, var.as_span()))
+        Some(Pointer::new(self.arena, place, span))
     }
 
     /// Gets the place translation of a variable name.
@@ -208,7 +213,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
 
                 match &mut place.kind {
                     tast::PlaceKind::VarP(v) => {
-                        let ptr = self.get_translation_ptr(*v).unwrap_or_else(|| panic!("Could not find translation for {v:?}"));
+                        let ptr = self.get_translation_ptr(*v, place.span).unwrap_or_else(|| panic!("Could not find translation for {v:?}"));
                         Reference::new(ptr, &mut place.mode)
                     }
                     tast::PlaceKind::FieldP(box strukt, field) => {

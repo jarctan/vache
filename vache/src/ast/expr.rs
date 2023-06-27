@@ -441,7 +441,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                             .map_primary(|primary| Expr::parse(primary, ctx))
                             .map_infix(|lhs, op, rhs| {
                                 let op_span = Span::from(op.as_span());
-                                let span = rhs.span.merge(rhs.span);
+                                let span = lhs.span.merge(op_span).merge(rhs.span);
                                 let kind = CallE {
                                     name: Namespaced::name_with_span(op.as_str(), op_span),
                                     args: vec![lhs, rhs],
@@ -450,8 +450,13 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                             })
                             .map_prefix(|op, mut rhs| match op.as_rule() {
                                 Rule::as_mut => {
+                                    let op_span = Span::from(op.as_span());
+                                    let span = rhs.span.merge(op_span);
                                     match &mut rhs.kind {
-                                        PlaceE(place) => place.mode = Mode::MutBorrowed,
+                                        PlaceE(place) => {
+                                            place.mode = Mode::MutBorrowed;
+                                            place.span = span;
+                                        }
                                         _ => ctx.emit(
                                             Diagnostic::error()
                                                 .with_code(AS_MUT_NOT_PLACE_ERROR)
@@ -464,11 +469,14 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                                     .with_message("not a place")]),
                                         ),
                                     }
-                                    rhs
+                                    Expr {
+                                        kind: rhs.kind,
+                                        span,
+                                    }
                                 }
                                 _ => {
                                     let op_span = Span::from(op.as_span());
-                                    let span = rhs.span.merge(rhs.span);
+                                    let span = rhs.span.merge(op_span);
                                     let kind = CallE {
                                         name: Namespaced::name_with_span(op.as_str(), op_span),
                                         args: vec![rhs],
