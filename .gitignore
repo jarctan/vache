@@ -4,3 +4,6 @@ vache_target
 binary
 *.va
 test-binary
+cfg.png
+loan.png
+var.png

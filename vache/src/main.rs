@@ -88,6 +88,12 @@ fn main() -> anyhow::Result<()> {
                         }
                     };
                     println!("{:#?}", mir);
+
+                    for (name, f) in mir.funs.iter() {
+                        f.body.print_image(name)?;
+                        println!("* CFG of function `{name}` has been saved to `{name}.png`");
+                    }
+
                     Ok(())
                 }
                 Err(diagnostics) => {

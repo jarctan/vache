@@ -67,6 +67,7 @@ pub fn var_liveness<'ctx>(
             }
         }
     }
+    var_flow.print_image("var");
 
     var_flow
 }
@@ -87,8 +88,6 @@ fn loan_liveness<'ctx>(
     var_flow: &Cfg<Flow<LocTree<'ctx, ()>>>,
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
 ) -> Cfg<'ctx, Flow<Ledger<'ctx>>> {
-    println!("{:?}", cfg);
-    println!("{:?}", var_flow);
     let out_of_scope: Cfg<LocTree<()>> =
         var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
 
@@ -98,10 +97,12 @@ fn loan_liveness<'ctx>(
     let mut updated = true;
 
     while updated {
+        #[cfg(not(test))]
         println!("TRRRRRRRRRRRRRYYYYYY\n\n\n\n");
         updated = false;
 
         for (label, instr) in cfg.postorder(entry_l).rev() {
+            #[cfg(not(test))]
             println!("{:?}", instr);
             let predecessors = cfg.preneighbors(label);
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
@@ -161,6 +162,7 @@ fn loan_liveness<'ctx>(
             }
         }
     }
+    loan_flow.print_image("loan");
 
     loan_flow
 }
@@ -180,48 +182,69 @@ pub fn liveness<'mir, 'ctx>(
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
     reporter: &mut Reporter<'ctx>,
 ) -> Result<CfgI<'mir, 'ctx>, Diagnostics<'ctx>> {
+    cfg.print_image("cfg");
+
+    let mut invalidated = Borrows::new();
+
     // Compute the var analysis first
     let var_flow = var_liveness(&cfg, entry_l);
 
-    // Check last variable use and replace with a move
-    let mut invalidated = Borrows::new();
-    for (label, instr) in cfg.bfs_mut(entry_l, false) {
-        let outs = &var_flow[&label].outs;
+    // Loop until there is no change in moves.
+    let loan_flow = loop {
+        // Now, compute loan analysis
+        let loan_flow = loan_liveness(&cfg, entry_l, &var_flow, strata);
 
-        // Get all the references of that instruction.
-        let references: Vec<_> = instr.references_mut().collect();
+        let mut updated = false;
+        // Check last variable use and replace with a move
+        for (label, instr) in cfg.bfs_mut(entry_l, false) {
+            let var_outs = &var_flow[&label].outs;
+            let borrows_outs = &loan_flow[&label].ins;
 
-        // Get, for each reference, the set of locations that are used by any reference
-        // after that one within the same instruction
-        // For example, for `print(a, a)`, we will see that we cannot move the first
-        // `a`, since it is used by a reference after that first `a`
-        // To do that, we compute the set of locations that cannot be moved for each
-        // reference in our `references`.
-        let mut cannot_move: VecDeque<_> = VecDeque::from([Set::new()]);
-        for r in references.iter().rev() {
-            let el = cannot_move.back().unwrap().clone() + r.loc();
-            cannot_move.push_front(el);
-        }
-        cannot_move.pop_front();
-        debug_assert!(cannot_move.len() == references.len());
+            // Get all the references of that instruction.
+            let references: Vec<_> = instr.references_mut().collect();
 
-        for (i, reference) in references.into_iter().enumerate() {
-            match reference.mode() {
-                Mode::Borrowed | Mode::MutBorrowed | Mode::SMutBorrowed | Mode::SBorrowed => {
-                    let loc = reference.loc();
-                    if !outs.contains(loc) && !cannot_move[i].contains(loc) {
-                        reference.set_mode(Mode::Moved);
+            // Get, for each reference, the set of locations that are used by any reference
+            // after that one within the same instruction
+            // For example, for `print(a, a)`, we will see that we cannot move the first
+            // `a`, since it is used by a reference after that first `a`
+            // To do that, we compute the set of locations that cannot be moved for each
+            // reference in our `references`.
+            let mut cannot_move: VecDeque<_> = VecDeque::from([Set::new()]);
+            for r in references.iter().rev() {
+                let el = cannot_move.back().unwrap().clone() + r.loc();
+                cannot_move.push_front(el);
+            }
+            cannot_move.pop_front();
+            debug_assert!(cannot_move.len() == references.len());
+
+            for (i, reference) in references.into_iter().enumerate() {
+                match reference.mode() {
+                    Mode::Borrowed | Mode::MutBorrowed | Mode::SMutBorrowed | Mode::SBorrowed => {
+                        let loc = reference.loc();
+                        if !var_outs.contains(loc) && !cannot_move[i].contains(loc) {
+                            let loans: Vec<_> = borrows_outs.loans(*reference.loc()).collect();
+                            if loans.is_empty() || loans.iter().all(|loan| !loan.mutable) {
+                                updated = true;
+                                reference.set_mode(Mode::Moved);
+                            } else {
+                                #[cfg(not(test))]
+                                println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
+                                /*panic!(
+                                    "Cannot move {loc:?} out  because {loans:?} are still active in {instr:?}"
+                                );*/
+                            }
+                        }
                     }
+                    Mode::Cloned => (), // We clone, there's a reason fot that. So you can't move
+                    Mode::Moved => (),  // already moved
                 }
-                Mode::Cloned => (), // We clone, there's a reason fot that. So you can't move
-                Mode::Moved => (),  // already moved
             }
         }
-    }
 
-    // Now, compute loan analysis
-    let loan_flow = loan_liveness(&cfg, entry_l, &var_flow, strata);
-    println!("{:?}", loan_flow);
+        if !updated {
+            break loan_flow;
+        }
+    };
 
     // List all borrows that are invalidated by mutation of the variable afterwards.
     for (label, instr) in cfg.bfs(entry_l, false) {
@@ -290,14 +313,16 @@ pub fn liveness<'mir, 'ctx>(
     }
 
     // Transform all invalidated borrows into clones
-    for Borrow {
+    for borrow @ Borrow {
         label,
         ptr,
         mutable,
         ..
     } in invalidated
     {
-        debug_assert!(!mutable);
+        #[cfg(not(test))]
+        println!("Invalidation: {:?}", borrow);
+        debug_assert!(!mutable, "Borrow {borrow:?} is mutable");
         cfg[&label].force_clone(&ptr);
     }
 

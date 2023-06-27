@@ -100,6 +100,7 @@ impl<'ctx> Ledger<'ctx> {
             .remove(loc)
             .map_or(default(), |node| node.into());
 
+        #[cfg(not(test))]
         println!(
             "Flushing {:?}{} with borrows {borrows:?}",
             loc,
@@ -130,6 +131,7 @@ impl<'ctx> Ledger<'ctx> {
                 loc,
             );
             if !removed_loans.is_empty() {
+                #[cfg(not(test))]
                 println!("Invalidated ici with {:?}", removed_loans);
             }
             self.invalidations.extend(removed_loans);
@@ -141,6 +143,10 @@ impl<'ctx> Ledger<'ctx> {
     /// Simultaneous removal of several locations from the ledger.
     pub fn flush_locs(&mut self, locs: impl Iterator<Item = Loc<'ctx>>, force: bool) {
         let locs: Set<_> = locs.collect();
+        if locs.is_empty() {
+            return;
+        }
+        #[cfg(not(test))]
         println!(
             "Flushing {:?}{}",
             locs,
@@ -160,6 +166,8 @@ impl<'ctx> Ledger<'ctx> {
                 .map_or(default(), |node| node.into());
 
             if !borrows.is_empty() {
+                #[cfg(not(test))]
+                println!("{loc:?} has borrows {borrows:?}, so must scheduled for cleanup");
                 to_clean.insert(*loc);
             }
 
@@ -178,7 +186,7 @@ impl<'ctx> Ledger<'ctx> {
         // We need to do that in a second step because we don't want to add as
         // invalidated loans loans that were made by locations that are being
         // flushed at the same time as the loaner!
-        for loc in if force { to_clean.iter() } else { locs.iter() } {
+        for loc in if force { locs.iter() } else { to_clean.iter() } {
             let removed_loans = self
                 .loans
                 .remove(loc)
@@ -190,8 +198,9 @@ impl<'ctx> Ledger<'ctx> {
                 .filter(|loan| !locs.contains(&loan.borrower))
                 .collect();
             if !removed_loans.is_empty() {
+                #[cfg(not(test))]
                 println!(
-                    "Invalidated apoi with {:?} (only {locs:?} allowed)",
+                    "Invalidated by out of scope of {loc:?}: {:?} (only {locs:?} allowed)",
                     removed_loans
                 );
             }
@@ -224,6 +233,8 @@ impl<'ctx> Ledger<'ctx> {
                     Ok(borrows) => {
                         for borrow in borrows {
                             debug_assert!(!borrow.mutable);
+                            #[cfg(not(test))]
+                            println!("Invalidated flatten {:?}", borrow);
                             self.invalidations.insert(borrow);
                         }
                         retained.insert(borrow);
@@ -233,6 +244,8 @@ impl<'ctx> Ledger<'ctx> {
                             self.unrecoverables.insert(borrow, contradiction);
                         } else {
                             debug_assert!(!borrow.mutable);
+                            #[cfg(not(test))]
+                            println!("Invalidated flatten 2 {:?}", borrow);
                             self.invalidations.insert(borrow);
                         }
                     }
@@ -249,6 +262,7 @@ impl<'ctx> Ledger<'ctx> {
         let place = place.into();
         let loc = place.root();
 
+        #[cfg(not(test))]
         println!("Adding {place:?} with {borrows:?}");
 
         // First, flush the place.
@@ -264,10 +278,13 @@ impl<'ctx> Ledger<'ctx> {
             match self.loans.get_mut_or_insert(borrow.loc()).insert(borrow) {
                 Ok(borrows) => {
                     if !borrows.is_empty() {
+                        #[cfg(not(test))]
                         println!("Mutable borrow {borrow:?} invalidates {borrows:?}");
                     }
                     for borrow in borrows {
                         debug_assert!(!borrow.mutable);
+                        #[cfg(not(test))]
+                        println!("Invalidated flatten 3 {:?}", borrow);
                         self.invalidations.insert(borrow);
                     }
                 }
@@ -276,7 +293,10 @@ impl<'ctx> Ledger<'ctx> {
                         self.unrecoverables.insert(borrow, contradiction);
                     } else {
                         debug_assert!(!borrow.mutable);
+                        #[cfg(not(test))]
                         println!("Invalidated there");
+                        #[cfg(not(test))]
+                        println!("Invalidated flatten 4 {:?}", borrow);
                         self.invalidations.insert(borrow);
                     }
                 }
@@ -289,10 +309,12 @@ impl<'ctx> Ledger<'ctx> {
                 if borrows.is_empty() {
                     self.borrows.remove(loc);
                 } else {
+                    #[cfg(not(test))]
                     println!("Registering borrows");
                     *self.borrows.get_mut_or_insert(loc) = borrows.into_iter().collect();
                     let borrows: Vec<Borrow> = self.borrows.get_all(loc).collect();
-                    println!("Registered {borrows:?}");
+                    #[cfg(not(test))]
+                    println!("Registered borrows {borrows:?}");
                 }
             }
             Err(()) => {
@@ -312,7 +334,7 @@ impl<'ctx> Ledger<'ctx> {
         self.loans.get_all(loc)
     }
 
-    /// Returns all loans of a place.
+    /// Returns all borrows of a place.
     pub fn borrows<'a>(
         &'a self,
         place: impl Into<Place<'ctx>>,

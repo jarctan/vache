@@ -55,6 +55,7 @@
         "tast",
         "termcolor",
         "thiserror",
+        "Tpng",
         "typecheck",
         "typer",
         "uninit",

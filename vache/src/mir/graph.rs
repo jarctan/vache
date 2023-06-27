@@ -3,9 +3,14 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::default::default;
 use std::hash::Hash;
+use std::io::Write;
 use std::ops::Index;
 use std::ops::{Deref, IndexMut};
+use std::process::Command;
 use std::{fmt, iter};
+
+use anyhow::Context as AnyhowContext;
+use anyhow::Result;
 
 use super::{Branch, Instr};
 use crate::utils::boxed;
@@ -283,6 +288,45 @@ impl<'ctx, N, E> Cfg<'ctx, N, E> {
     }
 }
 
+impl<'ctx, N: fmt::Debug, E: fmt::Debug> Cfg<'ctx, N, E> {
+    /// Debug function to print the CFG to `name.dot.png` in the working
+    /// directory.
+    ///
+    /// Note: it is very slow.
+    pub fn print_image(&self, name: impl AsRef<str>) -> Result<()> {
+        let name = name.as_ref();
+        ensure!(
+            !name.chars().any(|c| c == '/' || c == '.'),
+            "not a valid name"
+        );
+        let dot = format!("{:?}", self);
+
+        let mut file = std::fs::File::create(name).context("Failed to create output file")?;
+        file.write_all(dot.as_bytes())
+            .context("Failed to write to output file")?;
+
+        // Use the GraphViz command-line tool to generate the image
+        let output = Command::new("dot")
+            .arg("-Tpng")
+            .arg("-O")
+            .arg(name)
+            .output()
+            .context(
+                "Failed to execute `dot` command. Make sure that `dot` is installed on your system",
+            )?;
+
+        std::fs::remove_file(name).context("Could not remove .dot file")?;
+
+        if !output.status.success() {
+            bail!(
+                "Failed to plot Euler graph: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        Ok(())
+    }
+}
+
 impl<'mir, 'ctx> CfgI<'mir, 'ctx> {
     /// Returns the set of dominators for each node.
     ///
@@ -388,7 +432,8 @@ impl<'ctx, N: fmt::Debug, E: fmt::Debug> fmt::Debug for Cfg<'ctx, N, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "digraph G {{")?;
         for (ix, Node { value, .. }) in &self.node_map {
-            writeln!(f, "\tn{} [label=\"#{} {:?}\"];", ix.0, ix.0, value)?;
+            let value = format!("{:?}", value).replace('\"', "\\\"");
+            writeln!(f, "\tn{} [label=\"#{} {}\"];", ix.0, ix.0, value)?;
         }
         for Edge { from, to, weight } in self.edge_map.values() {
             writeln!(f, "\tn{} -> n{} [label=\"{:?}\"];", from.0, to.0, weight)?;
