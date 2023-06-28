@@ -2,3 +2,4 @@
 *.vsix
 refs/
 node_modules
+out/
