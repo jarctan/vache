@@ -67,7 +67,7 @@ pub fn var_liveness<'ctx>(
             }
         }
     }
-    var_flow.print_image("var");
+    //var_flow.print_image("var");
 
     var_flow
 }
@@ -158,7 +158,7 @@ fn loan_liveness<'ctx>(
             }
         }
     }
-    loan_flow.print_image("loan");
+    //loan_flow.print_image("loan");
 
     loan_flow
 }
@@ -178,7 +178,7 @@ pub fn liveness<'mir, 'ctx>(
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
     reporter: &mut Reporter<'ctx>,
 ) -> Result<CfgI<'mir, 'ctx>, Diagnostics<'ctx>> {
-    cfg.print_image("cfg");
+    //cfg.print_image("cfg");
 
     let mut invalidated = Borrows::new();
 
