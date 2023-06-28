@@ -24,22 +24,9 @@ impl LanguageServer for Backend {
             server_info: None,
             offset_encoding: None,
             capabilities: ServerCapabilities {
-                inlay_hint_provider: Some(OneOf::Left(true)),
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
-                execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec!["dummy.do_something".to_string()],
-                    work_done_progress_options: Default::default(),
-                }),
-
-                workspace: Some(WorkspaceServerCapabilities {
-                    workspace_folders: Some(WorkspaceFoldersServerCapabilities {
-                        supported: Some(true),
-                        change_notifications: Some(OneOf::Left(true)),
-                    }),
-                    file_operations: None,
-                }),
                 ..ServerCapabilities::default()
             },
         })
@@ -151,11 +138,11 @@ impl Backend {
         let res: Result<_, Diagnostics> = try {
             // Parse
             let program = parse_file(&mut ctx)?;
-            // Type check
-            typecheck(&mut ctx, program)?;
+            /*// Type check
+            typecheck(&mut ctx, program)?;*/
         };
 
-        // Report any diagnostic.
+        /*// Report any diagnostic.
         if let Err(diagnostics) = res {
             let diagnostics = diagnostics
                 .into_iter()
@@ -170,20 +157,17 @@ impl Backend {
             self.client
                 .publish_diagnostics(params.uri.clone(), diagnostics, Some(params.version))
                 .await;
-        };
+        };*/
     }
 }
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
-
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::build(|client| Backend { client }).finish();
-
-    serde_json::json!({"test": 20});
+    let (service, socket) = LspService::new(|client| Backend { client });
     Server::new(stdin, stdout, socket).serve(service).await;
 }
 
