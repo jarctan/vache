@@ -1467,6 +1467,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         }
     }
 
+    /// Introduces the identifiers in the given pattern into the typing context.
     fn introduce_pat_vars(&mut self, pat: &Pat<'ctx>) {
         match &pat.kind {
             BoolM(_) | IntegerM(_) | StringM(_) => todo!(),

@@ -17,11 +17,8 @@ pub struct Reference<'mir, 'ctx: 'mir> {
     pointer: Pointer<'ctx>,
     /// Addressing/referencing mode.
     ///
-    /// If there are multiple modes, that means that this reference is tied to
-    /// multiple [`Mode`]s in the typed AST. The invariant is that they will
-    /// always share the same mode, and modifying the mode of the [`Reference`]
-    /// will modify the mode of all the `&'ctx mut Mode` in the vector.
-    modes: Vec<&'mir mut Mode>,
+    /// If there are no mode, the default one is [`Mode::Moved`].
+    mode: Option<&'mir mut Mode>,
 }
 
 impl<'mir, 'ctx: 'mir> Reference<'mir, 'ctx> {
@@ -29,20 +26,7 @@ impl<'mir, 'ctx: 'mir> Reference<'mir, 'ctx> {
     pub fn new(pointer: Pointer<'ctx>, mode: &'mir mut Mode) -> Self {
         Self {
             pointer,
-            modes: vec![mode],
-        }
-    }
-
-    /// Creates a new [`Reference`], with multiple referencing modes at the same
-    /// time.
-    ///
-    /// Ok if not all modes are equal, but they will be made equal in case we
-    /// change to a clone or a move. In that case, the first element should be
-    /// the main mode.
-    pub fn new_multi_modes(ptr: Pointer<'ctx>, modes: Vec<&'mir mut Mode>) -> Self {
-        Self {
-            pointer: ptr,
-            modes,
+            mode: Some(mode),
         }
     }
 
@@ -50,33 +34,26 @@ impl<'mir, 'ctx: 'mir> Reference<'mir, 'ctx> {
     pub fn new_moved(ptr: Pointer<'ctx>) -> Self {
         Self {
             pointer: ptr,
-            modes: vec![],
+            mode: None,
         }
     }
 
     /// Addressing mode.
     pub fn mode(&self) -> Mode {
-        self.modes.get(0).map(|mode| **mode).unwrap_or(Mode::Moved)
-    }
-
-    /// Returns the addressing modes of that [`Reference`], consuming `self`.
-    ///
-    /// Used so that modes from one [`Reference`] may go
-    pub fn into_modes_mut(self) -> Vec<&'mir mut Mode> {
-        self.modes
+        self.mode.as_ref().map(|mode| **mode).unwrap_or(Mode::Moved)
     }
 
     /// Gets a mutable reference into the mode.
     ///
     /// # Panics
-    /// Panics if the reference has no associated mode in the AST.
+    /// No-op if the reference is not tied to any associated mode in the AST.
     pub fn set_mode(&mut self, new_mode: Mode) {
-        for mode in &mut self.modes {
+        if let Some(mode) = &mut self.mode {
             **mode = new_mode;
         }
     }
 
-    /// Sees self as a pointer, forgetting the mode.
+    /// Returns the pointer behind the reference.
     pub fn as_ptr(&self) -> Pointer<'ctx> {
         self.pointer
     }

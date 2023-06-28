@@ -111,7 +111,7 @@ impl<'ctx> Ledger<'ctx> {
             // If the borrow is not invalidated, remove it from the loans.
             if !self.invalidations.contains(borrow) {
                 self.loans
-                    .get_mut(borrow.loc())
+                    .get_mut(borrow.borrowed_loc())
                     .unwrap_or_else(|| panic!("Ledger error: want to free a non-invalidated borrow {borrow:?} but loaner is not alive anymore!"))
                     .remove(borrow);
             }
@@ -175,7 +175,7 @@ impl<'ctx> Ledger<'ctx> {
                 // If the borrow is not invalidated, remove it from the loans.
                 if !self.invalidations.contains(borrow) {
                     self.loans
-                        .get_mut(borrow.loc())
+                        .get_mut(borrow.borrowed_loc())
                         .unwrap_or_else(|| panic!("Ledger error: want to free a non-invalidated borrow {borrow:?} but loaner is not alive anymore!"))
                         .remove(borrow);
                 }
@@ -223,7 +223,7 @@ impl<'ctx> Ledger<'ctx> {
         let mut retained = Set::new();
         for borrows in borrows {
             for borrow in borrows {
-                let loans: &mut Loans = map.entry(borrow.loc()).or_default();
+                let loans: &mut Loans = map.entry(borrow.borrowed_loc()).or_default();
 
                 // Depending on the result of the insertion, find who to blame
                 // We always try to invalidate immutable borrows first because
@@ -270,12 +270,16 @@ impl<'ctx> Ledger<'ctx> {
 
         // Remove borrows into ourselves.
         if let Ok(loc) = place.try_into() {
-            borrows.retain(|b| b.loc() != loc);
+            borrows.retain(|b| b.borrowed_loc() != loc);
         }
 
         // Register on the loaner side
         for &borrow in &borrows {
-            match self.loans.get_mut_or_insert(borrow.loc()).insert(borrow) {
+            match self
+                .loans
+                .get_mut_or_insert(borrow.borrowed_loc())
+                .insert(borrow)
+            {
                 Ok(borrows) => {
                     if !borrows.is_empty() {
                         /*#[cfg(not(test))]

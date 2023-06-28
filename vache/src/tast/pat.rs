@@ -29,6 +29,10 @@ impl<'ctx> Pat<'ctx> {
         }
     }
 
+    /// Returns the discriminant of the pattern.
+    ///
+    /// The discriminant is the branch that tells on which value we should
+    /// evaluate that pattern.
     pub fn discriminant(&self) -> crate::anf::Branch<'ctx> {
         use crate::anf::Branch::*;
         match self.kind {

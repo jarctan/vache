@@ -23,11 +23,13 @@ pub struct Borrow<'ctx> {
 }
 
 impl<'ctx> Borrow<'ctx> {
-    pub fn loc(&self) -> Loc<'ctx> {
+    /// Gets the borrowed location.
+    pub fn borrowed_loc(&self) -> Loc<'ctx> {
         *self.ptr.loc()
     }
 
-    pub fn place(&self) -> Place<'ctx> {
+    /// Gets the borrowed place.
+    pub fn borrowed_place(&self) -> Place<'ctx> {
         *self.ptr.place()
     }
 }

@@ -265,7 +265,7 @@ pub fn liveness<'mir, 'ctx>(
                     .with_code(BORROW_ERROR)
                     .with_message(format!(
                         "cannot use `{}`{} here",
-                        borrow.loc(),
+                        borrow.borrowed_loc(),
                         if borrow.mutable { " mutably" } else { "" },
                     ))
                     .with_labels(vec![

@@ -224,7 +224,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                             place.span
                         );
 
-                        Reference::new_multi_modes(final_ptr, vec![&mut place.mode])
+                        Reference::new(final_ptr, &mut place.mode)
                     }
                     tast::PlaceKind::ElemP(box tuple, elem) => {
                         let tuple_ptr = self.visit_expr(stmts, tuple, Some(Mode::SMutBorrowed), ret_ptr);
@@ -238,7 +238,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                             place.span
                         );
 
-                        Reference::new_multi_modes(final_ptr, vec![&mut place.mode])
+                        Reference::new(final_ptr, &mut place.mode)
                     }
                     tast::PlaceKind::IndexP(box e, box ix) => {
                         let e_ptr = self.visit_expr(stmts, e, Some(Mode::SMutBorrowed), ret_ptr);
@@ -250,16 +250,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                             place.span
                         );
 
-                        // The reference into `IndexP` will depend on multiple modes: the global one,
-                        // the modes of the array expression, and the modes of the index expression.
-                        // All are tied, and only in this case (not in the case of fields, for instance), because moving
-                        // an indexed element in an array is essentially moving the entire array.
-                        // So if we change e1[e2] to Moved, we also need to change e1 to moved.
-                        let mut modes = vec![&mut place.mode];
-                        //modes.extend(e_ptr.into_modes_mut());
-                        //modes.extend(ix_ptr.into_modes_mut());
-
-                        Reference::new_multi_modes(final_ptr, modes)
+                        Reference::new(final_ptr, &mut place.mode)
                     }
                 }
             }
