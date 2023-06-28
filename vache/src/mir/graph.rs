@@ -726,14 +726,14 @@ mod tests {
         let arena = Arena::new();
         let config = default();
         let mut ctx = Context::new(config, &arena);
-        let mut checked = match typecheck(&mut ctx, crate::examples::while_loop())? {
+        let mut checked = match typecheck(&mut ctx, crate::examples::while_loop()) {
             Ok(checked) => checked,
             Err(e) => {
                 e.display()?;
                 bail!("Typing errors found");
             }
         };
-        let mir = match borrow_check(&mut ctx, mir(&mut checked)?)? {
+        let mir = match borrow_check(&mut ctx, mir(&mut checked)?) {
             Ok(mir) => mir,
             Err(e) => {
                 e.display()?;
@@ -777,14 +777,14 @@ mod tests {
         let arena = Arena::new();
         let config = default();
         let mut ctx = Context::new(config, &arena);
-        let mut checked = match typecheck(&mut ctx, crate::examples::simple_if())? {
+        let mut checked = match typecheck(&mut ctx, crate::examples::simple_if()) {
             Ok(checked) => checked,
             Err(e) => {
                 e.display()?;
                 bail!("Typing errors found");
             }
         };
-        let mir = match borrow_check(&mut ctx, mir(&mut checked)?)? {
+        let mir = match borrow_check(&mut ctx, mir(&mut checked)?) {
             Ok(mir) => mir,
             Err(e) => {
                 e.display()?;
@@ -815,14 +815,14 @@ mod tests {
         let arena = Arena::new();
         let config = default();
         let mut ctx = Context::new(config, &arena);
-        let mut checked = match typecheck(&mut ctx, crate::examples::simple_if())? {
+        let mut checked = match typecheck(&mut ctx, crate::examples::simple_if()) {
             Ok(checked) => checked,
             Err(e) => {
                 e.display()?;
                 bail!("Typing errors found");
             }
         };
-        let mir = match borrow_check(&mut ctx, mir(&mut checked)?)? {
+        let mir = match borrow_check(&mut ctx, mir(&mut checked)?) {
             Ok(mir) => mir,
             Err(e) => {
                 e.display()?;

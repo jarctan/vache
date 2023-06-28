@@ -2,6 +2,7 @@
 
 #![feature(default_free_fn)]
 #![feature(path_file_prefix)]
+#![feature(try_blocks)]
 
 #[macro_use]
 extern crate vache_tests_proc;

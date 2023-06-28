@@ -51,32 +51,26 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let arena = ::vache_lib::Arena::new();
                 let config = ::vache_lib::config::Config { input: "", ..::std::default::Default::default() };
                 let mut context = ::vache_lib::Context::new(config, &arena);
-                match ::vache_lib::typecheck(&mut context, p)? {
-                    Ok(mut checked) => {
-                        let mir = match ::vache_lib::borrow_check(&mut context, ::vache_lib::mir(&mut checked)?)? {
-                            Ok(mir) => mir,
-                            Err(e) => {
-                                e.display()?;
-                                bail!("Borrow errors found");
-                            }
-                        };
-                        let cur_dir = ::std::env::current_dir().context("Could not get current directory")?;
-                        let binary_name = "test-binary";
-                        assert_eq!(
-                            ::vache_lib::run(&mut context, checked, binary_name, &cur_dir).context("Could not run program")?,
-                            #expected_output,
-                            "Output mismatch for binary"
-                        );
+                let res: Result<(), ::vache_lib::reporter::Diagnostics> = try {
+                    let mut checked = ::vache_lib::typecheck(&mut context, p)?;
+                    let mir = ::vache_lib::borrow_check(&mut context, ::vache_lib::mir(&mut checked)?)?;
+                    let cur_dir = ::std::env::current_dir().context("Could not get current directory")?;
+                    let binary_name = "test-binary";
+                    let res = ::vache_lib::run(&mut context, checked, binary_name, &cur_dir).context("Could not run program")?;
+                    let expected = #expected_output;
+                    ::anyhow::ensure!(
+                        res == expected,
+                        "output mismatch\nexpected:\n{expected}\nfound:\n{res}"
+                    );
 
-                        let dest_file = cur_dir.join(binary_name);
-                        ::std::fs::remove_file(&dest_file).context("failed to remove binary at the end of the test")?;
-                        Ok(())
-                    }
-                    Err(diagnostics) => {
-                        diagnostics.display()?;
-                        ::anyhow::bail!("Compile errors");
-                    }
+                    let dest_file = cur_dir.join(binary_name);
+                    ::std::fs::remove_file(&dest_file).context("failed to remove binary at the end of the test")?;
+                };
+                if let Err(diagnostics) = res {
+                    diagnostics.display()?;
+                    ::anyhow::bail!("Compile errors");
                 }
+                Ok(())
             }
 
             #[test]
@@ -85,28 +79,22 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let arena = ::vache_lib::Arena::new();
                 let config = ::vache_lib::config::Config { input: "", ..::std::default::Default::default() };
                 let mut context = ::vache_lib::Context::new(config, &arena);
-                match ::vache_lib::typecheck(&mut context, p)? {
-                    Ok(mut checked) => {
-                        let mir = match ::vache_lib::borrow_check(&mut context, ::vache_lib::mir(&mut checked)?)? {
-                            Ok(mir) => mir,
-                            Err(e) => {
-                                e.display()?;
-                                bail!("Borrow errors found");
-                            }
-                        };
-                        eprintln!("MIR: {:#?}", mir);
-                        assert_eq!(
-                            ::vache_lib::interpret(mir)?,
-                            #expected_output,
-                            "Output mismatch for interpreter"
-                        );
-                        Ok(())
-                    }
-                    Err(diagnostics) => {
-                        diagnostics.display()?;
-                        ::anyhow::bail!("Compile errors");
-                    }
+                let res: Result<(), ::vache_lib::reporter::Diagnostics> = try {
+                    let mut checked = ::vache_lib::typecheck(&mut context, p)?;
+                    let mir = ::vache_lib::borrow_check(&mut context, ::vache_lib::mir(&mut checked)?)?;
+                    eprintln!("MIR: {:#?}", mir);
+                    let res = ::vache_lib::interpret(mir).context("interpreter error")?;
+                    let expected = #expected_output;
+                    ::anyhow::ensure!(
+                        res == expected,
+                        "output mismatch\nexpected:\n{expected}\nfound:\n{res}"
+                    );
+                };
+                if let Err(diagnostics) = res {
+                    diagnostics.display()?;
+                    ::anyhow::bail!("Compile errors");
                 }
+                Ok(())
             }
         }
     }

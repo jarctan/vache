@@ -23,7 +23,7 @@ fn test<'ctx>(p: impl Into<Program<'ctx>>) -> Result<()> {
         ..default()
     };
     let mut context = Context::new(config, &arena);
-    if let Err(err) = vache_lib::typecheck(&mut context, p.into()).expect("Compiler error") {
+    if let Err(err) = vache_lib::typecheck(&mut context, p.into()) {
         err.display().expect("Could not print typer errors");
         bail!("Typing errors");
     }

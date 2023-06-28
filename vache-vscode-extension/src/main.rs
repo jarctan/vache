@@ -1,11 +1,14 @@
+#![feature(try_blocks)]
+
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tower_lsp::jsonrpc::Result;
+use tower_lsp::jsonrpc::Result as JsonResult;
 use tower_lsp::lsp_types::notification::Notification;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use vache_lib::examples::parse_file;
+use vache_lib::reporter::Diagnostics;
 use vache_lib::typecheck;
 use vache_lib::{config::Config, Arena, Context};
 
@@ -16,7 +19,7 @@ struct Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, _: InitializeParams) -> JsonResult<InitializeResult> {
         Ok(InitializeResult {
             server_info: None,
             offset_encoding: None,
@@ -48,7 +51,7 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    async fn shutdown(&self) -> Result<()> {
+    async fn shutdown(&self) -> JsonResult<()> {
         Ok(())
     }
 
@@ -106,7 +109,7 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    async fn execute_command(&self, _: ExecuteCommandParams) -> Result<Option<Value>> {
+    async fn execute_command(&self, _: ExecuteCommandParams) -> JsonResult<Option<Value>> {
         self.client
             .log_message(MessageType::INFO, "command executed!")
             .await;
@@ -145,13 +148,16 @@ impl Backend {
         };
         let mut ctx = Context::new(config, &arena);
 
-        // Parse
-        let program = parse_file(&mut ctx).unwrap();
+        let res: Result<_, Diagnostics> = try {
+            // Parse
+            let program = parse_file(&mut ctx)?;
+            // Type check
+            typecheck(&mut ctx, program)?;
+        };
 
-        // Type check
-        let diagnostics = match typecheck(&mut ctx, program).unwrap() {
-            Ok(_) => vec![],
-            Err(diagnostics) => diagnostics
+        // Report any diagnostic.
+        if let Err(diagnostics) = res {
+            let diagnostics = diagnostics
                 .into_iter()
                 .map(|diagnostic| {
                     Diagnostic::new_simple(
@@ -159,12 +165,12 @@ impl Backend {
                         diagnostic.message,
                     )
                 })
-                .collect(),
-        };
+                .collect();
 
-        self.client
-            .publish_diagnostics(params.uri.clone(), diagnostics, Some(params.version))
-            .await;
+            self.client
+                .publish_diagnostics(params.uri.clone(), diagnostics, Some(params.version))
+                .await;
+        };
     }
 }
 

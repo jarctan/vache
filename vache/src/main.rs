@@ -9,7 +9,7 @@ use clap::{Parser, Subcommand};
 use unindent::Unindent;
 use vache_lib::{
     borrow_check, check_all, compile, config::Config, examples::parse_file, execute, farm_modes,
-    interpret, mir, typecheck, Arena, Context,
+    interpret, mir, reporter::Diagnostics, typecheck, Arena, Context,
 };
 
 #[derive(Parser, Debug)]
@@ -77,30 +77,22 @@ fn main() -> anyhow::Result<()> {
             };
             let mut context = Context::new(config, &arena);
 
-            let program = parse_file(&mut context).context("Compilation failed")?;
-            match typecheck(&mut context, program)? {
-                Ok(mut checked) => {
-                    let mir = match borrow_check(&mut context, mir(&mut checked)?)? {
-                        Ok(mir) => mir,
-                        Err(e) => {
-                            e.display()?;
-                            bail!("Borrow errors found");
-                        }
-                    };
-                    println!("{:#?}", mir);
+            let res: Result<_, Diagnostics> = try {
+                let program = parse_file(&mut context)?;
+                let mut checked = typecheck(&mut context, program)?;
+                let mir = borrow_check(&mut context, mir(&mut checked)?)?;
+                println!("{:#?}", mir);
 
-                    for (name, f) in mir.funs.iter() {
-                        f.body.print_image(name)?;
-                        println!("* CFG of function `{name}` has been saved to `{name}.png`");
-                    }
-
-                    Ok(())
+                for (name, f) in mir.funs.iter() {
+                    f.body.print_image(name)?;
+                    println!("* CFG of function `{name}` has been saved to `{name}.png`");
                 }
-                Err(diagnostics) => {
-                    diagnostics.display()?;
-                    bail!("Compile errors found");
-                }
+            };
+            if let Err(diagnostics) = res {
+                diagnostics.display()?;
+                bail!("Compile errors found");
             }
+            Ok(())
         }
         Commands::Check { ref filename } => {
             let arena = Arena::new();
@@ -115,8 +107,14 @@ fn main() -> anyhow::Result<()> {
             };
             let mut context = Context::new(config, &arena);
 
-            let program = parse_file(&mut context).context("Compilation failed")?;
-            check_all(&mut context, program)?;
+            let res: Result<_, Diagnostics> = try {
+                let program = parse_file(&mut context)?;
+                check_all(&mut context, program)?;
+            };
+            if let Err(diagnostics) = res {
+                diagnostics.display()?;
+                bail!("Compile errors found");
+            }
             Ok(())
         }
         Commands::Compile { ref filename } => {
@@ -132,8 +130,14 @@ fn main() -> anyhow::Result<()> {
             };
             let mut context = Context::new(config, &arena);
 
-            let program = parse_file(&mut context).context("Compilation failed")?;
-            compile(&mut context, program, "binary", &cur_dir)?;
+            let res: Result<_, Diagnostics> = try {
+                let program = parse_file(&mut context)?;
+                compile(&mut context, program, "binary", &cur_dir)?;
+            };
+            if let Err(diagnostics) = res {
+                diagnostics.display()?;
+                bail!("Compilation failed");
+            }
             Ok(())
         }
         Commands::Run { ref filename } => {
@@ -148,11 +152,20 @@ fn main() -> anyhow::Result<()> {
                 filename: Some(filename),
             };
             let mut context = Context::new(config, &arena);
-            let program = parse_file(&mut context).context("Compilation failed")?;
-            let res =
-                execute(&mut context, program, "binary", &cur_dir).context("execution error")?;
-            println!("{}", res);
-            Ok(())
+            let res: Result<_, Diagnostics> = try {
+                let program = parse_file(&mut context)?;
+                execute(&mut context, program, "binary", &cur_dir)?
+            };
+            match res {
+                Ok(res) => {
+                    println!("{}", res);
+                    Ok(())
+                }
+                Err(diagnostics) => {
+                    diagnostics.display()?;
+                    bail!("Execution failed");
+                }
+            }
         }
         Commands::Interpret { ref filename } => {
             let arena = Arena::new();
@@ -166,28 +179,24 @@ fn main() -> anyhow::Result<()> {
                 filename: Some(filename),
             };
             let mut context = Context::new(config, &arena);
-            let program = parse_file(&mut context).context("Compilation failed")?;
-            match typecheck(&mut context, program)? {
-                Ok(mut checked) => {
-                    // Compute MIR
-                    let mir = match borrow_check(&mut context, mir(&mut checked)?)? {
-                        Ok(mir) => mir,
-                        Err(e) => {
-                            e.display()?;
-                            bail!("Borrow errors found");
-                        }
-                    };
+            let res: Result<_, Diagnostics> = try {
+                // Compile
+                let program = parse_file(&mut context)?;
+                let mut checked = typecheck(&mut context, program)?;
+                let mir = borrow_check(&mut context, mir(&mut checked)?)?;
 
-                    // Interpret
-                    let res = interpret(mir).context("interpreter error")?;
-
+                // Interpret
+                interpret(mir).context("interpreter error")?
+            };
+            match res {
+                Ok(res) => {
                     println!("--------------------------------");
                     println!("{}", res);
                     Ok(())
                 }
                 Err(diagnostics) => {
                     diagnostics.display()?;
-                    ::anyhow::bail!("Compile errors");
+                    bail!("Interpretation failed");
                 }
             }
         }
@@ -203,11 +212,21 @@ fn main() -> anyhow::Result<()> {
                 filename: Some(filename),
             };
             let mut context = Context::new(config, &arena);
-            let program = parse_file(&mut context).context("Compilation failed")?;
-            let program = check_all(&mut context, program).context("Compilation error")?;
-            let modes = farm_modes(&mut context, &program);
-            println!("{:?}", modes);
-            Ok(())
+            let res: Result<_, Diagnostics> = try {
+                let program = parse_file(&mut context)?;
+                let program = check_all(&mut context, program)?;
+                farm_modes(&mut context, &program)
+            };
+            match res {
+                Ok(modes) => {
+                    println!("{:?}", modes);
+                    Ok(())
+                }
+                Err(diagnostics) => {
+                    diagnostics.display()?;
+                    bail!("Collecting modes failed");
+                }
+            }
         }
     }
 }

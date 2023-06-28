@@ -10,10 +10,18 @@ use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use crossbeam_queue::SegQueue;
 
-use crate::Arena;
-
 /// A compiler diagnostic.
 pub type Diagnostic = codespan_reporting::diagnostic::Diagnostic<()>;
+
+lazy_static! {
+    /// Terminal configuration.
+    static ref TERM_CONFIG: term::Config = term::Config::default();
+    /// Standard stream handle.
+    static ref STD_STREAM: StandardStream = StandardStream::stderr(ColorChoice::Always);
+    /// Dummy file descriptor for internal compiler errors.
+    static ref DUMMY_FILE_FOR_INTERNAL_ERRORS: SimpleFile<&'static str, &'static str> =
+        SimpleFile::new("internal error", "");
+}
 
 /// Collection of compiler diagnostics, ready to be displayed.
 pub struct Diagnostics<'ctx> {
@@ -31,6 +39,48 @@ pub struct Diagnostics<'ctx> {
     diagnostics: SegQueue<Diagnostic>,
     /// True iff `self.diagnostics` contains at least one error diagnostic.
     is_error: AtomicBool,
+}
+
+impl<'ctx> From<anyhow::Error> for Diagnostics<'ctx> {
+    fn from(err: anyhow::Error) -> Self {
+        let diagnostics = SegQueue::default();
+        let mut chain = err.chain().rev();
+        if let Some(final_error) = chain.next() {
+            let caused_by: Vec<_> = chain.map(|x| format!("Caused by: {x}")).collect();
+            diagnostics.push(
+                Diagnostic::error()
+                    .with_message(final_error.to_string())
+                    .with_notes(caused_by),
+            );
+        } else {
+            diagnostics.push(Diagnostic::error().with_message("internal compiler error"));
+        }
+        Self {
+            config: &TERM_CONFIG,
+            writer: &STD_STREAM,
+            files: &DUMMY_FILE_FOR_INTERNAL_ERRORS,
+            diagnostics,
+            is_error: AtomicBool::new(true),
+        }
+    }
+}
+
+impl<'ctx> From<std::io::Error> for Diagnostics<'ctx> {
+    fn from(err: std::io::Error) -> Self {
+        let diagnostics = SegQueue::default();
+        diagnostics.push(
+            Diagnostic::error()
+                .with_message("I/O error")
+                .with_notes(vec![err.to_string()]),
+        );
+        Self {
+            config: &TERM_CONFIG,
+            writer: &STD_STREAM,
+            files: &DUMMY_FILE_FOR_INTERNAL_ERRORS,
+            diagnostics,
+            is_error: AtomicBool::new(true),
+        }
+    }
 }
 
 impl<'ctx> Diagnostics<'ctx> {
@@ -94,13 +144,11 @@ pub struct Reporter<'ctx> {
 
 impl<'ctx> Reporter<'ctx> {
     /// Create a new `Reporter`.
-    pub fn new(arena: &'ctx Arena, files: &'ctx SimpleFile<&'ctx str, &'ctx str>) -> Self {
-        let writer = arena.alloc(StandardStream::stderr(ColorChoice::Always));
-        let config = arena.alloc(default());
+    pub fn new(files: &'ctx SimpleFile<&'ctx str, &'ctx str>) -> Self {
         Self {
             diagnostics: Diagnostics {
-                writer,
-                config,
+                config: &TERM_CONFIG,
+                writer: &STD_STREAM,
                 files,
                 diagnostics: default(),
                 is_error: AtomicBool::new(false),

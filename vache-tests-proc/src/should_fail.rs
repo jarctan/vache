@@ -55,7 +55,7 @@ pub fn should_fail(attr: TokenStream, item: TokenStream) -> TokenStream {
             let arena = ::vache_lib::Arena::new();
             let config = ::vache_lib::config::Config { input: "", ..::std::default::Default::default() };
             let mut context = ::vache_lib::Context::new(config, &arena);
-            match ::vache_lib::typecheck(&mut context, p)? {
+            match ::vache_lib::typecheck(&mut context, p) {
                 Err(diagnostics) => {
                     let codes = diagnostics.into_iter().flat_map(|diag| diag.code).collect::<Vec<String>>();
                     let codes = codes.iter().map(|code| code.as_str()).collect::<HashSet<&str>>();

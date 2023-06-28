@@ -63,75 +63,84 @@ fn exec_va(filename: &str) {
     };
     let mut context = Context::new(config, &arena);
 
-    // Parse and type/borrow check
-    let program = parse_file(&mut context).context("Compilation failed")?;
-    let program = check_all(&mut context, program).context("Compilation error")?;
+    let res: Result<_, ::vache_lib::reporter::Diagnostics> = try {
+        // Parse and type/borrow check
+        let program = parse_file(&mut context)?;
+        let program = check_all(&mut context, program)?;
 
-    // Get the mode for every place
-    let modes = farm_modes(&mut context, &program);
+        // Get the mode for every place
+        let modes = farm_modes(&mut context, &program);
 
-    // If we specified a borrow-testing section
-    if let Some(borrows) = borrows {
-        // One borrow per line, so split lines
-        for borrow in borrows
-            .split('\n')
-            .map(str::trim)
-            .filter(|borrow| !borrow.is_empty())
-        {
-            // Discard comments at the end
-            let borrow = borrow
-                .split_once("//")
-                .map(|(borrow, _comments)| borrow)
-                .unwrap_or(borrow)
-                .trim(); // <- Trim any whitespace
+        // If we specified a borrow-testing section
+        if let Some(borrows) = borrows {
+            // One borrow per line, so split lines
+            for borrow in borrows
+                .split('\n')
+                .map(str::trim)
+                .filter(|borrow| !borrow.is_empty())
+            {
+                // Discard comments at the end
+                let borrow = borrow
+                    .split_once("//")
+                    .map(|(borrow, _comments)| borrow)
+                    .unwrap_or(borrow)
+                    .trim(); // <- Trim any whitespace
 
-            // Match the `line:col:mode` pattern
-            let mut els = borrow.split(':');
-            let (line, col, expected) = (
-                els.next()
-                    .context("Wrong format: expected `line:col:mode`")?,
-                els.next()
-                    .context("Wrong format: expected `line:col:mode`")?,
-                els.next()
-                    .context("Wrong format: expected `line:col:mode`")?,
-            );
+                // Match the `line:col:mode` pattern
+                let mut els = borrow.split(':');
+                let (line, col, expected) = (
+                    els.next()
+                        .context("Wrong format: expected `line:col:mode`")?,
+                    els.next()
+                        .context("Wrong format: expected `line:col:mode`")?,
+                    els.next()
+                        .context("Wrong format: expected `line:col:mode`")?,
+                );
 
-            // Parse column and lines as integers
-            // And parse the mode string
-            let line = line.parse().context("Wrong format: line is not a number")?;
-            let col = col.parse().context("Wrong format: col is not a number")?;
-            let expected = match expected {
-                "Moved" => Mode::Moved,
-                "Borrowed" => Mode::Borrowed,
-                "Cloned" => Mode::Cloned,
-                _ => panic!("Wrong format: expected Moved, Borrowed or Cloned, found {expected}"),
-            };
+                // Parse column and lines as integers
+                // And parse the mode string
+                let line = line.parse().context("Wrong format: line is not a number")?;
+                let col = col.parse().context("Wrong format: col is not a number")?;
+                let expected = match expected {
+                    "Moved" => Mode::Moved,
+                    "Borrowed" => Mode::Borrowed,
+                    "Cloned" => Mode::Cloned,
+                    _ => {
+                        panic!("Wrong format: expected Moved, Borrowed or Cloned, found {expected}")
+                    }
+                };
 
-            // Fetch the actual mode for that line:col
-            let found = modes.get(&(line, col)).with_context(|| {
-                format!("
-                Position {line}:{col} do not correspond to any element with referencing mode in the code.
-                Make sure to indicate the _start_ position of the element to inspect")
-                .unindent()
-            })?;
+                // Fetch the actual mode for that line:col
+                let found = modes.get(&(line, col)).with_context(|| {
+                    format!("
+                    Position {line}:{col} do not correspond to any element with referencing mode in the code.
+                    Make sure to indicate the _start_ position of the element to inspect")
+                    .unindent()
+                })?;
 
-            ensure!(
-                &expected == found,
-                "expected {expected:?}, found {found:?} at {line}:{col}\nsee `{filename}` for details"
-            );
+                ensure!(
+                    &expected == found,
+                    "expected {expected:?}, found {found:?} at {line}:{col}\nsee `{filename}` for details"
+                );
+            }
         }
+
+        // Run
+        let res = run(&mut context, program, "test-binary", &cur_dir).context("execution error")?;
+
+        // Finally, check the result
+        ensure!(
+            res == expected,
+            format!(
+                "output mismatch\nexpected:\n{expected}\nfound:\n{res}\nsee `{filename}` for details"
+            )
+        );
+    };
+
+    if let Err(diagnostics) = res {
+        diagnostics.display()?;
+        ::anyhow::bail!("Compile errors");
     }
-
-    // Run
-    let res = run(&mut context, program, "test-binary", &cur_dir).context("execution error")?;
-
-    // Finally, check the result
-    ensure!(
-        res == expected,
-        format!(
-            "output mismatch\nexpected:\n{expected}\nfound:\n{res}\nsee `{filename}` for details"
-        )
-    );
 }
 
 /// Automatically detects and interprets `.vat` (Vache bundled test) files.
@@ -177,31 +186,23 @@ fn interpret_va(filename: &str) {
     };
     let mut context = Context::new(config, &arena);
 
-    // Parse and type/borrow check
-    let program = parse_file(&mut context).context("Compilation failed")?;
+    let res: Result<_, ::vache_lib::reporter::Diagnostics> = try {
+        // Parse and type/borrow check
+        let program = parse_file(&mut context)?;
+        let mut checked = typecheck(&mut context, program)?;
+        let mir = borrow_check(&mut context, mir(&mut checked)?)?;
+        eprintln!("MIR: {mir:?}");
 
-    match typecheck(&mut context, program)? {
-        Ok(mut checked) => {
-            let mir = match borrow_check(&mut context, mir(&mut checked)?)? {
-                Ok(mir) => mir,
-                Err(e) => {
-                    e.display()?;
-                    bail!("Borrow errors found");
-                }
-            };
-            eprintln!("MIR: {mir:?}");
+        // Interpret
+        let res = interpret(mir).context("execution error")?;
 
-            // Interpret
-            let res = interpret(mir).context("execution error")?;
-
-            ensure!(
-                res == expected,
+        ensure!(
+            res == expected,
             "output mismatch\nexpected:\n{expected}\nfound:\n{res}\nsee `{filename}` for details"
-            );
-        }
-        Err(diagnostics) => {
-            diagnostics.display()?;
-            ::anyhow::bail!("Compile errors");
-        }
+        );
+    };
+    if let Err(diagnostics) = res {
+        diagnostics.display()?;
+        ::anyhow::bail!("Compile errors");
     }
 }

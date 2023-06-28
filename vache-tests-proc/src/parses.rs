@@ -82,7 +82,13 @@ pub fn parses(attr: TokenStream, item: TokenStream) -> TokenStream {
             let config = crate::config::Config { input, ..::std::default::Default::default() };
             let mut ctx = crate::Context::new(config, &arena);
 
-            let #arg_name: #arg_ty = parse_rule(&mut ctx, crate::grammar::Rule::#rule)?;
+            let #arg_name: #arg_ty = match parse_rule(&mut ctx, crate::grammar::Rule::#rule) {
+                Ok(el) => el,
+                Err(diagnostics) => {
+                    diagnostics.display()?;
+                    bail!("Parsing errors");
+                }
+            };
             eprintln!("Parsed expression: {:?}", #arg_name);
             #body
             Ok(())

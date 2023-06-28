@@ -27,7 +27,7 @@ impl<'ctx> Context<'ctx> {
         ));
         Self {
             arena,
-            reporter: Reporter::new(arena, files),
+            reporter: Reporter::new(files),
             config,
             files,
         }
