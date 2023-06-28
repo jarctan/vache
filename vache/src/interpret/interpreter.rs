@@ -154,6 +154,14 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
             "&&" => self.bool_binop(|x, y| BoolV(*x && *y), args, stratum),
             "||" => self.bool_binop(|x, y| BoolV(*x || *y), args, stratum),
             "!" => self.bool_unop(|x| BoolV(!x), args, stratum),
+            "assert" => self.bool_unop(
+                |x| {
+                    assert!(x, "Assertion failed");
+                    UnitV
+                },
+                args,
+                stratum,
+            ),
             "print" => {
                 let args = args.iter().map(|arg| self.display(arg)).join(" ");
                 self.stdout.append(args);
@@ -248,13 +256,13 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
         self.env.last_mut().unwrap().add_var(name, r);
 
         // Keep it, useful for debugging
-        eprintln!(
+        /* eprintln!(
             "[{:?} : {:?} = {:?} i.e. {}]",
             name,
             r,
             self.get_value(r),
             self.display(&r)
-        );
+        );*/
     }
 
     /// Assigns `*ptr`.
@@ -264,13 +272,13 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
         let r = self.get_ptr(ptr);
         self.set_value(r, value);
         // Keep it, useful for debugging
-        eprintln!(
+        /*eprintln!(
             "[{:?} : {:?} = {:?} i.e. {}]",
             ptr.place(),
             r,
             self.get_value(r),
             self.display(&r)
-        );
+        );*/
     }
 
     /// Adds a value to the dynamic store/slab.
@@ -484,7 +492,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     /// Executes an expression, returning the first label that do not exist in
     /// the CFG. Often, this is the return/exit label.
     fn visit_cfg(&mut self, cfg: &CfgI<'mir, 'ctx>, label: CfgLabel) {
-        eprintln!("{:?}", cfg[&label].kind);
+        //eprintln!("{:?}", cfg[&label].kind);
         let branch = match &cfg[&label].kind {
             InstrKind::Noop => DefaultB,
             InstrKind::Assign(ptr, rvalue) => {

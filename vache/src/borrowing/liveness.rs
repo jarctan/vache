@@ -97,13 +97,9 @@ fn loan_liveness<'ctx>(
     let mut updated = true;
 
     while updated {
-        #[cfg(not(test))]
-        println!("TRRRRRRRRRRRRRYYYYYY\n\n\n\n");
         updated = false;
 
         for (label, instr) in cfg.postorder(entry_l).rev() {
-            #[cfg(not(test))]
-            println!("{:?}", instr);
             let predecessors = cfg.preneighbors(label);
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
             let mut outs: Ledger = match &instr.kind {
@@ -227,9 +223,9 @@ pub fn liveness<'mir, 'ctx>(
                                 updated = true;
                                 reference.set_mode(Mode::Moved);
                             } else {
-                                #[cfg(not(test))]
+                                /*#[cfg(not(test))]
                                 println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
-                                /*panic!(
+                                panic!(
                                     "Cannot move {loc:?} out  because {loans:?} are still active in {instr:?}"
                                 );*/
                             }
@@ -320,8 +316,8 @@ pub fn liveness<'mir, 'ctx>(
         ..
     } in invalidated
     {
-        #[cfg(not(test))]
-        println!("Invalidation: {:?}", borrow);
+        /*#[cfg(not(test))]
+        println!("Invalidation: {:?}", borrow);*/
         debug_assert!(!mutable, "Borrow {borrow:?} is mutable");
         cfg[&label].force_clone(&ptr);
     }

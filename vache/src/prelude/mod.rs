@@ -18,6 +18,7 @@ mod integer;
 mod lints;
 mod range;
 mod reexports;
+mod var;
 mod vec;
 
 /// Producing the necessary prelude for all our outputs.
@@ -28,6 +29,7 @@ pub fn prelude() -> TokenStream {
     let integer = integer::integer();
     let range = range::range();
     let cow = cow::cow();
+    let var = var::var();
     let field = field::field();
     let functions = functions::functions();
     let vec = vec::vec();
@@ -44,6 +46,8 @@ pub fn prelude() -> TokenStream {
         #range
 
         #cow
+
+        #var
 
         #vec
 

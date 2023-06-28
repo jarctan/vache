@@ -4,7 +4,7 @@
 use super::*;
 
 #[test]
-fn basic_lifetime() {
+fn basic_lifetime() -> Result<()> {
     test(vec![Fun {
         name: "main",
         body: Block {
@@ -20,5 +20,5 @@ fn basic_lifetime() {
             span: default(),
         },
         ..default()
-    }]);
+    }])
 }

@@ -1,7 +1,7 @@
 {
     "name": "vache-syntax",
     "displayName": "Vache Syntax",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "description": "Vache syntax highlighting",
     "author": "Jonathan Arnoult",
     "publisher": "jarctan",

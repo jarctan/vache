@@ -14,7 +14,7 @@ fn person_struct<'ctx>() -> Struct<'ctx> {
 }
 
 #[test]
-fn simple_structure() {
+fn simple_structure() -> Result<()> {
     test(Program::new(
         vec![person_struct()],
         default(),
@@ -36,7 +36,7 @@ fn simple_structure() {
             ]),
             ..default()
         }],
-    ));
+    ))
 }
 
 #[test]

@@ -16,7 +16,7 @@ use vache_lib::Arena;
 
 use super::*;
 
-fn test<'ctx>(p: impl Into<Program<'ctx>>) {
+fn test<'ctx>(p: impl Into<Program<'ctx>>) -> Result<()> {
     let arena = Arena::new();
     let config = Config {
         input: "",
@@ -25,5 +25,7 @@ fn test<'ctx>(p: impl Into<Program<'ctx>>) {
     let mut context = Context::new(config, &arena);
     if let Err(err) = vache_lib::typecheck(&mut context, p.into()).expect("Compiler error") {
         err.display().expect("Could not print typer errors");
+        bail!("Typing errors");
     }
+    Ok(())
 }

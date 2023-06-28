@@ -6,7 +6,7 @@ use super::*;
 #[test]
 fn wrong_nested_scopes() -> Program {
     vec![Fun {
-        name: "wrong_scopes",
+        name: "main",
         body: stmts(vec![
             ExprS(block(stmts(vec![declare(vardef("d", IntT), int(2))]))).into(),
             declare(vardef("e", IntT), var("d")),
@@ -17,14 +17,14 @@ fn wrong_nested_scopes() -> Program {
 }
 
 #[test]
-fn nested_scopes() {
+fn nested_scopes() -> Result<()> {
     test(vec![Fun {
-        name: "nested_scopes",
+        name: "main",
         body: Block {
             stmts: vec![declare(vardef("e", IntT), int(2))],
             ret: block(stmts(vec![declare(vardef("d", IntT), var("e"))])),
             span: default(),
         },
         ..default()
-    }]);
+    }])
 }

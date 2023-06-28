@@ -3,7 +3,7 @@
 use super::*;
 
 #[test]
-fn simple_array() {
+fn simple_array() -> Result<()> {
     test(Program::from(Fun {
         name: "main",
         body: stmts(vec![declare(
@@ -11,7 +11,7 @@ fn simple_array() {
             array([int(0), int(1), int(2), int(3)]),
         )]),
         ..default()
-    }));
+    }))
 }
 
 #[should_fail(HETEROGENEOUS_LISTS_ERROR)]
@@ -60,7 +60,7 @@ fn empty_list() -> Program {
 }
 
 #[test]
-fn simple_array_indexing() {
+fn simple_array_indexing() -> Result<()> {
     test(Program::from(Fun {
         name: "main",
         body: stmts(vec![
@@ -72,5 +72,5 @@ fn simple_array_indexing() {
             print([var("item")]),
         ]),
         ..default()
-    }));
+    }))
 }

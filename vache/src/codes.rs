@@ -35,6 +35,8 @@ pub const NOT_IN_LOOP_ERROR: &str = "E0015";
 pub const TUPLE_ACCESS_ERROR: &str = "E0016";
 /// Generic borrowing error.
 pub const BORROW_ERROR: &str = "E0017";
+/// Error if there is no main function.
+pub const NO_MAIN_FN_ERROR: &str = "E0018";
 /// Temporary: empty list error.
 pub const EMPTY_LIST_ERROR: &str = "E0100";
 /// Temporary: empty match error.

@@ -4,7 +4,7 @@
 use super::*;
 
 #[test]
-fn mutual_structs() {
+fn mutual_structs() -> Result<()> {
     test(Program::new(
         vec![
             Struct {
@@ -27,6 +27,9 @@ fn mutual_structs() {
             },
         ],
         default(),
-        default(),
-    ));
+        vec![Fun {
+            name: "main",
+            ..default()
+        }],
+    ))
 }

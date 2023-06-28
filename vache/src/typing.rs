@@ -115,6 +115,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         typer.add_fun(binop_bool_sig("&&", BoolT));
         typer.add_fun(binop_bool_sig("||", BoolT));
         typer.add_fun(unop_bool_sig("!", BoolT));
+        typer.add_fun(unop_bool_sig("assert", UnitT));
 
         typer
     }
@@ -1309,14 +1310,25 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             .map(|e| (e.name, self.visit_enum(e)))
             .collect();
 
+        let funs: HashMap<_, _> = funs
+            .into_iter()
+            .map(|f| (f.name, self.visit_fun(f)))
+            .collect();
+
+        // Emit an error if there is no `main` function
+        if !funs.contains_key("main") {
+            self.ctx.emit(
+                Diagnostic::error()
+                    .with_code(NO_MAIN_FN_ERROR)
+                    .with_message("Please add a `main` function to your program"),
+            );
+        }
+
         Program {
             arena: self.ctx.arena,
             structs: self.ctx.alloc(structs),
             enums: self.ctx.alloc(enums),
-            funs: funs
-                .into_iter()
-                .map(|f| (f.name, self.visit_fun(f)))
-                .collect(),
+            funs,
         }
     }
 

@@ -100,12 +100,12 @@ impl<'ctx> Ledger<'ctx> {
             .remove(loc)
             .map_or(default(), |node| node.into());
 
-        #[cfg(not(test))]
+        /*#[cfg(not(test))]
         println!(
             "Flushing {:?}{} with borrows {borrows:?}",
             loc,
             if force { " forcefully" } else { "" }
-        );
+        );*/
 
         for borrow in borrows.iter() {
             // If the borrow is not invalidated, remove it from the loans.
@@ -130,10 +130,10 @@ impl<'ctx> Ledger<'ctx> {
                 removed_loans,
                 loc,
             );
-            if !removed_loans.is_empty() {
+            /*if !removed_loans.is_empty() {
                 #[cfg(not(test))]
                 println!("Invalidated ici with {:?}", removed_loans);
-            }
+            }*/
             self.invalidations.extend(removed_loans);
         }
 
@@ -146,12 +146,12 @@ impl<'ctx> Ledger<'ctx> {
         if locs.is_empty() {
             return;
         }
-        #[cfg(not(test))]
+        /*#[cfg(not(test))]
         println!(
             "Flushing {:?}{}",
             locs,
             if force { " forcefully" } else { "" }
-        );
+        );*/
 
         // First, remove all the borrows of the locations to flush
         // We store at the same time the locations we really want to remove from the
@@ -166,8 +166,8 @@ impl<'ctx> Ledger<'ctx> {
                 .map_or(default(), |node| node.into());
 
             if !borrows.is_empty() {
-                #[cfg(not(test))]
-                println!("{loc:?} has borrows {borrows:?}, so must scheduled for cleanup");
+                /*#[cfg(not(test))]
+                println!("{loc:?} has borrows {borrows:?}, so must scheduled for cleanup");*/
                 to_clean.insert(*loc);
             }
 
@@ -197,13 +197,13 @@ impl<'ctx> Ledger<'ctx> {
                 .into_iter()
                 .filter(|loan| !locs.contains(&loan.borrower))
                 .collect();
-            if !removed_loans.is_empty() {
+            /*if !removed_loans.is_empty() {
                 #[cfg(not(test))]
                 println!(
                     "Invalidated by out of scope of {loc:?}: {:?} (only {locs:?} allowed)",
                     removed_loans
                 );
-            }
+            }*/
             self.invalidations.extend(removed_loans);
         }
     }
@@ -233,8 +233,8 @@ impl<'ctx> Ledger<'ctx> {
                     Ok(borrows) => {
                         for borrow in borrows {
                             debug_assert!(!borrow.mutable);
-                            #[cfg(not(test))]
-                            println!("Invalidated flatten {:?}", borrow);
+                            /*#[cfg(not(test))]
+                            println!("Invalidated flatten {:?}", borrow);*/
                             self.invalidations.insert(borrow);
                         }
                         retained.insert(borrow);
@@ -244,8 +244,8 @@ impl<'ctx> Ledger<'ctx> {
                             self.unrecoverables.insert(borrow, contradiction);
                         } else {
                             debug_assert!(!borrow.mutable);
-                            #[cfg(not(test))]
-                            println!("Invalidated flatten 2 {:?}", borrow);
+                            /*#[cfg(not(test))]
+                            println!("Invalidated flatten 2 {:?}", borrow);*/
                             self.invalidations.insert(borrow);
                         }
                     }
@@ -262,8 +262,8 @@ impl<'ctx> Ledger<'ctx> {
         let place = place.into();
         let loc = place.root();
 
-        #[cfg(not(test))]
-        println!("Adding {place:?} with {borrows:?}");
+        /*#[cfg(not(test))]
+        println!("Adding {place:?} with {borrows:?}");*/
 
         // First, flush the place.
         self.flush_place(place, true);
@@ -278,13 +278,13 @@ impl<'ctx> Ledger<'ctx> {
             match self.loans.get_mut_or_insert(borrow.loc()).insert(borrow) {
                 Ok(borrows) => {
                     if !borrows.is_empty() {
-                        #[cfg(not(test))]
-                        println!("Mutable borrow {borrow:?} invalidates {borrows:?}");
+                        /*#[cfg(not(test))]
+                        println!("Mutable borrow {borrow:?} invalidates {borrows:?}");*/
                     }
                     for borrow in borrows {
                         debug_assert!(!borrow.mutable);
-                        #[cfg(not(test))]
-                        println!("Invalidated flatten 3 {:?}", borrow);
+                        /*#[cfg(not(test))]
+                        println!("Invalidated flatten 3 {:?}", borrow);*/
                         self.invalidations.insert(borrow);
                     }
                 }
@@ -293,10 +293,10 @@ impl<'ctx> Ledger<'ctx> {
                         self.unrecoverables.insert(borrow, contradiction);
                     } else {
                         debug_assert!(!borrow.mutable);
-                        #[cfg(not(test))]
+                        /*#[cfg(not(test))]
                         println!("Invalidated there");
                         #[cfg(not(test))]
-                        println!("Invalidated flatten 4 {:?}", borrow);
+                        println!("Invalidated flatten 4 {:?}", borrow);*/
                         self.invalidations.insert(borrow);
                     }
                 }
@@ -309,12 +309,12 @@ impl<'ctx> Ledger<'ctx> {
                 if borrows.is_empty() {
                     self.borrows.remove(loc);
                 } else {
-                    #[cfg(not(test))]
-                    println!("Registering borrows");
+                    /*#[cfg(not(test))]
+                    println!("Registering borrows");*/
                     *self.borrows.get_mut_or_insert(loc) = borrows.into_iter().collect();
-                    let borrows: Vec<Borrow> = self.borrows.get_all(loc).collect();
+                    /*let borrows: Vec<Borrow> = self.borrows.get_all(loc).collect();
                     #[cfg(not(test))]
-                    println!("Registered borrows {borrows:?}");
+                    println!("Registered borrows {borrows:?}");*/
                 }
             }
             Err(()) => {

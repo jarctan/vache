@@ -35,6 +35,10 @@ impl<'mir, 'ctx: 'mir> Reference<'mir, 'ctx> {
 
     /// Creates a new [`Reference`], with multiple referencing modes at the same
     /// time.
+    ///
+    /// Ok if not all modes are equal, but they will be made equal in case we
+    /// change to a clone or a move. In that case, the first element should be
+    /// the main mode.
     pub fn new_multi_modes(ptr: Pointer<'ctx>, modes: Vec<&'mir mut Mode>) -> Self {
         Self {
             pointer: ptr,

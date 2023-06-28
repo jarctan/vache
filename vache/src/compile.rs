@@ -46,79 +46,47 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     }
 
     /// Translate a type into a Rust type.
-    pub fn translate_type(ty: &Ty, show_lifetime: bool) -> TokenStream {
+    pub fn translate_type(ty: &Ty, show_lifetime: bool, wrap_var: bool) -> TokenStream {
+        let wrapper = if wrap_var { quote!(Var) } else { quote!(Cow) };
+        let lft = if show_lifetime {
+            if wrap_var {
+                quote!('a, 'b, ) // two lifetimes are needed for `Var`
+            } else {
+                quote!('b, ) // only one is needed for `Cow`
+            }
+        } else {
+            quote!() // no lifetime needed then
+        };
         match ty {
             UnitT => quote!(()),
-            BoolT => {
-                if show_lifetime {
-                    quote!(Cow<'a, bool>)
-                } else {
-                    quote!(Cow<bool>)
-                }
-            }
-            IntT => {
-                if show_lifetime {
-                    quote!(Cow<'a, __Integer>)
-                } else {
-                    quote!(Cow<__Integer>)
-                }
-            }
-            StrT => {
-                if show_lifetime {
-                    quote!(Cow<'a, __String>)
-                } else {
-                    quote!(Cow<__String>)
-                }
-            }
+            BoolT => quote!(#wrapper<#lft bool>),
+            IntT => quote!(#wrapper<#lft __Integer>),
+            StrT => quote!(#wrapper<#lft __String>),
             StructT(name) => {
                 let name = format_ident!("{}", name);
-                if show_lifetime {
-                    quote!(Cow<'a, #name>)
-                } else {
-                    quote!(Cow<#name>)
-                }
+                quote!(#wrapper<#lft #name>)
             }
             EnumT(name) => {
                 let name = format_ident!("{}", name);
-                if show_lifetime {
-                    quote!(Cow<'a, #name>)
-                } else {
-                    quote!(Cow<#name>)
-                }
+                quote!(#wrapper<#lft #name>)
             }
             VarT(name) => {
                 let name = format_ident!("{}", name);
-                if show_lifetime {
-                    quote!(Cow<'a, #name>)
-                } else {
-                    quote!(Cow<#name>)
-                }
+                quote!(#wrapper<#lft #name>)
             }
             ArrayT(ty) => {
-                let ty = Self::translate_type(ty, show_lifetime);
-                if show_lifetime {
-                    quote!(Cow<'a, __Vec<#ty>>)
-                } else {
-                    quote!(Cow<__Vec<#ty>>)
-                }
+                let ty = Self::translate_type(ty, show_lifetime, true);
+                quote!(#wrapper<#lft __Vec<#ty>>)
             }
             TupleT(items) => {
                 let items = items
                     .iter()
-                    .map(|item| Self::translate_type(item, show_lifetime));
-                if show_lifetime {
-                    quote!(Cow<'a, (#(Field<#items>),*)>)
-                } else {
-                    quote!(Cow<(#(Field<#items>),*)>)
-                }
+                    .map(|item| Self::translate_type(item, show_lifetime, true));
+                quote!(#wrapper<#lft (#(#items),*)>)
             }
             IterT(ty) => {
-                let ty = Self::translate_type(ty, show_lifetime);
-                if show_lifetime {
-                    quote!(Cow<'a, __Range<#ty>>)
-                } else {
-                    quote!(Cow<__Range<#ty>>)
-                }
+                let ty = Self::translate_type(ty, show_lifetime, true);
+                quote!(#wrapper<#lft __Range<#ty>>)
             }
             HoleT => unreachable!(),
         }
@@ -135,9 +103,9 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         match place.kind {
             VarP(var) => {
                 let var = self.visit_var(var);
-                let ty = Self::translate_type(&place.ty, false);
+                let ty = Self::translate_type(&place.ty, false, true);
                 match place.mode {
-                    LhsMode::Assigning => quote!(#var),
+                    LhsMode::Assigning => quote!(*(#var)),
                     LhsMode::Declaring => quote!(let mut #var: #ty),
                 }
             }
@@ -145,27 +113,27 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let (line, col) = index.span.line_col(self.ctx.files);
                 let filename = self.ctx.files.name();
                 let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
-                let array = self.visit_expr(array);
-                let index = self.visit_expr(index);
+                let array = self.visit_expr(array, false);
+                let index = self.visit_expr(index, false);
                 let index = quote!((#index).to_usize().unwrap());
                 match place.mode {
-                    LhsMode::Assigning => quote!((*(#array).get_mut(#index).context(#codespan)?)),
+                    LhsMode::Assigning => quote!(**(#array).get_mut(#index).context(#codespan)?),
                     LhsMode::Declaring => unreachable!(),
                 }
             }
             FieldP(box strukt, field) => {
-                let strukt = self.visit_expr(strukt);
+                let strukt = self.visit_expr(strukt, false);
                 let field = format_ident!("{}", field);
                 match place.mode {
-                    LhsMode::Assigning => quote!((#strukt).#field),
+                    LhsMode::Assigning => quote!(*(#strukt).#field),
                     LhsMode::Declaring => unreachable!(),
                 }
             }
             ElemP(box tuple, elem) => {
-                let tuple = self.visit_expr(tuple);
+                let tuple = self.visit_expr(tuple, false);
                 let elem = syn::Index::from(elem);
                 match place.mode {
-                    LhsMode::Assigning => quote!((#tuple).#elem),
+                    LhsMode::Assigning => quote!(*(#tuple).#elem),
                     LhsMode::Declaring => unreachable!(),
                 }
             }
@@ -173,65 +141,155 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     }
 
     /// Compiles a place.
-    fn visit_place(&mut self, place: Place<'ctx>) -> TokenStream {
+    fn visit_place(&mut self, place: Place<'ctx>, wrap_var: bool) -> TokenStream {
         match place.kind {
             VarP(var) => {
                 let var = self.visit_var(var);
                 match place.mode {
-                    Mode::Cloned => quote!(#var.clone()),
-                    Mode::Borrowed => quote!(__borrow(&#var)),
+                    Mode::Cloned => {
+                        if wrap_var {
+                            quote!(#var.clone())
+                        } else {
+                            quote!(Var::to_cow(&mut #var.clone()))
+                        }
+                    }
+                    Mode::Borrowed => {
+                        if wrap_var {
+                            quote!(__ref(&#var))
+                        } else {
+                            quote!(__borrow(&mut *#var))
+                        }
+                    }
                     Mode::SBorrowed => quote!(#var),
-                    Mode::MutBorrowed => quote!(__borrow_mut(&mut #var)),
+                    Mode::MutBorrowed => {
+                        if wrap_var {
+                            quote!(__ref_mut(&mut #var))
+                        } else {
+                            quote!(__borrow_mut(&mut *#var))
+                        }
+                    }
                     Mode::SMutBorrowed => quote!(#var),
-                    Mode::Moved => quote!(#var),
+                    Mode::Moved => {
+                        if wrap_var {
+                            quote!(Var::__take(&mut #var))
+                        } else {
+                            quote!(Cow::__take(&mut #var))
+                        }
+                    }
                 }
             }
             IndexP(box array, box index) => {
                 let (line, col) = index.span.line_col(self.ctx.files);
                 let filename = self.ctx.files.name();
                 let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
-                let array = self.visit_expr(array);
-                let index = self.visit_expr(index);
+                let array = self.visit_expr(array, false);
+                let index = self.visit_expr(index, false);
                 let index = quote!((#index).to_usize().unwrap());
                 match place.mode {
                     Mode::Borrowed => {
-                        quote!(__borrow((#array).get(#index).context(#codespan)?))
+                        if wrap_var {
+                            quote!(__ref((#array).get(#index).context(#codespan)?))
+                        } else {
+                            unimplemented!()
+                        }
                     }
-                    Mode::SBorrowed => {
-                        quote!((#array).get(#index).context(#codespan)?)
-                    }
+                    Mode::SBorrowed => quote!((#array).get(#index).context(#codespan)?),
                     Mode::SMutBorrowed => {
                         quote!(#array.get_mut(#index).context(#codespan)?)
                     }
                     Mode::MutBorrowed => {
-                        quote!(__borrow_mut((#array).get_mut(#index).context(#codespan)?))
+                        if wrap_var {
+                            quote!(__ref_mut((#array).get_mut(#index).context(#codespan)?))
+                        } else {
+                            unimplemented!()
+                        }
                     }
-                    Mode::Cloned => quote!((#array).get(#index).context(#codespan)?.clone()),
-                    Mode::Moved => quote!((#array).remove(#index).context(#codespan)?),
+                    Mode::Cloned => {
+                        if wrap_var {
+                            quote!(Var::clone((#array).get(#index).context(#codespan)?))
+                        } else {
+                            quote!(Cow::clone(&*(#array).get(#index).context(#codespan)?))
+                        }
+                    }
+                    Mode::Moved => {
+                        if wrap_var {
+                            quote!(#array.remove(#index).context(#codespan)?)
+                        } else {
+                            quote!(Cow::remove(#array.__take(), #index).context(#codespan)?)
+                        }
+                    }
                 }
             }
             FieldP(box strukt, field) => {
-                let strukt = self.visit_expr(strukt);
+                let strukt = self.visit_expr(strukt, false);
                 let field = format_ident!("{}", field);
                 match place.mode {
-                    Mode::Borrowed => quote!(__borrow((#strukt).#field.as_ref())),
+                    Mode::Borrowed => {
+                        if wrap_var {
+                            quote!(__ref(&(#strukt).#field))
+                        } else {
+                            quote!(__borrow(&*(#strukt).#field))
+                        }
+                    }
                     Mode::SBorrowed => unimplemented!(),
-                    Mode::MutBorrowed => quote!(__borrow_mut((#strukt).#field.as_mut())),
+                    Mode::MutBorrowed => {
+                        if wrap_var {
+                            quote!(__ref_mut(&mut (#strukt).#field))
+                        } else {
+                            quote!(__borrow_mut(&mut *(#strukt).#field))
+                        }
+                    }
                     Mode::SMutBorrowed => unimplemented!(),
-                    Mode::Cloned => quote!((#strukt).#field.clone().take()),
-                    Mode::Moved => quote!((#strukt).#field.take()),
+                    Mode::Cloned => {
+                        if wrap_var {
+                            quote!(Var::clone(&(#strukt).#field))
+                        } else {
+                            quote!(Cow::clone(&*(#strukt).#field))
+                        }
+                    }
+                    Mode::Moved => {
+                        if wrap_var {
+                            quote!(Var::__take(&mut (#strukt).#field))
+                        } else {
+                            quote!(Cow::__take(&mut (#strukt).#field))
+                        }
+                    }
                 }
             }
             ElemP(box tuple, elem) => {
-                let tuple = self.visit_expr(tuple);
+                let tuple = self.visit_expr(tuple, false);
                 let elem = syn::Index::from(elem);
                 match place.mode {
-                    Mode::Borrowed => quote!(__borrow((#tuple).#elem.as_ref())),
+                    Mode::Borrowed => {
+                        if wrap_var {
+                            quote!(__ref(&(#tuple).#elem))
+                        } else {
+                            quote!(__borrow(&(#tuple).#elem))
+                        }
+                    }
                     Mode::SBorrowed => unimplemented!(),
-                    Mode::MutBorrowed => quote!(__borrow_mut((#tuple).#elem.as_mut())),
+                    Mode::MutBorrowed => {
+                        if wrap_var {
+                            quote!(__ref_mut(&mut (#tuple).#elem))
+                        } else {
+                            quote!(__borrow_mut(&mut *(#tuple).#elem))
+                        }
+                    }
                     Mode::SMutBorrowed => unimplemented!(),
-                    Mode::Cloned => quote!((#tuple).#elem.clone().take()),
-                    Mode::Moved => quote!((#tuple).#elem.take()),
+                    Mode::Cloned => {
+                        if wrap_var {
+                            quote!(Var::clone(&(#tuple).#elem))
+                        } else {
+                            quote!(Cow::clone(&*(#tuple).#elem))
+                        }
+                    }
+                    Mode::Moved => {
+                        if wrap_var {
+                            quote!(Var::__take(&mut (#tuple).#elem))
+                        } else {
+                            quote!(Cow::__take(&mut (#tuple).#elem))
+                        }
+                    }
                 }
             }
         }
@@ -245,13 +303,13 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             .iter()
             .map(|(field, ty)| {
                 let field = format_ident!("{field}");
-                let ty = Self::translate_type(&ty.kind, true);
-                quote!(#field: Field<#ty>,)
+                let ty = Self::translate_type(&ty.kind, true, true);
+                quote!(#field: #ty,)
             })
             .collect();
         quote!(
             #[derive(Debug, Clone)]
-            pub struct #name<'a> {
+            pub struct #name<'a, 'b> {
                 #fields
             }
         )
@@ -268,7 +326,9 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 if args.is_empty() {
                     quote!(#variant,)
                 } else {
-                    let args = args.iter().map(|arg| Self::translate_type(&arg.kind, true));
+                    let args = args
+                        .iter()
+                        .map(|arg| Self::translate_type(&arg.kind, true, true));
                     quote!(#variant(#(#args),*),)
                 }
             })
@@ -293,11 +353,11 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
 
         quote!(
             #[derive(Debug, Clone)]
-            pub enum #name<'a> {
+            pub enum #name<'a, 'b> {
                 #variants
             }
 
-            impl<'a> ::std::fmt::Display for #name<'a> {
+            impl<'a, 'b> ::std::fmt::Display for #name<'a, 'b> {
                 fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
                     match self {
                         #(#variants_display)*
@@ -308,38 +368,39 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     }
 
     /// Compiles a expression kind.
-    fn visit_expr(&mut self, expr: Expr<'ctx>) -> TokenStream {
+    fn visit_expr(&mut self, expr: Expr<'ctx>, wrap_var: bool) -> TokenStream {
+        let wrapper = if wrap_var { quote!(Var) } else { quote!(Cow) };
         match expr.kind {
             UnitE => quote!(()),
-            BoolE(b) => quote!(Cow::Owned(#b)),
+            BoolE(b) => quote!(#wrapper::owned(#b)),
             IntegerE(i) => {
                 let i = i
                     .to_u128()
                     .expect("Integer {i} is too big to be represented in source code");
-                quote!(Cow::Owned( __Integer::try_from(#i).unwrap()))
+                quote!(#wrapper::owned( __Integer::try_from(#i).unwrap()))
             }
             StringE(s) => {
-                quote!(Cow::Owned(__String::from(#s)))
+                quote!(#wrapper::owned(__String::from(#s)))
             }
-            PlaceE(p) => self.visit_place(p),
+            PlaceE(p) => self.visit_place(p, wrap_var),
             StructE { name, fields } => {
                 let name = format_ident!("{name}");
                 let fields = fields.into_iter().map(|(name, expr)| {
                     let name = format_ident!("{name}");
-                    let expr = self.visit_expr(expr);
-                    quote!(#name: Field::new(#expr))
+                    let expr = self.visit_expr(expr, true);
+                    quote!(#name: #expr)
                 });
-                quote!(Cow::Owned(#name {
+                quote!(#wrapper::owned(#name {
                     #(#fields),*
                 }))
             }
             ArrayE(array) => {
-                let items = array.into_iter().map(|item| self.visit_expr(item));
-                quote!(Cow::Owned(__Vec(vec![#(#items),*])))
+                let items = array.into_iter().map(|item| self.visit_expr(item, true));
+                quote!(#wrapper::owned(__Vec(vec![#(#items),*])))
             }
             TupleE(items) => {
-                let items = items.into_iter().map(|item| self.visit_expr(item));
-                quote!(Cow::Owned((#(Field::new(#items)),*)))
+                let items = items.into_iter().map(|item| self.visit_expr(item, true));
+                quote!(#wrapper::owned((#(#items),*)))
             }
             CallE { name, args } => {
                 if name.name == "print" {
@@ -354,11 +415,11 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         builder.append(" {}");
                     }
 
-                    let args = args.into_iter().map(|arg| self.visit_expr(arg));
+                    let args = args.into_iter().map(|arg| self.visit_expr(arg, true));
                     let fmt_str = builder.string().unwrap();
                     quote!(println!(#fmt_str, #(#args),*))
                 } else {
-                    let args = args.into_iter().map(|arg| self.visit_expr(arg));
+                    let args = args.into_iter().map(|arg| self.visit_expr(arg, true));
                     let name = match name.name {
                         "+" => "__add".to_string(),
                         "-" => "__sub".to_string(),
@@ -377,7 +438,11 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         _ => name.name.to_string(),
                     };
                     let name = format_ident!("{name}");
-                    quote!(#name(#(#args),*)?)
+                    if wrap_var {
+                        quote!(Var::Owned(#name(#(#args),*)?))
+                    } else {
+                        quote!(#name(#(#args),*)?)
+                    }
                 }
             }
             VariantE {
@@ -390,26 +455,26 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
 
                 // Special case for unit variant, do not show the `()`
                 if args.is_empty() {
-                    quote!(Cow::Owned(#enun::#variant))
+                    quote!(#wrapper::owned(#enun::#variant))
                 } else {
-                    let args = args.into_iter().map(|arg| self.visit_expr(arg));
-                    quote!(Cow::Owned(#enun::#variant(#(#args),*)))
+                    let args = args.into_iter().map(|arg| self.visit_expr(arg, true));
+                    quote!(#wrapper::owned(#enun::#variant(#(#args),*)))
                 }
             }
             IfE(box cond, box iftrue, box iffalse) => {
-                let cond = self.visit_expr(cond);
-                let iftrue = self.visit_block(iftrue);
-                let iffalse = self.visit_block(iffalse);
+                let cond = self.visit_expr(cond, false);
+                let iftrue = self.visit_block(iftrue, wrap_var);
+                let iffalse = self.visit_block(iffalse, wrap_var);
 
                 quote! {
                     if *(#cond) #iftrue else #iffalse
                 }
             }
             MatchE(box matched, branches) => {
-                let matched = self.visit_expr(matched);
+                let matched = self.visit_expr(matched, false);
                 let branches = branches.into_iter().map(|(pattern, branch)| {
                     let pattern = self.visit_pattern(pattern);
-                    let branch = self.visit_expr(branch);
+                    let branch = self.visit_expr(branch, wrap_var);
                     quote!(| #pattern => #branch)
                 });
 
@@ -420,14 +485,14 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     }
                 }
             }
-            BlockE(box block) => self.visit_block(block),
+            BlockE(box block) => self.visit_block(block, wrap_var),
             HoleE => {
                 panic!("Cannot compile code with holes; your code probably even did not typecheck")
             }
             RangeE(box start, box end) => {
-                let start = self.visit_expr(start);
-                let end = self.visit_expr(end);
-                quote!(Cow::Owned(__Range::new(#start,#end)))
+                let start = self.visit_expr(start, true);
+                let end = self.visit_expr(end, true);
+                quote!(#wrapper::owned(__Range::new(#start,#end)))
             }
         }
     }
@@ -465,41 +530,33 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     fn visit_stmt(&mut self, stmt: Stmt<'ctx>) -> TokenStream {
         match stmt.kind {
             AssignS(lhs, rhs) => {
-                // Different output if we have a field at lhs
-                let is_field = matches!(lhs.kind, FieldP(..) | ElemP(..));
-
+                let lhs_mode = lhs.mode;
+                let rhs = self.visit_expr(rhs, matches!(lhs_mode, LhsMode::Declaring));
                 let lhs = self.visit_lhs_place(lhs);
-                let rhs = self.visit_expr(rhs);
 
                 // For fields, add a `Field` wrapper
-                if is_field {
-                    quote! {
-                        #lhs = Field::new(#rhs);
-                    }
-                } else {
-                    quote! {
-                        #lhs = #rhs;
-                    }
+                quote! {
+                    #lhs = #rhs;
                 }
             }
             ExprS(expr) => {
-                let expr = self.visit_expr(expr);
+                let expr = self.visit_expr(expr, false);
                 quote! {
                     #expr;
                 }
             }
             WhileS { cond, body } => {
-                let cond = self.visit_expr(cond);
-                let body = self.visit_block(body);
+                let cond = self.visit_expr(cond, false);
+                let body = self.visit_block(body, false);
                 quote! {
-                    while *(#cond) #body
+                    while *#cond #body
                 }
             }
 
             ForS { item, iter, body } => {
                 let item = format_ident!("{}", item.name().as_str());
-                let iter = self.visit_expr(iter);
-                let body = self.visit_block(body);
+                let iter = self.visit_expr(iter, false);
+                let body = self.visit_block(body, false);
                 quote! {
                     for #item in #iter #body
                 }
@@ -508,14 +565,14 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             BreakS => quote!(break;),
             ContinueS => quote!(continue;),
             ReturnS(ret) => {
-                let ret = self.visit_expr(ret);
+                let ret = self.visit_expr(ret, false);
                 quote!(return Ok(#ret);)
             }
         }
     }
 
     /// Compiles a block.
-    fn visit_block(&mut self, block: Block<'ctx>) -> TokenStream {
+    fn visit_block(&mut self, block: Block<'ctx>, wrap_var: bool) -> TokenStream {
         let stmts: Vec<_> = block
             .stmts
             .into_iter()
@@ -524,7 +581,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         let ret = if let ExprKind::UnitE = block.ret.kind {
             default()
         } else {
-            self.visit_expr(block.ret)
+            self.visit_expr(block.ret, wrap_var)
         };
         quote! {
             {
@@ -542,7 +599,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             .into_iter()
             .map(|param| {
                 let name = format_ident!("{}", param.name().as_str());
-                let ty = Self::translate_type(&param.ty, true);
+                let ty = Self::translate_type(&param.ty, true, true);
                 quote! {
                     mut #name: #ty
                 }
@@ -552,12 +609,12 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         let ret_ty = match f.ret_ty.kind {
             UnitT => quote!(::anyhow::Result<()>),
             ty => {
-                let ty = Self::translate_type(&ty, true);
+                let ty = Self::translate_type(&ty, true, false); // DO NOT add a `Var` on the return type!!
                 quote!(::anyhow::Result<#ty>)
             }
         };
 
-        let body = self.visit_block(f.body);
+        let body = self.visit_block(f.body, false);
 
         let body = quote! {{
             let res: #ret_ty = try {
@@ -572,7 +629,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             }
         } else {
             quote! {
-                pub fn #name<'a>(#(#params),*) -> #ret_ty #body
+                pub fn #name<'a, 'b>(#(#params),*) -> #ret_ty #body
             }
         }
     }

@@ -30,7 +30,10 @@ fn unknown_struct_in_field() -> Program {
             ..default()
         }],
         default(),
-        default(),
+        vec![Fun {
+            name: "main",
+            ..default()
+        }],
     )
 }
 
@@ -41,7 +44,7 @@ fn unknown_struct_in_params() -> Program {
         vec![person_struct()],
         default(),
         vec![Fun {
-            name: "test",
+            name: "main",
             params: vec![vardef("a", VarT("UnknownStruct"))], // should fail
             body: expr(UnitE),
             ..default()
@@ -56,7 +59,7 @@ fn unknown_struct_in_declare() -> Program {
         vec![person_struct()],
         default(),
         vec![Fun {
-            name: "test",
+            name: "main",
             body: stmts(vec![declare(
                 vardef("john", VarT("UnknownStruct")), // should fail
                 structure(

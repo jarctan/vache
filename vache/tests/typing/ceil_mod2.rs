@@ -2,7 +2,7 @@ use super::*;
 
 /// Ceil modulo 2.
 #[test]
-fn ceil_mod_2() {
+fn ceil_mod_2() -> Result<()> {
     test({
         let f1 = Fun {
             name: "is_even",
@@ -31,6 +31,11 @@ fn ceil_mod_2() {
             ..default()
         };
 
-        vec![f1, f2]
-    });
+        let f3 = Fun {
+            name: "main",
+            ..default()
+        };
+
+        vec![f1, f2, f3]
+    })
 }
