@@ -52,6 +52,7 @@
         "struct",
         "strukt",
         "subexpr",
+        "substs",
         "tast",
         "termcolor",
         "thiserror",

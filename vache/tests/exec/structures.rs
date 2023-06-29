@@ -19,7 +19,7 @@ fn simple_field_access() -> Program {
             name: "main",
             body: stmts(vec![
                 declare(
-                    vardef("john", VarT("Person")),
+                    vardef("john", varT("Person")),
                     structure(
                         "Person",
                         vec![

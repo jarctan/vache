@@ -14,7 +14,7 @@ use Ty::*;
 
 use crate::tast::{
     Block, Enum, Expr, ExprKind, Fun, LhsMode, LhsPlace, Mode, Pat, PatKind, Place, PlaceKind,
-    Program, Stmt, StmtKind, Struct, Ty, Varname,
+    Program, Stmt, StmtKind, Struct, Ty, TyVar, Varname,
 };
 use crate::Context;
 
@@ -70,9 +70,12 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let name = format_ident!("{}", name);
                 quote!(#wrapper<#lft #name>)
             }
-            VarT(name) => {
+            VarT(TyVar::Named(name)) => {
                 let name = format_ident!("{}", name);
                 quote!(#wrapper<#lft #name>)
+            }
+            VarT(TyVar::Gen(_)) => {
+                unreachable!()
             }
             ArrayT(ty) => {
                 let ty = Self::translate_type(ty, show_lifetime, true);
@@ -88,7 +91,6 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let ty = Self::translate_type(ty, show_lifetime, true);
                 quote!(#wrapper<#lft __Range<#ty>>)
             }
-            HoleT => unreachable!(),
         }
     }
 

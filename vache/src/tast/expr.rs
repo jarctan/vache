@@ -40,7 +40,7 @@ impl<'ctx> Expr<'ctx> {
     pub fn hole(span: impl Into<Span>) -> Self {
         Self {
             kind: HoleE,
-            ty: Ty::HoleT,
+            ty: Ty::hole(),
             stm: Stratum::static_stm(),
             span: span.into(),
         }

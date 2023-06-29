@@ -45,7 +45,7 @@ fn unknown_struct_in_params() -> Program {
         default(),
         vec![Fun {
             name: "main",
-            params: vec![vardef("a", VarT("UnknownStruct"))], // should fail
+            params: vec![vardef("a", varT("UnknownStruct"))], // should fail
             body: expr(UnitE),
             ..default()
         }],
@@ -53,7 +53,7 @@ fn unknown_struct_in_params() -> Program {
 }
 
 #[test]
-#[should_fail(UNKNOWN_TYPE_VAR, TYPE_MISMATCH_ERROR)]
+#[should_fail(UNKNOWN_TYPE_VAR)]
 fn unknown_struct_in_declare() -> Program {
     Program::new(
         vec![person_struct()],
@@ -61,7 +61,7 @@ fn unknown_struct_in_declare() -> Program {
         vec![Fun {
             name: "main",
             body: stmts(vec![declare(
-                vardef("john", VarT("UnknownStruct")), // should fail
+                vardef("john", varT("UnknownStruct")), // should fail
                 structure(
                     "Person",
                     vec![

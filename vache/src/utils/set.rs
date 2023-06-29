@@ -107,39 +107,6 @@ impl<'a, T: Eq + Hash> Sub<&'a Set<T>> for Set<T> {
     }
 }
 
-impl<'a, T: Eq + Hash> Sub<Option<&'a T>> for Set<T> {
-    type Output = Set<T>;
-
-    fn sub(mut self, rhs: Option<&T>) -> Self {
-        if let Some(rhs) = rhs {
-            self.0.remove(rhs);
-        }
-        self
-    }
-}
-
-impl<'a, T: Eq + Hash> Sub<&'a Option<T>> for Set<T> {
-    type Output = Set<T>;
-
-    fn sub(mut self, rhs: &Option<T>) -> Self {
-        if let Some(ref rhs) = rhs {
-            self.0.remove(rhs);
-        }
-        self
-    }
-}
-
-impl<T: Eq + Hash> Sub<Option<T>> for Set<T> {
-    type Output = Set<T>;
-
-    fn sub(mut self, rhs: Option<T>) -> Self {
-        if let Some(ref rhs) = rhs {
-            self.0.remove(rhs);
-        }
-        self
-    }
-}
-
 impl<T: Eq + Hash> Add<Option<T>> for Set<T> {
     type Output = Set<T>;
 
@@ -151,20 +118,13 @@ impl<T: Eq + Hash> Add<Option<T>> for Set<T> {
     }
 }
 
-impl<'a, T: Eq + Hash> Sub<&'a T> for Set<T> {
+impl<'a, T: Eq + Hash + 'a, I: Iterator<Item = &'a T>> Sub<I> for Set<T> {
     type Output = Set<T>;
 
-    fn sub(mut self, rhs: &T) -> Self {
-        self.0.remove(rhs);
-        self
-    }
-}
-
-impl<T: Eq + Hash> Sub<T> for Set<T> {
-    type Output = Set<T>;
-
-    fn sub(mut self, rhs: T) -> Self {
-        self.0.remove(&rhs);
+    fn sub(mut self, iter: I) -> Self {
+        for i in iter {
+            self.0.remove(i);
+        }
         self
     }
 }

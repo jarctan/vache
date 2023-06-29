@@ -193,7 +193,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     /// type inference).
     fn check_ty(&mut self, ty: &mut ast::TyUse<'ctx>) {
         match &mut ty.kind {
-            UnitT | BoolT | IntT | StrT | HoleT => (),
+            UnitT | BoolT | IntT | StrT => (),
             ArrayT(item) => self.check_ty(&mut item.with_span(ty.span)),
             TupleT(items) => {
                 for item in items.iter() {
@@ -201,7 +201,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
             }
             IterT(item) => self.check_ty(&mut item.with_span(ty.span)),
-            VarT(name) => match self.valid_type_names.get(name) {
+            VarT(TyVar::Gen(_)) => (),
+            VarT(TyVar::Named(name)) => match self.valid_type_names.get(name) {
                 Some(TypeNameKind::Struct) => {
                     ty.kind = StructT(name);
                 }
@@ -256,8 +257,13 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ast::PlaceKind::IndexP(box e, box ix) => {
                 let e = self.visit_expr(e, ret_ty, in_loop);
                 let ix = self.visit_expr(ix, ret_ty, in_loop);
-                match (e.ty.as_array(), ix.ty.is_int()) {
-                    (Some(ty), true) => {
+                let array_ty = self.ctx.alloc(Ty::hole());
+                match (
+                    e.ty.unify(&ArrayT(array_ty), self.ctx.arena),
+                    ix.ty.unify(&IntT, self.ctx.arena),
+                ) {
+                    (Some(subst1), Some(subst2)) => {
+                        let ty = array_ty.subst(self.ctx.arena, &subst1);
                         let e_stm = e.stm; // Needed now because we move e after
                         Some(LhsPlace {
                             kind: IndexP(boxed(e), boxed(ix)),
@@ -267,7 +273,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             span: place.span,
                         })
                     }
-                    (None, true) => {
+                    (None, Some(_)) => {
                         self.ctx.emit(
                             Diagnostic::error()
                                 .with_code(TYPE_MISMATCH_ERROR)
@@ -277,7 +283,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         );
                         None
                     }
-                    (_, false) => {
+                    (_, None) => {
                         self.ctx.emit(
                             Diagnostic::error()
                                 .with_code(TYPE_MISMATCH_ERROR)
@@ -329,11 +335,11 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             span: place.span,
                         })
                     }
-                    HoleT => Some(LhsPlace {
+                    VarT(_) => Some(LhsPlace {
                         stm: s.stm,
                         kind: FieldP(boxed(s), field),
                         mode: LhsMode::Assigning,
-                        ty: HoleT,
+                        ty: Ty::hole(),
                         span: place.span,
                     }),
                     _ => {
@@ -375,11 +381,11 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             span: place.span,
                         })
                     }
-                    HoleT => Some(LhsPlace {
+                    VarT(_) => Some(LhsPlace {
                         stm: tuple.stm,
                         kind: ElemP(boxed(tuple), elem),
                         mode: LhsMode::Assigning,
-                        ty: HoleT,
+                        ty: Ty::hole(),
                         span: place.span,
                     }),
                     _ => {
@@ -574,7 +580,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                                 .join(", ")
                                         )]),
                                 );
-                                HoleT
+                                Ty::hole()
                             }
                         };
                         let stm = s.stm; // Needed now because we move s after
@@ -615,7 +621,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                             format!("has only {} elements", elems.len()),
                                         )]),
                                 );
-                                HoleT
+                                Ty::hole()
                             }
                         };
                         let stm = tuple.stm; // Needed now because we move `tuple` after
@@ -646,8 +652,13 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 ast::PlaceKind::IndexP(box e, box ix) => {
                     let e = self.visit_expr(e, ret_ty, in_loop);
                     let ix = self.visit_expr(ix, ret_ty, in_loop);
-                    match (e.ty.as_array(), ix.ty.is_int()) {
-                        (Some(ty), true) => {
+                    let array_ty = self.ctx.alloc(Ty::hole());
+                    match (
+                        e.ty.unify(&ArrayT(array_ty), self.ctx.arena),
+                        ix.ty.unify(&IntT, self.ctx.arena),
+                    ) {
+                        (Some(subst1), Some(subst2)) => {
+                            let ty = array_ty.subst(self.ctx.arena, &subst1);
                             let e_stm = e.stm; // Needed now because we move e after
                             Expr::new(
                                 PlaceE(Place {
@@ -662,7 +673,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 span,
                             )
                         }
-                        (None, true) => {
+                        (None, Some(_)) => {
                             self.ctx.emit(
                                 Diagnostic::error()
                                     .with_code(TYPE_MISMATCH_ERROR)
@@ -675,7 +686,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             );
                             Expr::hole(span)
                         }
-                        (_, false) => {
+                        (_, None) => {
                             self.ctx.emit(
                                 Diagnostic::error()
                                     .with_code(TYPE_MISMATCH_ERROR)
@@ -716,14 +727,15 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 let iffalse = self.visit_block(iffalse, ret_ty, in_loop);
 
                 // Condition must be a bool
-                if !cond.ty.is_bool() {
-                    self.ctx.emit(
+                match cond.ty.unify(&BoolT, self.ctx.arena) {
+                    Some(substs) => {}
+                    None => self.ctx.emit(
                         Diagnostic::error()
                             .with_code(TYPE_MISMATCH_ERROR)
                             .with_message(format!("expected bool, found {}", cond.ty))
                             .with_labels(vec![cond.span.as_label()])
                             .with_notes(vec!["if condition must be of type bool".to_string()]),
-                    );
+                    ),
                 }
 
                 // If and else branches must be of the same type
@@ -829,16 +841,6 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 )
             }
             ast::ExprKind::ArrayE(array) => {
-                if array.is_empty() {
-                    self.ctx.emit(
-                        Diagnostic::error()
-                            .with_code(EMPTY_LIST_ERROR)
-                            .with_message("empty arrays are not supported yet")
-                            .with_labels(vec![span.into()]),
-                    );
-                    return Expr::hole(span);
-                }
-
                 // Compute the type of the items
                 let array: Vec<Expr> = array
                     .into_iter()
@@ -852,10 +854,22 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         core::cmp::max(s1, *s2)
                     });
 
-                // Check that all items have the same type and compute the final type
-                let ty = ArrayT(self.ctx.alloc(array[0].ty));
-                if !array.iter().all(|item| item.ty == array[0].ty) {
-                    self.ctx.emit(
+                // The final type, that will get replace thanks to unification
+                let ty = ArrayT(self.ctx.alloc(Ty::hole()));
+
+                // Check that all items unify to the same type
+                let subst: Option<TySubst> = array
+                    .array_windows::<2>()
+                    .map(|[item1, item2]| item1.ty.unify(&item2.ty, self.ctx.arena))
+                    .fold(Some(TySubst::new(self.ctx.arena)), |acc, el| {
+                        match (acc, el) {
+                            (Some(acc), Some(el)) => Some(acc + &el),
+                            _ => None,
+                        }
+                    });
+                match subst {
+                    Some(subst) => {}
+                    None => self.ctx.emit(
                         Diagnostic::error()
                             .with_code(HETEROGENEOUS_LISTS_ERROR)
                             .with_message(format!(
@@ -863,7 +877,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 array[0].ty,
                             ))
                             .with_labels(vec![span.into()]),
-                    );
+                    ),
                 }
 
                 Expr::new(ArrayE(array), ty, common_stm, span)
@@ -892,23 +906,29 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 let end = self.visit_expr(end, ret_ty, in_loop);
 
                 // Check that the type of both ends is `int`
-                if !start.ty.is_int() {
-                    self.ctx.emit(
-                        Diagnostic::error()
-                            .with_code(TYPE_MISMATCH_ERROR)
-                            .with_message(format!("expected type int, found type {}", start.ty))
-                            .with_labels(vec![start.span.as_label()])
-                            .with_notes(vec!["ranges only work for integers".to_string()]),
-                    );
+                match start.ty.unify(&IntT, self.ctx.arena) {
+                    Some(substs) => {}
+                    None => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message(format!("expected type int, found type {}", start.ty))
+                                .with_labels(vec![start.span.as_label()])
+                                .with_notes(vec!["ranges only work for integers".to_string()]),
+                        );
+                    }
                 }
-                if !end.ty.is_int() {
-                    self.ctx.emit(
-                        Diagnostic::error()
-                            .with_code(TYPE_MISMATCH_ERROR)
-                            .with_message(format!("expected type int, found type {}", end.ty))
-                            .with_labels(vec![end.span.as_label()])
-                            .with_notes(vec!["ranges only work for integers".to_string()]),
-                    );
+                match end.ty.unify(&IntT, self.ctx.arena) {
+                    Some(substs) => {}
+                    None => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message(format!("expected type int, found type {}", end.ty))
+                                .with_labels(vec![end.span.as_label()])
+                                .with_notes(vec!["ranges only work for integers".to_string()]),
+                        );
+                    }
                 }
 
                 let (start_stm, end_stm) = (start.stm, end.stm); // Necessary bc we move start before getting `start.stm`
@@ -983,7 +1003,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             .with_message("Empty `match`es are not supported yet")
                             .with_labels(vec![e.span.as_label()]),
                     );
-                    HoleT
+                    Ty::hole()
                 };
 
                 // Compute the common stm of all the branches, which is the max of the stratum
@@ -1016,16 +1036,17 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     self.check_ty(&mut vardef.ty);
 
                     // Check the type
-                    if &vardef.ty != expr_ty {
-                        self.ctx.emit(
+                    match &vardef.ty.unify(expr_ty, self.ctx.arena) {
+                        Some(substs) => {}
+                        None => self.ctx.emit(
                             Diagnostic::error()
                                 .with_code(TYPE_MISMATCH_ERROR)
-                                .with_message("Left and right hand side have incompatible types")
+                                .with_message("left and right hand side have incompatible types")
                                 .with_labels(vec![rhs_span.as_label().with_message(format!(
                                     "expected type {}, found type {expr_ty}",
                                     vardef.ty
                                 ))]),
-                        );
+                        ),
                     }
 
                     self.add_var(vardef);
@@ -1087,8 +1108,9 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                     let iter = self.visit_expr(iter, ret_ty, in_loop);
 
-                    let item_ty = match iter.ty.as_iter() {
-                        Some(item_ty) => item_ty,
+                    let item_ty = self.ctx.alloc(Ty::hole());
+                    let item_ty = match iter.ty.unify(&IterT(item_ty), self.ctx.arena) {
+                        Some(substs) => item_ty.subst(self.ctx.arena, &substs),
                         None => {
                             self.ctx.emit(
                                 Diagnostic::error()
@@ -1102,7 +1124,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                         "For loop requires an iterator here".to_string()
                                     ]),
                             );
-                            HoleT
+                            Ty::hole()
                         }
                     };
                     let item = item.with_type(item_ty);

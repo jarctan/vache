@@ -25,4 +25,6 @@ pub use reference::{LhsRef, Reference};
 pub use rvalue::RValue;
 pub use stmt::{Stmt, StmtKind};
 
-pub use crate::tast::{Enum, Mode, Namespaced, Span, Stratum, Struct, Ty, VarDef, VarUse, Varname, LhsMode};
+pub use crate::tast::{
+    Enum, LhsMode, Mode, Namespaced, Span, Stratum, Struct, Ty, VarDef, VarUse, Varname,
+};

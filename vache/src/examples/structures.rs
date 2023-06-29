@@ -20,7 +20,7 @@ pub fn get_field_and_mutate<'ctx>() -> Program<'ctx> {
             name: "main",
             body: stmts(vec![
                 declare(
-                    vardef("john", VarT("Person")),
+                    vardef("john", varT("Person")),
                     structure(
                         "Person",
                         vec![

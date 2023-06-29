@@ -47,16 +47,13 @@ fn heterogeneous_list2() -> Program {
     .into()
 }
 
-/// Note: the empty list currently panics, but should not in the future.
-#[should_fail(EMPTY_LIST_ERROR)]
 #[test]
-fn empty_list() -> Program {
-    Fun {
+fn empty_list() -> Result<()> {
+    test(Program::from(Fun {
         name: "main",
         body: stmts(vec![declare(vardef("l", ArrayT(&IntT)), array([]))]),
         ..default()
-    }
-    .into()
+    }))
 }
 
 #[test]

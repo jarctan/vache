@@ -22,7 +22,7 @@ fn simple_structure() -> Result<()> {
             name: "main",
             body: stmts(vec![
                 declare(
-                    vardef("john", VarT("Person")),
+                    vardef("john", varT("Person")),
                     structure(
                         "Person",
                         vec![
@@ -49,7 +49,7 @@ fn access_unknown_field() -> Program {
             name: "main",
             body: stmts(vec![
                 declare(
-                    vardef("john", VarT("Person")),
+                    vardef("john", varT("Person")),
                     structure(
                         "Person",
                         vec![
@@ -75,7 +75,7 @@ fn missing_field() -> Program {
         vec![Fun {
             name: "main",
             body: stmts(vec![declare(
-                vardef("john", VarT("Person")), // should fail!
+                vardef("john", varT("Person")), // should fail!
                 structure("Person", vec![("name", string("doe")), ("age", int(21))]),
             )]),
             ..default()
@@ -92,7 +92,7 @@ fn extra_field() -> Program {
         vec![Fun {
             name: "main",
             body: stmts(vec![declare(
-                vardef("john", VarT("Person")),
+                vardef("john", varT("Person")),
                 structure(
                     "Person",
                     vec![
@@ -117,7 +117,7 @@ fn type_mismatch() -> Program {
         vec![Fun {
             name: "main",
             body: stmts(vec![declare(
-                vardef("john", VarT("Person")),
+                vardef("john", varT("Person")),
                 structure(
                     "Person",
                     vec![

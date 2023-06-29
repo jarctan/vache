@@ -2,8 +2,6 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use itertools::Itertools;
-
 use super::borrow::Borrows;
 use super::flow::Flow;
 use super::tree::LocTree;
