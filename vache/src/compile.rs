@@ -421,23 +421,27 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 } else {
                     let args = args.into_iter().map(|arg| self.visit_expr(arg, true));
                     let name = match name.name {
-                        "+" => "__add".to_string(),
-                        "-" => "__sub".to_string(),
-                        "*" => "__mul".to_string(),
-                        "/" => "__div".to_string(),
-                        "%" => "__rem".to_string(),
-                        "<" => "__lt".to_string(),
-                        ">" => "__gt".to_string(),
-                        "<=" => "__le".to_string(),
-                        ">=" => "__ge".to_string(),
-                        "==" => "__eq".to_string(),
-                        "!=" => "__neq".to_string(),
-                        "&&" => "__and".to_string(),
-                        "||" => "__or".to_string(),
-                        "!" => "__not".to_string(),
-                        _ => name.name.to_string(),
+                        "+" => quote!(__add),
+                        "-" => quote!(__sub),
+                        "*" => quote!(__mul),
+                        "/" => quote!(__div),
+                        "%" => quote!(__rem),
+                        "<" => quote!(__lt),
+                        ">" => quote!(__gt),
+                        "<=" => quote!(__le),
+                        ">=" => quote!(__ge),
+                        "==" => quote!(__eq),
+                        "!=" => quote!(__neq),
+                        "&&" => quote!(__and),
+                        "||" => quote!(__or),
+                        "!" => quote!(__not),
+                        "assert" => quote!(__assert),
+                        _ => {
+                            let ident = format_ident!("{}", name.name);
+                            quote!(#ident)
+                        }
                     };
-                    let name = format_ident!("{name}");
+
                     if wrap_var {
                         quote!(Var::Owned(#name(#(#args),*)?))
                     } else {

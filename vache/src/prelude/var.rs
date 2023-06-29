@@ -146,5 +146,18 @@ pub fn var() -> TokenStream {
                 Var::Owned(ref o) => Var::Owned(__borrow(o)),
             }
         }
+
+        impl<'a, 'b, B: Clone + ::std::ops::Not> ::std::ops::Not for Var<'a, 'b, B>
+        where
+            <B as ::std::ops::Not>::Output: Clone,
+        {
+            type Output = Var<'a, 'b, <B as ::std::ops::Not>::Output>;
+
+            // Required method
+            fn not(self) -> <Self as ::std::ops::Not>::Output {
+                let owned: B = Var::into_owned(self);
+                Var::owned(!owned)
+            }
+        }
     )
 }

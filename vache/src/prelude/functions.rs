@@ -108,5 +108,10 @@ pub fn functions() -> TokenStream {
             let neg: C = !owned;
             Ok(Cow::Owned(neg))
         }
+
+        pub(crate) fn __assert<'a, 'b>(pred: Var<'a, 'b, bool>) -> __Result<Cow<'b, ()>> {
+            ::anyhow::ensure!(**pred, "Assertion failed");
+            Ok(Cow::owned(()))
+        }
     )
 }
