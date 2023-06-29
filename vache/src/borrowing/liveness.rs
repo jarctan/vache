@@ -2,6 +2,8 @@
 
 use std::collections::{HashMap, VecDeque};
 
+use itertools::Itertools;
+
 use super::borrow::Borrows;
 use super::flow::Flow;
 use super::tree::LocTree;
@@ -194,7 +196,7 @@ pub fn liveness<'mir, 'ctx>(
         // Check last variable use and replace with a move
         for (label, instr) in cfg.bfs_mut(entry_l, false) {
             let var_outs = &var_flow[&label].outs;
-            let borrows_outs = &loan_flow[&label].ins;
+            let borrows_in = &loan_flow[&label].ins;
 
             // Get all the references of that instruction.
             let references: Vec<_> = instr.references_mut().collect();
@@ -218,8 +220,11 @@ pub fn liveness<'mir, 'ctx>(
                     Mode::Borrowed | Mode::MutBorrowed | Mode::SMutBorrowed | Mode::SBorrowed => {
                         let loc = reference.loc();
                         if !var_outs.contains(loc) && !cannot_move[i].contains(loc) {
-                            let loans: Vec<_> = borrows_outs.loans(*reference.loc()).collect();
-                            if loans.is_empty() || loans.iter().all(|loan| !loan.mutable) {
+                            let mut loans = borrows_in.loans(*reference.loc());
+                            let mut borrows = borrows_in.borrows(*reference.place());
+                            if loans.all(|loan| !loan.mutable)
+                                && borrows.all(|borrow| !borrow.mutable)
+                            {
                                 updated = true;
                                 reference.set_mode(Mode::Moved);
                             } else {
@@ -320,6 +325,52 @@ pub fn liveness<'mir, 'ctx>(
         println!("Invalidation: {:?}", borrow);*/
         debug_assert!(!mutable, "Borrow {borrow:?} is mutable");
         cfg[&label].force_clone(&ptr);
+    }
+
+    // Check for uses of of a mutably borrowed variable
+    for (label, instr) in cfg.bfs(entry_l, false) {
+        let borrows_in = &loan_flow[&label].ins;
+
+        for r in instr.references() {
+            let loc = *r.loc();
+            let mut mut_borrows = borrows_in.loans(loc).filter(|borrow| borrow.mutable);
+            if let Some(borrow) = mut_borrows.next() {
+                let borrower = borrow.borrower;
+                // Find the next occurrence of the borrower in the CFG (must exist because
+                // borrow is live)
+                let next_use = 'outer: loop {
+                    for (_, instr) in cfg.bfs(label, false) {
+                        for r in instr.references() {
+                            if *r.loc() == borrower {
+                                break 'outer r.span;
+                            }
+                        }
+                    }
+                    unreachable!()
+                };
+                reporter.emit(
+                    Diagnostic::error()
+                        .with_code(BORROW_ERROR)
+                        .with_message(format!(
+                            "you cannot use `{}` while it is taken mutably by `{borrower}`",
+                            loc,
+                        ))
+                        .with_labels(vec![
+                            r.span.as_label(),
+                            borrow
+                                .span
+                                .as_secondary_label()
+                                .with_message("borrow occurs here"),
+                            next_use
+                                .as_secondary_label()
+                                .with_message(format!("next use of `{borrower}` here")),
+                        ])
+                        .with_notes(vec![format!(
+                            "help: wait until `{borrower}` is inactive to use `{loc}`"
+                        )]),
+                );
+            }
+        }
     }
 
     Ok(cfg)
