@@ -784,7 +784,18 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     .map(|(name, expr)| (name, self.visit_expr(expr, ret_ty, in_loop)))
                     .collect();
 
-                let strukt = &self.struct_env[s_name];
+                let strukt = match self.struct_env.get(s_name) {
+                    Some(strukt) => strukt,
+                    None => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(UNKNOWN_TYPE_VAR)
+                                .with_message(format!("no structure named `{s_name}` in context"))
+                                .with_labels(vec![span.into()]),
+                        );
+                        return Expr::hole(span);
+                    }
+                };
 
                 // Check that the instance has the same field names as the declaration
                 if !keys_match(&strukt.fields, fields.iter().map(|(field, _)| field)) {
