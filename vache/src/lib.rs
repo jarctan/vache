@@ -31,6 +31,7 @@ mod mode_farmer;
 mod normalize;
 mod prelude;
 pub mod reporter;
+mod scoped;
 mod tast;
 mod typing;
 mod utils;
@@ -58,6 +59,7 @@ use anyhow::Result;
 pub use context::Context;
 pub use mode_farmer::farm_modes;
 use prelude::prelude;
+use scoped::Scoped;
 pub use steps::{borrow_check, interpret, mir, run, typecheck};
 pub use utils::arena::Arena;
 

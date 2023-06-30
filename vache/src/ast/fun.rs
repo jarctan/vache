@@ -170,6 +170,20 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Fun<'ctx> {
 
         let name = consume!(pairs).as_str();
 
+        // Possible type parameters
+        let mut ty_params = vec![];
+        if consume_opt!(pairs, Rule::lt).is_some() {
+            loop {
+                let pair = consume!(pairs);
+                match pair.as_rule() {
+                    Rule::gt => break,
+                    Rule::cma => continue,
+                    Rule::ident => ty_params.push(ctx.parse(pair)),
+                    _ => unreachable!(),
+                }
+            }
+        }
+
         let params_pair = consume!(pairs, Rule::params);
         let params_span = params_pair.as_span();
         let mut params_pairs = params_pair.into_inner();
@@ -193,7 +207,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Fun<'ctx> {
 
         Fun {
             name,
-            ty_params: default(),
+            ty_params,
             params,
             ret_ty,
             body,

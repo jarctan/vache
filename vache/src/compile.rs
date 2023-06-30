@@ -601,6 +601,15 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     /// Compiles a function.
     fn visit_fun(&mut self, f: Fun<'ctx>) -> TokenStream {
         let name = format_ident!("{}", f.name);
+
+        let ty_params = f.ty_params.into_iter().map(|param| match param {
+            TyVar::Named(name) => {
+                let name = format_ident!("{}", name);
+                quote!(#name: ::std::fmt::Debug + ::std::fmt::Display + ::std::clone::Clone)
+            }
+            TyVar::Gen(..) => unreachable!(),
+        });
+
         let params: Vec<TokenStream> = f
             .params
             .into_iter()
@@ -635,9 +644,11 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 pub fn #name(#(#params),*) -> #ret_ty #body
             }
         } else {
-            quote! {
-                pub fn #name<'a, 'b>(#(#params),*) -> #ret_ty #body
-            }
+            let res = quote! {
+                pub fn #name<#(#ty_params,)* 'a, 'b>(#(#params),*) -> #ret_ty #body
+            };
+            println!("{res}");
+            res
         }
     }
 

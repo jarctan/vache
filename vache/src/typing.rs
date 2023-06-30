@@ -17,57 +17,8 @@ use crate::reporter::Diagnostic;
 use crate::tast::place::LhsPlace;
 use crate::tast::*;
 use crate::utils::{boxed, keys_match};
+use crate::Scoped;
 use crate::{ast, Context};
-
-/// A typing environment.
-///
-/// Contains definitions for variables and functions.
-struct Env<'ctx> {
-    /// Map between vars and their definitions.
-    var_env: HashMap<Varname<'ctx>, ast::VarDef<'ctx>>,
-}
-
-impl<'ctx> Env<'ctx> {
-    /// Creates a new, empty environment.
-    fn new() -> Self {
-        Self {
-            var_env: HashMap::new(),
-        }
-    }
-
-    /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<Varname<'ctx>>) -> Option<&ast::VarDef<'ctx>> {
-        self.var_env.get(v.as_ref())
-    }
-
-    /// Declares a new variable in the context.
-    ///
-    /// # Panics
-    /// Panics if the var is not stated as declared in that stratum/environment.
-    /// You should only add a var definition in the stratum in which it is
-    /// tied to.
-    fn add_var(&mut self, vardef: impl Into<ast::VarDef<'ctx>>) {
-        let vardef = vardef.into();
-        self.var_env.insert(vardef.name(), vardef);
-    }
-}
-
-impl Default for Env<'_> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Kind of type name.
-///
-/// In the source code, we will find plenty of type names, that can stand for
-/// different things. Here we list all the different kinds of names we can have.
-pub enum TypeNameKind {
-    /// Name of a struct.
-    Struct,
-    /// Name of an enum.
-    Enum,
-}
 
 /// A typer that will type-check some program by
 /// visiting it.
@@ -80,12 +31,10 @@ pub(crate) struct Typer<'t, 'ctx> {
     struct_env: HashMap<&'ctx str, &'ctx Struct<'ctx>>,
     /// Map between `enum` names and their definitions.
     enum_env: HashMap<&'ctx str, &'ctx Enum<'ctx>>,
-    /// Map between valid type names and their kind (structure, variants, etc.).
-    /// Initialized at the very beginning, allows to have
-    /// mutually-referencing structures.
-    valid_type_names: HashMap<&'ctx str, TypeNameKind>,
     /// The typing environment stack.
-    env: Vec<Env<'ctx>>,
+    env: Scoped<Varname<'ctx>, ast::VarDef<'ctx>>,
+    /// The typing environment stack.
+    generic_types: Scoped<TyVar<'ctx>, ()>,
     /// Type variable substitutions.
     subst: TySubst<'ctx>,
 }
@@ -99,8 +48,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             fun_env: default(),
             struct_env: default(),
             enum_env: default(),
-            valid_type_names: default(),
-            env: vec![Env::default()],
+            env: default(),
+            generic_types: default(),
         };
 
         // Add builtin function signatures.
@@ -130,17 +79,15 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
     /// Creates a new scope.
     fn push_scope(&mut self) {
-        self.env.push(Env::default());
+        self.env.push_scope();
+        self.subst.push_scope();
     }
 
     /// Pops and removes the current scope.
-    fn pop_scope(&mut self) -> Option<()> {
-        // Refuse the pop the static environment
-        if self.env.len() >= 2 {
-            self.env.pop().map(|_| ())
-        } else {
-            None
-        }
+    fn pop_scope(&mut self) -> anyhow::Result<()> {
+        self.env.pop_scope()?;
+        self.subst.pop_scope()?;
+        Ok(())
     }
 
     /// Gets the definition of a variable.
@@ -153,16 +100,14 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         // Returns the first environment that has that variable declared
         let v = v.as_ref();
         self.env
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(i, e)| e.get_var(v).map(|x| (x, i.try_into().unwrap())))
+            .get_and_scope(v)
+            .map(|(i, x)| (x, i.try_into().unwrap()))
     }
 
     /// Declares a new variable in the context.
     fn add_var(&mut self, vardef: impl Into<ast::VarDef<'ctx>>) {
         let vardef = vardef.into();
-        self.env.last_mut().unwrap().add_var(vardef);
+        self.env.insert(vardef.name(), vardef);
     }
 
     /// Declares a new function in the context.
@@ -186,42 +131,6 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     /// Returns the current stratum/scope id.
     fn current_stratum(&self) -> Stratum {
         (self.env.len() - 1).try_into().unwrap()
-    }
-
-    /// Checks that `ty` is well defined in the environment.
-    ///
-    /// In particular, unknown structure names will raise an error.
-    ///
-    /// Can eventually refine the type given in argument (note: will change with
-    /// type inference).
-    fn check_ty(&mut self, ty: &mut ast::TyUse<'ctx>) {
-        match &mut ty.kind {
-            UnitT | BoolT | IntT | StrT => (),
-            ArrayT(item) => self.check_ty(&mut item.with_span(ty.span)),
-            TupleT(items) => {
-                for item in items.iter() {
-                    self.check_ty(&mut item.with_span(ty.span));
-                }
-            }
-            IterT(item) => self.check_ty(&mut item.with_span(ty.span)),
-            VarT(TyVar::Gen(..)) => (),
-            VarT(TyVar::Named(name)) => match self.valid_type_names.get(name) {
-                Some(TypeNameKind::Struct) => {
-                    ty.kind = StructT(name);
-                }
-                Some(TypeNameKind::Enum) => {
-                    ty.kind = EnumT(name);
-                }
-                None => self.ctx.emit(
-                    Diagnostic::error()
-                        .with_code(UNKNOWN_TYPE_VAR)
-                        .with_message(format!("no type named `{name}` in context"))
-                        .with_labels(vec![ty.span.into()]),
-                ),
-            },
-            StructT(_) => unreachable!(),
-            EnumT(_) => unreachable!(),
-        }
     }
 
     /// Type-checks a **lhs** place expression.
@@ -1004,7 +913,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     self.push_scope();
                     self.introduce_pat_vars(&pat);
                     let expr = self.visit_expr(expr, ret_ty, in_loop);
-                    self.pop_scope().unwrap();
+                    self.pop_scope().expect("should be able to pop scope here");
                     new_branches.push((pat, expr));
                 }
 
@@ -1065,12 +974,10 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     let stm = self.current_stratum();
                     let expr = self.visit_expr(expr, ret_ty, in_loop);
                     let expr_ty = &expr.ty;
+
+                    // Either get the annotation or create a fresh type variable
                     let var_ty = match var.ty_use() {
-                        Some(mut ty) => {
-                            // If provided, check the type declaration
-                            self.check_ty(&mut ty);
-                            ty.kind
-                        }
+                        Some(mut ty) => ty.kind,
                         None => Ty::hole(expr.span),
                     };
 
@@ -1184,7 +1091,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     let body = self.visit_block(body, ret_ty, true);
 
                     // Pop the intermediate scope
-                    self.pop_scope();
+                    self.pop_scope().expect("should be able to pop scope here");
 
                     if body.ret.ty != UnitT {
                         self.ctx.emit(
@@ -1266,7 +1173,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             .map(|s| self.visit_stmt(s, ret_ty, in_loop))
             .collect();
         let ret = self.visit_expr(b.ret, ret_ty, in_loop);
-        self.pop_scope().unwrap();
+        self.pop_scope().expect("should be able to pop scope here");
         Block { stmts, ret, span }
     }
 
@@ -1275,9 +1182,13 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         let stm = self.current_stratum();
 
         self.push_scope();
+        for &ty_param in &f.ty_params {
+            // Trivial substitution.
+            self.generic_types.insert(ty_param, ());
+        }
+
         // Introduce arguments in the typing context
         for arg in &mut f.params {
-            self.check_ty(&mut arg.ty);
             self.add_var(*arg);
         }
 
@@ -1293,19 +1204,19 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         body_ty.subst(self.ctx.arena, &self.subst)
                     ))
                     .with_labels(vec![
-                        body.ret
-                            .span
-                            .as_label()
-                            .with_message(format!("body returns a value of type {}", body_ty)),
-                        f.ret_ty
-                            .span
-                            .as_secondary_label()
-                            .with_message(format!("function declared to return {:?}", f.ret_ty)),
+                        body.ret.span.as_label().with_message(format!(
+                            "body returns a value of type {}",
+                            body_ty.subst(self.ctx.arena, &self.subst)
+                        )),
+                        f.ret_ty.span.as_secondary_label().with_message(format!(
+                            "function declared to return {:?}",
+                            f.ret_ty.subst(self.ctx.arena, &self.subst)
+                        )),
                     ]),
             );
         }
 
-        self.pop_scope();
+        self.pop_scope().expect("should be able to pop scope here");
 
         Fun {
             name: f.name,
@@ -1339,8 +1250,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             let name = strukt.name;
             // Insert and check for redefinition at the same time
             if self
-                .valid_type_names
-                .insert(name, TypeNameKind::Struct)
+                .subst
+                .insert(TyVar::Named(name), StructT(name))
                 .is_some()
             {
                 self.ctx.emit(
@@ -1355,11 +1266,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         for enun in &enums {
             let name = enun.name;
             // Insert and check for redefinition at the same time
-            if self
-                .valid_type_names
-                .insert(name, TypeNameKind::Enum)
-                .is_some()
-            {
+            if self.subst.insert(TyVar::Named(name), EnumT(name)).is_some() {
                 self.ctx.emit(
                     Diagnostic::error()
                         .with_code(ITEM_REDEFINED_ERROR)
@@ -1419,7 +1326,11 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         // Any free variable left is a type inference error
         for var in p.free_ty_vars() {
             match var {
-                TyVar::Named(..) => unreachable!(), // Only generated variables should be free
+                TyVar::Named(name) => self.ctx.emit(
+                    Diagnostic::error()
+                        .with_code(UNKNOWN_TYPE_VAR)
+                        .with_message(format!("no type named `{name}` in context")),
+                ),
                 TyVar::Gen(id, span) => self.ctx.emit(
                     Diagnostic::error()
                         .with_code(TYPE_INFER_ERROR)
@@ -1437,12 +1348,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     }
 
     /// Type-checks a structure.
-    fn visit_struct(&mut self, mut strukt: ast::Struct<'ctx>) -> Struct<'ctx> {
-        // Check that all types in the structure exist.
-        for ty in strukt.fields.values_mut() {
-            self.check_ty(ty);
-        }
-
+    fn visit_struct(&mut self, strukt: ast::Struct<'ctx>) -> Struct<'ctx> {
         // TODO: do not return Struct in this function. Nor should we return
         // Fun in `visit_fun`. We should just append them to the context and retrieve
         // them all only at the end, in one go. This would avoid this
@@ -1453,14 +1359,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     }
 
     /// Type-checks a enumeration.
-    fn visit_enum(&mut self, mut enun: ast::Enum<'ctx>) -> Enum<'ctx> {
-        // Check that all types in the enum exist.
-        for args in enun.variants.values_mut() {
-            for arg in args {
-                self.check_ty(arg);
-            }
-        }
-
+    fn visit_enum(&mut self, enun: ast::Enum<'ctx>) -> Enum<'ctx> {
         // TODO: do not return Struct in this function. Nor should we return
         // Fun in `visit_fun`. We should just append them to the context and retrieve
         // them all only at the end, in one go. This would avoid this
@@ -1603,11 +1502,11 @@ mod tests {
         };
         let mut ctx = Context::new(config, &arena);
         let mut typer = Typer::new(&mut ctx);
-        assert_eq!(typer.pop_scope(), None); // Cannot pop the static stratum
+        assert!(typer.pop_scope().is_err()); // Cannot pop the static stratum
 
         typer.push_scope();
-        assert!(typer.pop_scope().is_some());
+        assert!(typer.pop_scope().is_ok());
 
-        assert_eq!(typer.pop_scope(), None); // Still cannot pop it
+        assert!(typer.pop_scope().is_err()); // Still cannot pop it
     }
 }

@@ -165,15 +165,19 @@ impl<'ctx> Ty<'ctx> {
             (VarT(name), ty) | (ty, VarT(name)) if let Some(mapped) = subst.get(name) => {
                 mapped.unify(&ty, subst)
             }
-            // Otherwise, introduce a substitution for it
-            (VarT(name), ty) | (ty, VarT(name)) => {
-                if !ty.occurs(name) {
-                    subst.insert(name, ty);
+            // If they are generated variables, introduce a substitution for it
+            (VarT(var @ TyVar::Gen(..)), ty) | (ty, VarT(var @ TyVar::Gen(..))) => {
+                if !ty.occurs(var) {
+                    subst.insert(var, ty);
                     true
                 } else {
                     false
                 }
             }
+            // Type variables that are equal can be substituted
+            (VarT(TyVar::Named(name1)), VarT(TyVar::Named(name2))) => name1 == name2,
+            // Otherwise, in general, user-defined type variables can't be substituted
+            (VarT(TyVar::Named(..)), _) | (_, VarT(TyVar::Named(..))) => false,
             (UnitT, UnitT) => true,
             (UnitT, _) => false,
             (BoolT, BoolT) => true,

@@ -1,6 +1,6 @@
 program = _{ SOI ~ (fun | struct_def | enum_def)* ~ &EOI }
 
-fun = { fn_kw ~ ident ~ params ~ (arw ~ ty)? ~ block }
+fun = { fn_kw ~ ident ~ (lt ~ (ident ~ (cma ~ ident)* ~ cma?)? ~ gt)? ~ params ~ (arw ~ ty)? ~ block }
 
 params = { lp ~ (vardef ~ (cma ~ vardef)*)? ~ rp }
 

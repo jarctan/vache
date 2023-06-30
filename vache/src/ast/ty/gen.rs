@@ -35,10 +35,11 @@ impl<'ctx> GenTy<'ctx> {
     /// Applies a type substitution from `subst` in `self`, returning a
     /// new type.
     pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
-        subst
-            .subst
-            .iter()
-            .fold(*self, |acc, (var, ty)| acc.subst_var(arena, *var, *ty))
+        let subst = subst.clone() - self.params.iter();
+        Self {
+            params: self.params,
+            ty: self.ty.subst(arena, &subst),
+        }
     }
 
     /// Returns the free type variables in `self`.

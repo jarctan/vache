@@ -3,7 +3,10 @@
 use std::fmt;
 use std::sync::atomic::AtomicU64;
 
-use crate::ast::Span;
+use pest::iterators::Pair;
+
+use crate::ast::{Context, Parsable, Span};
+use crate::grammar::*;
 
 /// Fresh type variable counter.
 ///
@@ -41,5 +44,12 @@ impl<'ctx> fmt::Display for TyVar<'ctx> {
 impl<'ctx> fmt::Debug for TyVar<'ctx> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for TyVar<'ctx> {
+    fn parse(pair: Pair<'ctx, Rule>, _ctx: &Context<'ctx>) -> Self {
+        assert!(pair.as_rule() == Rule::ident);
+        Self::Named(pair.as_str())
     }
 }

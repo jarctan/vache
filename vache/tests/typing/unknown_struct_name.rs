@@ -53,7 +53,10 @@ fn unknown_struct_in_params() -> Program {
 }
 
 #[test]
-#[should_fail(UNKNOWN_TYPE_VAR)]
+#[should_fail(
+    UNKNOWN_TYPE_VAR, // Unknown type `UnknownStruct`
+    TYPE_MISMATCH_ERROR, // incompatible types: lhs has type `UnknownStruct` while rhs has type `Person`
+)]
 fn unknown_struct_in_declare() -> Program {
     Program::new(
         vec![person_struct()],
