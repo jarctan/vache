@@ -501,7 +501,6 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 ),
             ) in args.iter().zip(fun.params.iter()).enumerate()
             {
-                println!("Unifying {param_ty:?} {arg_ty:?}");
                 if !arg_ty.unify(param_ty, &mut self.subst)  {
                     self.ctx.emit(
                         Diagnostic::error()
