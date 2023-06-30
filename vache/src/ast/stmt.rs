@@ -35,7 +35,7 @@ pub enum StmtKind<'ctx> {
     /// A declaration. We assign the computation
     /// of the 2nd argument to the newly created variable
     /// defined in the 1st argument.
-    DeclareS(VarDef<'ctx>, Expr<'ctx>),
+    DeclareS(VarUse<'ctx>, Expr<'ctx>),
     /// An assignment.
     AssignS(Place<'ctx>, Expr<'ctx>),
     /// An expression, whose final value is discarded.
@@ -75,7 +75,7 @@ impl<'ctx> Stmt<'ctx> {
     ///
     /// # Errors
     /// Returns `None` if the statement is not a declaration.
-    pub fn as_declare(&self) -> Option<(&VarDef, &Expr)> {
+    pub fn as_declare(&self) -> Option<(&VarUse<'ctx>, &Expr<'ctx>)> {
         if let DeclareS(vardef, expr) = &self.kind {
             Some((vardef, expr))
         } else {
@@ -89,7 +89,7 @@ impl<'ctx> Stmt<'ctx> {
     ///
     /// # Errors
     /// Returns `None` if the statement is not a assignment.
-    pub fn as_assign(&self) -> Option<(&Place, &Expr)> {
+    pub fn as_assign(&self) -> Option<(&Place<'ctx>, &Expr<'ctx>)> {
         if let AssignS(lhs, rhs) = &self.kind {
             Some((lhs, rhs))
         } else {
@@ -103,7 +103,7 @@ impl<'ctx> Stmt<'ctx> {
     ///
     /// # Errors
     /// Returns `None` if the statement is not an expression.
-    pub fn as_expr(&self) -> Option<&Expr> {
+    pub fn as_expr(&self) -> Option<&Expr<'ctx>> {
         if let ExprS(expr) = &self.kind {
             Some(expr)
         } else {
@@ -117,7 +117,7 @@ impl<'ctx> Stmt<'ctx> {
     ///
     /// # Errors
     /// Returns `None` if the statement is not a while loop.
-    pub fn as_while_loop(&self) -> Option<(&Expr, &Block)> {
+    pub fn as_while_loop(&self) -> Option<(&Expr<'ctx>, &Block<'ctx>)> {
         if let WhileS { cond, body } = &self.kind {
             Some((cond, body))
         } else {
@@ -131,7 +131,7 @@ impl<'ctx> Stmt<'ctx> {
     ///
     /// # Errors
     /// Returns `None` if the statement is not a `for` loop.
-    pub fn as_for_lop(&self) -> Option<(&VarUse, &Expr, &Block)> {
+    pub fn as_for_lop(&self) -> Option<(&VarUse<'ctx>, &Expr<'ctx>, &Block<'ctx>)> {
         if let ForS { item, iter, body } = &self.kind {
             Some((item, iter, body))
         } else {
@@ -149,10 +149,17 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
             Rule::declare => {
                 let mut pairs = pair.into_inner();
                 consume!(pairs, Rule::var_kw);
-                let vardef = ctx.parse(consume!(pairs));
+                // Match the lhs, possibly with a type annotation
+                let varuse = if let Some(pair) = consume_opt!(pairs, Rule::ident) {
+                    // Without type annotation
+                    ctx.parse(pair)
+                } else {
+                    // With type annotation
+                    VarDef::parse(consume!(pairs), ctx).into()
+                };
                 consume!(pairs, Rule::eq);
                 let rhs = ctx.parse(consume!(pairs));
-                DeclareS(vardef, rhs)
+                DeclareS(varuse, rhs)
             }
             Rule::assign => {
                 let mut pairs = pair.into_inner();
@@ -223,7 +230,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
 }
 
 /// Shortcut to declare a variable in our program.
-pub fn declare<'ctx>(lhs: impl Into<VarDef<'ctx>>, rhs: impl Into<Expr<'ctx>>) -> Stmt<'ctx> {
+pub fn declare<'ctx>(lhs: impl Into<VarUse<'ctx>>, rhs: impl Into<Expr<'ctx>>) -> Stmt<'ctx> {
     DeclareS(lhs.into(), rhs.into()).into()
 }
 
@@ -258,8 +265,8 @@ mod tests {
     #[test]
     fn declaration(stmt: Stmt) {
         let (lhs, rhs) = stmt.as_declare().context("is not a declare")?;
-        assert_eq!(lhs.var, "x");
-        assert_eq!(lhs.ty, Ty::IntT);
+        assert_eq!(lhs.name(), "x");
+        assert_eq!(lhs.ty(), Some(Ty::IntT));
         assert_eq!(rhs.as_integer().unwrap(), &BigInt::from(4));
     }
 

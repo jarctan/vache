@@ -86,12 +86,15 @@ pub(crate) struct Typer<'t, 'ctx> {
     valid_type_names: HashMap<&'ctx str, TypeNameKind>,
     /// The typing environment stack.
     env: Vec<Env<'ctx>>,
+    /// Type variable substitutions.
+    substs: TySubst<'ctx>,
 }
 
 impl<'t, 'ctx> Typer<'t, 'ctx> {
     /// Creates a new typer.
     pub fn new(ctx: &'t mut Context<'ctx>) -> Self {
         let mut typer = Self {
+            substs: TySubst::new(ctx.arena),
             ctx,
             fun_env: default(),
             struct_env: default(),
@@ -263,6 +266,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     ix.ty.unify(&IntT, self.ctx.arena),
                 ) {
                     (Some(subst1), Some(subst2)) => {
+                        self.substs += &subst1;
+                        self.substs += &subst2;
                         let ty = array_ty.subst(self.ctx.arena, &subst1);
                         let e_stm = e.stm; // Needed now because we move e after
                         Some(LhsPlace {
@@ -444,20 +449,21 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 ),
             ) in args.iter().zip(params.iter()).enumerate()
             {
-                if arg_ty != param_ty {
-                    self.ctx.emit(
-                        Diagnostic::error()
-                            .with_code(TYPE_MISMATCH_ERROR)
-                            .with_message(format!(
-                                "expected type {param_ty}, found type {arg_ty}"
-                            ))
-                            .with_labels(vec![span.as_label()])
-                            .with_notes(vec![format!(
-                                "{param_ty} is the expected type for argument #{} of `{}`",
-                                i + 1,
-                                root
-                            )]),
-                    );
+                match arg_ty.unify(param_ty, self.ctx.arena)  {
+                    Some(substs) => self.substs += &substs,
+                    None => self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message(format!(
+                                    "expected type {param_ty}, found type {arg_ty}"
+                                ))
+                                .with_labels(vec![span.as_label()])
+                                .with_notes(vec![format!(
+                                    "{param_ty} is the expected type for argument #{} of `{}`",
+                                    i + 1,
+                                    root
+                                )]),
+                        )
                 }
             }
 
@@ -488,8 +494,9 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 ),
             ) in args.iter().zip(fun.params.iter()).enumerate()
             {
-                if arg_ty != param_ty {
-                    self.ctx.emit(
+                match arg_ty.unify(param_ty, self.ctx.arena)  {
+                    Some(substs) => self.substs += &substs,
+                    None => self.ctx.emit(
                         Diagnostic::error()
                             .with_code(TYPE_MISMATCH_ERROR)
                             .with_message(format!(
@@ -501,7 +508,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 i + 1,
                                 name
                             )]),
-                    );
+                    ),
                 }
             }
 
@@ -658,6 +665,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         ix.ty.unify(&IntT, self.ctx.arena),
                     ) {
                         (Some(subst1), Some(subst2)) => {
+                            self.substs += &subst1;
+                            self.substs += &subst2;
                             let ty = array_ty.subst(self.ctx.arena, &subst1);
                             let e_stm = e.stm; // Needed now because we move e after
                             Expr::new(
@@ -728,7 +737,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                 // Condition must be a bool
                 match cond.ty.unify(&BoolT, self.ctx.arena) {
-                    Some(substs) => {}
+                    Some(substs) => self.substs += &substs,
                     None => self.ctx.emit(
                         Diagnostic::error()
                             .with_code(TYPE_MISMATCH_ERROR)
@@ -865,9 +874,6 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         core::cmp::max(s1, *s2)
                     });
 
-                // The final type, that will get replace thanks to unification
-                let ty = ArrayT(self.ctx.alloc(Ty::hole()));
-
                 // Check that all items unify to the same type
                 let subst: Option<TySubst> = array
                     .array_windows::<2>()
@@ -878,8 +884,18 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             _ => None,
                         }
                     });
+
+                // Computing the type of the array
+                let ty = if let Some(item1) = array.first() {
+                    // there is at least one array element! easy-peasy
+                    ArrayT(self.ctx.alloc(item1.ty))
+                } else {
+                    // no item in array, so we must use a type variable
+                    ArrayT(self.ctx.alloc(Ty::hole()))
+                };
+
                 match subst {
-                    Some(subst) => {}
+                    Some(subst) => self.substs += &subst,
                     None => self.ctx.emit(
                         Diagnostic::error()
                             .with_code(HETEROGENEOUS_LISTS_ERROR)
@@ -918,7 +934,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                 // Check that the type of both ends is `int`
                 match start.ty.unify(&IntT, self.ctx.arena) {
-                    Some(substs) => {}
+                    Some(substs) => self.substs += &substs,
                     None => {
                         self.ctx.emit(
                             Diagnostic::error()
@@ -930,7 +946,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     }
                 }
                 match end.ty.unify(&IntT, self.ctx.arena) {
-                    Some(substs) => {}
+                    Some(substs) => self.substs += &substs,
                     None => {
                         self.ctx.emit(
                             Diagnostic::error()
@@ -1037,33 +1053,51 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     fn visit_stmt(&mut self, s: ast::Stmt<'ctx>, ret_ty: TyUse<'ctx>, in_loop: bool) -> Stmt<'ctx> {
         let res: Option<Stmt> = try {
             match s.kind {
-                ast::StmtKind::DeclareS(mut vardef, expr) => {
+                ast::StmtKind::DeclareS(var, expr) => {
                     let rhs_span = expr.span;
                     let stm = self.current_stratum();
                     let expr = self.visit_expr(expr, ret_ty, in_loop);
                     let expr_ty = &expr.ty;
-
-                    // Check type declaration.
-                    self.check_ty(&mut vardef.ty);
+                    let var_ty = match var.ty_use() {
+                        Some(mut ty) => {
+                            // If provided, check the type declaration
+                            self.check_ty(&mut ty);
+                            ty.kind
+                        }
+                        None => Ty::hole(),
+                    };
 
                     // Check the type
-                    match &vardef.ty.unify(expr_ty, self.ctx.arena) {
-                        Some(substs) => {}
-                        None => self.ctx.emit(
-                            Diagnostic::error()
-                                .with_code(TYPE_MISMATCH_ERROR)
-                                .with_message("left and right hand side have incompatible types")
-                                .with_labels(vec![rhs_span.as_label().with_message(format!(
-                                    "expected type {}, found type {expr_ty}",
-                                    vardef.ty
-                                ))]),
-                        ),
-                    }
+                    let var_ty = match &var_ty.unify(expr_ty, self.ctx.arena) {
+                        Some(substs) => {
+                            self.substs += substs;
+                            var_ty.subst(self.ctx.arena, substs)
+                        }
+                        None => {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(TYPE_MISMATCH_ERROR)
+                                    .with_message(
+                                        "left and right hand side have incompatible types",
+                                    )
+                                    .with_labels(vec![rhs_span.as_label().with_message(format!(
+                                        "expected type {}, found type {expr_ty}",
+                                        var_ty
+                                    ))]),
+                            );
+                            var_ty
+                        }
+                    };
 
-                    self.add_var(vardef);
+                    self.add_var(VarDef {
+                        var,
+                        ty: var_ty,
+                        stm,
+                        span: var.as_span(),
+                    });
 
                     AssignS(
-                        LhsPlace::var(vardef.var, vardef.ty, stm, LhsMode::Declaring, vardef.span),
+                        LhsPlace::var(var, var_ty, stm, LhsMode::Declaring, var.as_span()),
                         expr,
                     )
                     .with_span(s.span)
@@ -1075,17 +1109,18 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     let place = self.visit_lhs_place(place, ret_ty, in_loop)?;
 
                     // Check the type
-                    if &place.ty != expr_ty {
-                        self.ctx.emit(
+                    match &place.ty.unify(expr_ty, self.ctx.arena) {
+                        Some(substs) => self.substs += substs,
+                        None => self.ctx.emit(
                             Diagnostic::error()
                                 .with_code(TYPE_MISMATCH_ERROR)
-                                .with_message("Left and right hand side have incompatible types")
+                                .with_message("left and right hand side have incompatible types")
                                 .with_labels(vec![rhs_span.as_label().with_message(format!(
                                     "expected type {}, found type {expr_ty}",
                                     place.ty
                                 ))]),
-                        );
-                    }
+                        ),
+                    };
 
                     AssignS(place, expr).with_span(s.span)
                 }
@@ -1121,7 +1156,10 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                     let item_ty = self.ctx.alloc(Ty::hole());
                     let item_ty = match iter.ty.unify(&IterT(item_ty), self.ctx.arena) {
-                        Some(substs) => item_ty.subst(self.ctx.arena, &substs),
+                        Some(substs) => {
+                            self.substs += &substs;
+                            item_ty.subst(self.ctx.arena, &substs)
+                        }
                         None => {
                             self.ctx.emit(
                                 Diagnostic::error()
@@ -1138,7 +1176,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             Ty::hole()
                         }
                     };
-                    let item = item.with_type(item_ty);
+                    let item = item.as_vardef(item_ty);
                     //
                     // Introduce a new intermediate scope, in which `item` is defined`
                     self.push_scope();
@@ -1333,12 +1371,12 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
         // Note: order is important.
         // We must visit structures first.
-        let structs = structs
+        let structs: HashMap<_, _> = structs
             .into_iter()
             .map(|s| (s.name, self.visit_struct(s)))
             .collect();
 
-        let enums = enums
+        let enums: HashMap<_, _> = enums
             .into_iter()
             .map(|e| (e.name, self.visit_enum(e)))
             .collect();
@@ -1356,6 +1394,20 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     .with_message("Please add a `main` function to your program"),
             );
         }
+
+        // Finally, apply type inference substitutions recursively.
+        let structs = structs
+            .into_iter()
+            .map(|(name, s)| (name, s.subst(self.ctx.arena, &self.substs)))
+            .collect();
+        let enums = enums
+            .into_iter()
+            .map(|(name, e)| (name, e.subst(self.ctx.arena, &self.substs)))
+            .collect();
+        let funs: HashMap<_, _> = funs
+            .into_iter()
+            .map(|(name, f)| (name, f.subst(self.ctx.arena, &self.substs)))
+            .collect();
 
         Program {
             arena: self.ctx.arena,
@@ -1428,7 +1480,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ast::ExprKind::PlaceE(place) => {
                 if let ast::PlaceKind::VarP(v) = place.kind {
                     Some(Pat::new(
-                        IdentM(VarDef::with_stratum(v.with_type(ty), stm)),
+                        IdentM(VarDef::with_stratum(v.as_vardef(ty), stm)),
                         IntT,
                         span,
                     ))

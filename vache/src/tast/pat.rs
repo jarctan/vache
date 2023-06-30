@@ -1,6 +1,7 @@
 //! Defining (pattern matching) patterns.
 
-use super::{Span, Ty, VarDef};
+use super::{Span, Ty, TySubst, VarDef};
+use crate::Arena;
 
 /// Code pattern, that represents some data structure to match.
 ///
@@ -47,6 +48,14 @@ impl<'ctx> Pat<'ctx> {
             } => StrB(variant),
         }
     }
+
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        Self {
+            kind: self.kind.subst(arena, substs),
+            ty: self.ty.subst(arena, substs),
+            span: self.span,
+        }
+    }
 }
 
 /// Pattern kinds.
@@ -74,3 +83,24 @@ pub enum PatKind<'ctx> {
 }
 
 use PatKind::*;
+
+impl<'ctx> PatKind<'ctx> {
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        match self {
+            pat @ (BoolM(_) | IntegerM(_) | StringM(_)) => pat,
+            IdentM(vardef) => IdentM(vardef.subst(arena, substs)),
+            VariantM {
+                enun,
+                variant,
+                args,
+            } => VariantM {
+                enun,
+                variant,
+                args: args
+                    .into_iter()
+                    .map(|arg| arg.subst(arena, substs))
+                    .collect(),
+            },
+        }
+    }
+}

@@ -1,6 +1,8 @@
 //! Defining places in the typed AST.
 
-use super::{Expr, LhsMode, Mode, Span, Stratum, Ty, VarUse};
+use super::{Expr, LhsMode, Mode, Span, Stratum, Ty, TySubst, VarUse};
+use crate::utils::boxed;
+use crate::Arena;
 
 /// A place in the AST: allowed left hand side expressions.
 #[derive(Debug, Clone)]
@@ -32,6 +34,16 @@ impl<'ctx> Place<'ctx> {
             stm,
             mode,
             span: span.into(),
+        }
+    }
+
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        Self {
+            kind: self.kind.subst(arena, substs),
+            ty: self.ty.subst(arena, substs),
+            stm: self.stm,
+            mode: self.mode,
+            span: self.span,
         }
     }
 }
@@ -68,6 +80,16 @@ impl<'ctx> LhsPlace<'ctx> {
             span: span.into(),
         }
     }
+
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        Self {
+            kind: self.kind.subst(arena, substs),
+            ty: self.ty.subst(arena, substs),
+            stm: self.stm,
+            mode: self.mode,
+            span: self.span,
+        }
+    }
 }
 
 /// Kinds of places.
@@ -81,4 +103,20 @@ pub enum PlaceKind<'ctx> {
     FieldP(Box<Expr<'ctx>>, &'ctx str),
     /// An element in a tuple.
     ElemP(Box<Expr<'ctx>>, usize),
+}
+
+use PlaceKind::*;
+
+impl<'ctx> PlaceKind<'ctx> {
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        match self {
+            VarP(var) => VarP(var.subst(arena, substs)),
+            IndexP(box array, box index) => IndexP(
+                boxed(array.subst(arena, substs)),
+                boxed(index.subst(arena, substs)),
+            ),
+            FieldP(box strukt, field) => FieldP(boxed(strukt.subst(arena, substs)), field),
+            ElemP(box tuple, index) => ElemP(boxed(tuple.subst(arena, substs)), index),
+        }
+    }
 }

@@ -30,7 +30,7 @@ for_loop = { for_kw ~ ident ~ in_kw ~ expr ~ block }
 
 assign = { expr ~ eq ~ expr ~ sc }
 
-declare = { var_kw ~ vardef ~ eq ~ expr ~ sc }
+declare = { var_kw ~ (vardef | ident) ~ eq ~ expr ~ sc }
 
 vardef = { ident ~ cln ~ ty }
 

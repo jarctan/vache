@@ -75,6 +75,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 quote!(#wrapper<#lft #name>)
             }
             VarT(TyVar::Gen(_)) => {
+                // We should not have free, compiler-generated type variables at this stage
                 unreachable!()
             }
             ArrayT(ty) => {

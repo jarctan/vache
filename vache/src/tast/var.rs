@@ -2,8 +2,9 @@
 
 use std::fmt;
 
-use super::{Span, Stratum, Ty, VarUse, Varname};
+use super::{Span, Stratum, Ty, TySubst, VarUse, Varname};
 use crate::ast;
+use crate::Arena;
 
 /// A variable definition, with stratum and type information.
 #[derive(Clone, Copy, PartialEq)]
@@ -34,6 +35,15 @@ impl<'ctx> VarDef<'ctx> {
     /// stratum information).
     pub(crate) fn name(&self) -> Varname<'ctx> {
         self.var.name()
+    }
+
+    pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> VarDef<'ctx> {
+        Self {
+            var: self.var.subst(arena, substs),
+            ty: self.ty.subst(arena, substs),
+            stm: self.stm,
+            span: self.span,
+        }
     }
 }
 

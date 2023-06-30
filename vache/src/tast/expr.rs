@@ -2,7 +2,9 @@
 
 use num_bigint::BigInt;
 
-use super::{Block, Namespaced, Pat, Place, Span, Stratum, Ty};
+use super::{Block, Namespaced, Pat, Place, Span, Stratum, Ty, TySubst};
+use crate::utils::boxed;
+use crate::Arena;
 
 /// An expression in the typed AST.
 ///
@@ -43,6 +45,15 @@ impl<'ctx> Expr<'ctx> {
             ty: Ty::hole(),
             stm: Stratum::static_stm(),
             span: span.into(),
+        }
+    }
+
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        Self {
+            kind: self.kind.subst(arena, substs),
+            ty: self.ty.subst(arena, substs),
+            stm: self.stm,
+            span: self.span,
         }
     }
 }
@@ -106,3 +117,67 @@ pub enum ExprKind<'ctx> {
 }
 
 use ExprKind::*;
+
+impl<'ctx> ExprKind<'ctx> {
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        match self {
+            prim @ (UnitE | BoolE(_) | IntegerE(_) | StringE(_) | HoleE) => prim,
+            PlaceE(place) => PlaceE(place.subst(arena, substs)),
+            RangeE(box e1, box e2) => RangeE(
+                boxed(e1.subst(arena, substs)),
+                boxed(e2.subst(arena, substs)),
+            ),
+            StructE { name, fields } => StructE {
+                name,
+                fields: fields
+                    .into_iter()
+                    .map(|(name, e)| (name, e.subst(arena, substs)))
+                    .collect(),
+            },
+            ArrayE(items) => ArrayE(
+                items
+                    .into_iter()
+                    .map(|item| item.subst(arena, substs))
+                    .collect(),
+            ),
+            TupleE(elems) => TupleE(
+                elems
+                    .into_iter()
+                    .map(|elem| elem.subst(arena, substs))
+                    .collect(),
+            ),
+            CallE { name, args } => CallE {
+                name,
+                args: args
+                    .into_iter()
+                    .map(|arg| arg.subst(arena, substs))
+                    .collect(),
+            },
+            IfE(box cond, box iftrue, box iffalse) => IfE(
+                boxed(cond.subst(arena, substs)),
+                boxed(iftrue.subst(arena, substs)),
+                boxed(iffalse.subst(arena, substs)),
+            ),
+            BlockE(box b) => BlockE(boxed(b.subst(arena, substs))),
+            MatchE(box matched, variants) => MatchE(
+                boxed(matched.subst(arena, substs)),
+                variants
+                    .into_iter()
+                    .map(|(pat, e)| (pat.subst(arena, substs), e.subst(arena, substs)))
+                    .collect(),
+            ),
+            VariantE {
+                enun,
+                variant,
+                args,
+            } => VariantE {
+                enun,
+                variant,
+                args: args
+                    .into_iter()
+                    .map(|arg| arg.subst(arena, substs))
+                    .collect(),
+            },
+        }
+    }
+}

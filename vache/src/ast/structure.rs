@@ -5,9 +5,10 @@ use std::fmt;
 
 use pest::iterators::Pair;
 
-use super::{Context, Parsable, VarDef};
-use super::{Span, Ty, TyUse};
+use super::{Context, Parsable};
+use super::{Span, Ty, TySubst, TyUse, VarDef};
 use crate::grammar::*;
+use crate::Arena;
 
 /// A C-like `struct`.
 #[derive(Clone, Default)]
@@ -37,6 +38,18 @@ impl fmt::Debug for Struct<'_> {
 }
 
 impl<'ctx> Struct<'ctx> {
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
+        Self {
+            name: self.name,
+            fields: self
+                .fields
+                .into_iter()
+                .map(|(name, ty)| (name, ty.subst(arena, subst)))
+                .collect(),
+            span: self.span,
+        }
+    }
+
     /// Gets the type of a field in the structure.
     pub fn get_field(&self, field: impl AsRef<str>) -> Option<Ty<'ctx>> {
         self.fields.get(field.as_ref()).map(|ty| ty.kind)

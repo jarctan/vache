@@ -6,7 +6,7 @@ use std::sync::atomic::AtomicU64;
 
 use pest::iterators::Pair;
 
-use super::{Context, Parsable, Span, Ty, TyUse};
+use super::{Context, Parsable, Span, Ty, TySubst, TyUse};
 use crate::grammar::*;
 use crate::Arena;
 
@@ -15,7 +15,7 @@ use crate::Arena;
 /// Global to avoid any confusion between variable names.
 pub static VAR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// A variable.
 pub struct Varname<'ctx>(&'ctx str);
 
@@ -27,10 +27,12 @@ impl<'ctx> Varname<'ctx> {
 }
 
 /// A variable in the code.
-#[derive(Clone, Copy, Hash)]
+#[derive(Clone, Copy, Default)]
 pub struct VarUse<'ctx> {
     /// Name of the variable.
     name: Varname<'ctx>,
+    /// Optional type annotation.
+    ty: Option<TyUse<'ctx>>,
     /// Span where the variable is used.
     span: Span,
 }
@@ -61,7 +63,11 @@ impl<'ctx> PartialEq<&str> for Varname<'ctx> {
 
 impl<'ctx> PartialEq<str> for VarUse<'ctx> {
     fn eq(&self, other: &str) -> bool {
-        let Self { name, span: _ } = self; // So that if we have more fields, we'll have a compile error to update this
+        let Self {
+            name,
+            span: _,
+            ty: _,
+        } = self; // So that if we have more fields, we'll have a compile error to update this
         name == other // NB: var equality is computed according to the name
                       // only.
     }
@@ -69,7 +75,11 @@ impl<'ctx> PartialEq<str> for VarUse<'ctx> {
 
 impl<'ctx> PartialEq<&str> for VarUse<'ctx> {
     fn eq(&self, other: &&str) -> bool {
-        let Self { name, span: _ } = self; // So that if we have more fields, we'll have a compile error to update this
+        let Self {
+            name,
+            span: _,
+            ty: _,
+        } = self; // So that if we have more fields, we'll have a compile error to update this
         name == *other // NB: var equality is computed according to the
                        // name only.
     }
@@ -86,7 +96,25 @@ impl<'ctx> VarUse<'ctx> {
         VarUse {
             name: name.into(),
             span,
+            ty: None,
         }
+    }
+
+    /// Returns the annotation type of this variable use.
+    ///
+    /// Returns `None` if there is no type annotation for this variable use.
+    pub fn ty(&self) -> Option<Ty<'ctx>> {
+        Some(*self.ty?)
+    }
+
+    /// Returns the annotation type of this variable use.
+    ///
+    /// Returns `None` if there is no type annotation for this variable use.
+    pub fn ty_use(&self) -> Option<TyUse<'ctx>> {
+        Some(TyUse {
+            kind: *self.ty?,
+            span: self.span,
+        })
     }
 
     /// See the variable as a string.
@@ -104,17 +132,23 @@ impl<'ctx> VarUse<'ctx> {
         self.name
     }
 
-    /// Adds type information to the variable use to transform it into a
-    /// variable declaration.
-    ///
-    /// Useful during the typing phase, when we want to type untyped versions.
-    /// Note/TODO: will disappear when we support type inference (we will use
-    /// `VarDef` directly).
-    pub fn with_type(self, ty: Ty<'ctx>) -> VarDef<'ctx> {
+    /// Transforms that `VarUse` into a `VarDef`, by adding a type if there is
+    /// none (otherwise, it will **keep** the original type).
+    pub fn as_vardef(self, ty: Ty<'ctx>) -> VarDef<'ctx> {
         VarDef {
             var: self,
-            ty: ty.with_span(self.span), /* We'll say that the span of the `type` in the code is
-                                          * the same as the variable declaration */
+            ty: self.ty.unwrap_or(ty.with_span(self.span)), /* We'll say that the span of the
+                                                             * `type` in the code is
+                                                             * the same as the variable
+                                                             * declaration */
+            span: self.span,
+        }
+    }
+
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        Self {
+            name: self.name,
+            ty: self.ty.map(|ty| ty.subst(arena, substs)),
             span: self.span,
         }
     }
@@ -160,7 +194,7 @@ impl<'ctx> From<&'ctx str> for VarUse<'ctx> {
     fn from(name: &'ctx str) -> Self {
         Self {
             name: name.into(),
-            span: Span::default(),
+            ..default()
         }
     }
 }
@@ -191,7 +225,11 @@ impl fmt::Debug for VarUse<'_> {
 
 impl fmt::Display for VarUse<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name)
+        if let Some(ty) = self.ty {
+            write!(f, "{}: {ty}", self.name)
+        } else {
+            write!(f, "{}", self.name)
+        }
     }
 }
 
@@ -220,6 +258,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for VarUse<'ctx> {
         VarUse {
             name: ctx.parse(pair),
             span,
+            ..default()
         }
     }
 }

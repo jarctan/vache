@@ -1,6 +1,7 @@
 //! Defining statements.
 
-use super::{Block, Expr, LhsPlace, Span, VarDef};
+use super::{Block, Expr, LhsPlace, Span, TySubst, VarDef};
+use crate::Arena;
 
 /// A statement.
 #[derive(Debug, Clone, Default)]
@@ -9,6 +10,14 @@ pub struct Stmt<'ctx> {
     pub kind: StmtKind<'ctx>,
     /// Codespan in the source code.
     pub span: Span,
+}
+impl<'ctx> Stmt<'ctx> {
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        Self {
+            kind: self.kind.subst(arena, substs),
+            span: self.span,
+        }
+    }
 }
 
 /// Statement kind.
@@ -45,10 +54,32 @@ pub enum StmtKind<'ctx> {
     HoleS,
 }
 
+use StmtKind::*;
+
 impl<'ctx> StmtKind<'ctx> {
     /// Enrich the [`StmtKind`] with some [`Span`] information to get a
     /// [`Stmt`].
     pub(crate) fn with_span(self, span: Span) -> Stmt<'ctx> {
         Stmt { kind: self, span }
+    }
+
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        match self {
+            AssignS(lhs, rhs) => AssignS(lhs.subst(arena, substs), rhs.subst(arena, substs)),
+            ExprS(e) => ExprS(e.subst(arena, substs)),
+            BreakS => BreakS,
+            ContinueS => ContinueS,
+            ReturnS(e) => ReturnS(e.subst(arena, substs)),
+            WhileS { cond, body } => WhileS {
+                cond: cond.subst(arena, substs),
+                body: body.subst(arena, substs),
+            },
+            ForS { item, iter, body } => ForS {
+                item: item.subst(arena, substs),
+                iter: iter.subst(arena, substs),
+                body: body.subst(arena, substs),
+            },
+            HoleS => HoleS,
+        }
     }
 }

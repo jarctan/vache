@@ -1,6 +1,7 @@
 //! Defining typed blocks.
 
-use super::{Expr, Span, Stmt};
+use super::{Expr, Span, Stmt, TySubst};
+use crate::Arena;
 
 /// A block in the typed AST.
 ///
@@ -13,4 +14,18 @@ pub struct Block<'ctx> {
     pub ret: Expr<'ctx>,
     /// Code span.
     pub span: Span,
+}
+
+impl<'ctx> Block<'ctx> {
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        Self {
+            stmts: self
+                .stmts
+                .into_iter()
+                .map(|stmt| stmt.subst(arena, substs))
+                .collect(),
+            ret: self.ret.subst(arena, substs),
+            span: self.span,
+        }
+    }
 }

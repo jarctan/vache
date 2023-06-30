@@ -2,7 +2,7 @@
 
 use std::default::default;
 use std::fmt;
-use std::ops::{Add, Deref};
+use std::ops::{Add, AddAssign, Deref};
 use std::sync::atomic::AtomicU64;
 
 use itertools::Itertools;
@@ -17,10 +17,16 @@ use crate::{grammar::*, Arena};
 /// Global to avoid any confusion between type variable names.
 pub static TY_VAR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct TySubst<'ctx> {
     substs: Vec<(TyVar<'ctx>, Ty<'ctx>)>,
     arena: &'ctx Arena<'ctx>,
+}
+
+impl<'ctx> fmt::Debug for TySubst<'ctx> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.substs)
+    }
 }
 
 impl<'ctx> TySubst<'ctx> {
@@ -36,13 +42,19 @@ impl<'ctx> Add<&TySubst<'ctx>> for TySubst<'ctx> {
     type Output = Self;
 
     fn add(mut self, rhs: &TySubst<'ctx>) -> Self::Output {
+        self += rhs;
+        self
+    }
+}
+
+impl<'ctx> AddAssign<&TySubst<'ctx>> for TySubst<'ctx> {
+    fn add_assign(&mut self, rhs: &TySubst<'ctx>) {
         self.substs.extend(
             rhs.substs
                 .iter()
                 .map(|&(var, ty)| (var, ty.subst(self.arena, &self)))
                 .collect::<Vec<_>>(),
         );
-        self
     }
 }
 
@@ -83,6 +95,15 @@ pub struct TyUse<'ctx> {
     pub kind: Ty<'ctx>,
     /// Span in the code for that use.
     pub span: Span,
+}
+
+impl<'ctx> TyUse<'ctx> {
+    pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
+        Self {
+            kind: self.kind.subst(arena, subst),
+            span: self.span,
+        }
+    }
 }
 
 impl<'ctx> Deref for TyUse<'ctx> {
@@ -184,7 +205,12 @@ pub struct GenTy<'ctx> {
 }
 
 impl<'ctx> GenTy<'ctx> {
-    pub fn subst_var(&self, arena: &'ctx Arena<'ctx>, from: TyVar<'ctx>, to: Ty<'ctx>) -> Self {
+    pub(crate) fn subst_var(
+        &self,
+        arena: &'ctx Arena<'ctx>,
+        from: TyVar<'ctx>,
+        to: Ty<'ctx>,
+    ) -> Self {
         if self.quantifiers.iter().all(|&el| el != from) {
             Self {
                 quantifiers: self.quantifiers,
@@ -195,7 +221,7 @@ impl<'ctx> GenTy<'ctx> {
         }
     }
 
-    pub fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         subst
             .substs
             .iter()
@@ -289,11 +315,16 @@ impl<'ctx> Ty<'ctx> {
         }
     }
 
-    pub fn subst_var(&self, arena: &'ctx Arena<'ctx>, from: TyVar<'ctx>, to: Ty<'ctx>) -> Self {
+    pub(crate) fn subst_var(
+        &self,
+        arena: &'ctx Arena<'ctx>,
+        from: TyVar<'ctx>,
+        to: Ty<'ctx>,
+    ) -> Self {
         self._subst_var(arena, from, to).unwrap_or_else(|x| x)
     }
 
-    pub fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         subst
             .substs
             .iter()

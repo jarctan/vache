@@ -6,8 +6,8 @@ use std::fmt;
 use pest::iterators::Pair;
 
 use super::{Context, Parsable};
-use super::{Span, TyUse};
-use crate::grammar::*;
+use super::{Span, TySubst, TyUse};
+use crate::{grammar::*, Arena};
 
 /// An enumerated type (tag union of types).
 #[derive(Clone, Default)]
@@ -40,6 +40,25 @@ impl<'ctx> Enum<'ctx> {
     /// Gets the arguments of of a variant in the `enum`.
     pub fn get_variant<'a>(&'a self, variant: impl AsRef<str>) -> Option<&'a [TyUse<'ctx>]> {
         self.variants.get(variant.as_ref()).map(|args| &**args)
+    }
+
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Enum<'ctx> {
+        Self {
+            name: self.name,
+            variants: self
+                .variants
+                .into_iter()
+                .map(|(name, args)| {
+                    (
+                        name,
+                        args.into_iter()
+                            .map(|arg| arg.subst(arena, substs))
+                            .collect(),
+                    )
+                })
+                .collect(),
+            span: self.span,
+        }
     }
 }
 
