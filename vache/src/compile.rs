@@ -301,6 +301,15 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     /// Compiles a struct.
     fn visit_struct(&mut self, strukt: &Struct) -> TokenStream {
         let name = format_ident!("{}", strukt.name);
+
+        let ty_params = strukt.ty_params.iter().map(|param| match param {
+            TyVar::Named(name) => {
+                let name = format_ident!("{}", name);
+                quote!(#name: ::std::fmt::Debug + ::std::fmt::Display + ::std::clone::Clone)
+            }
+            TyVar::Gen(..) => unreachable!(),
+        });
+
         let fields: TokenStream = strukt
             .fields
             .iter()
@@ -310,9 +319,10 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 quote!(#field: #ty,)
             })
             .collect();
+
         quote!(
             #[derive(Debug, Clone)]
-            pub struct #name<'a, 'b> {
+            pub struct #name<#(#ty_params,)* 'a, 'b> {
                 #fields
             }
         )
@@ -321,6 +331,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     /// Compiles an `enum`.
     fn visit_enum(&mut self, enun: &Enum) -> TokenStream {
         let name = format_ident!("{}", enun.name);
+
         let variants: TokenStream = enun
             .variants
             .iter()
@@ -337,6 +348,9 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             })
             .collect();
 
+        // Add an implementation of `Display` for enums
+        // For that, create the branches of the match we'll use in the impl of
+        // `Display`.
         let variants_display: Vec<_> = enun
             .variants
             .iter()
@@ -344,23 +358,49 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let variant_str = variant;
                 let variant_ident = format_ident!("{}", variant);
                 if !args.is_empty() {
-                    let args_lhs1 = (0..args.len()).map(|i| format_ident!("__arg{i}"));
-                    let args_lhs2 = args_lhs1.clone();
+                    // Create the list of left-hand side arguments, the one we're going to introduce with the pattern matching
+                    // and then use again on the other side of the `=>`, in the `write!`
+                    let args = (0..args.len()).map(|i| format_ident!("__arg{i}")).collect::<Vec<_>>();
+                    // Compute the format string for the arguments of that variant in the display
+                    // Overall, some `{} {} {} {} ...`
                     let variant_str = format!("{variant_str}({})", (0..args.len()).map(|_| "{}").join(", "));
-                    quote!(#name::#variant_ident(#(#args_lhs1),*) => write!(f, #variant_str, #(#args_lhs2),*),)
+                    quote!(#name::#variant_ident(#(#args),*) => write!(f, #variant_str, #(#args),*),)
                 } else {
                     quote!(#name::#variant_ident => write!(f, #variant_str),)
                 }
             })
             .collect();
 
+        // Type parameters with trait bounds
+        let ty_params_w_bounds: Vec<_> = enun
+            .ty_params
+            .iter()
+            .map(|param| match param {
+                TyVar::Named(name) => {
+                    let name = format_ident!("{}", name);
+                    quote!(#name: ::std::fmt::Debug + ::std::fmt::Display + ::std::clone::Clone)
+                }
+                TyVar::Gen(..) => unreachable!(),
+            })
+            .collect();
+
+        // Type parameters list without trait bounds
+        let ty_params_wo_bounds: Vec<_> = enun
+            .ty_params
+            .iter()
+            .map(|param| match param {
+                TyVar::Named(name) => format_ident!("{}", name),
+                TyVar::Gen(..) => unreachable!(),
+            })
+            .collect();
+
         quote!(
             #[derive(Debug, Clone)]
-            pub enum #name<'a, 'b> {
+            pub enum #name<#(#ty_params_w_bounds,)* 'a, 'b> {
                 #variants
             }
 
-            impl<'a, 'b> ::std::fmt::Display for #name<'a, 'b> {
+            impl<#(#ty_params_w_bounds,)* 'a, 'b> ::std::fmt::Display for #name<#(#ty_params_wo_bounds,)* 'a, 'b> {
                 fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
                     match self {
                         #(#variants_display)*
@@ -644,11 +684,9 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 pub fn #name(#(#params),*) -> #ret_ty #body
             }
         } else {
-            let res = quote! {
+            quote! {
                 pub fn #name<#(#ty_params,)* 'a, 'b>(#(#params),*) -> #ret_ty #body
-            };
-            println!("{res}");
-            res
+            }
         }
     }
 

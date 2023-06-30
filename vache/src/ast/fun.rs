@@ -170,7 +170,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Fun<'ctx> {
 
         let name = consume!(pairs).as_str();
 
-        // Possible type parameters
+        // Parse optional type parameters
         let mut ty_params = vec![];
         if consume_opt!(pairs, Rule::lt).is_some() {
             loop {
@@ -184,12 +184,12 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Fun<'ctx> {
             }
         }
 
+        // Parse parameters
         let params_pair = consume!(pairs, Rule::params);
         let params_span = params_pair.as_span();
         let mut params_pairs = params_pair.into_inner();
         consume!(params_pairs, Rule::lp);
         consume_back!(params_pairs, Rule::rp);
-
         let params = params_pairs
             .filter(|pair| !matches!(pair.as_rule(), Rule::cma))
             .map(|param| ctx.parse(param))
