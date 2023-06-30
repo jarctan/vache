@@ -11,7 +11,7 @@ use PlaceKind::*;
 use StmtKind::*;
 use Ty::*;
 
-use crate::ast::fun::{binop_bool_sig, binop_int_sig, unop_bool_sig};
+use crate::ast::fun::{binop_bool_sig, binop_gen_sig, binop_int_sig, unop_bool_sig};
 use crate::codes::*;
 use crate::reporter::Diagnostic;
 use crate::tast::place::LhsPlace;
@@ -109,7 +109,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         typer.add_fun(binop_int_sig("*", IntT));
         typer.add_fun(binop_int_sig("/", IntT));
         typer.add_fun(binop_int_sig("%", IntT));
-        typer.add_fun(binop_int_sig("==", BoolT));
+        typer.add_fun(binop_gen_sig("==", TyVar::Named("T"), BoolT));
         typer.add_fun(binop_int_sig("<=", BoolT));
         typer.add_fun(binop_int_sig("<", BoolT));
         typer.add_fun(binop_int_sig(">=", BoolT));
@@ -468,7 +468,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             }
 
             Expr::new(VariantE { enun: root, variant, args }, EnumT(enun.name), self.current_stratum(), span)
-        } else if let Some(fun) = self.fun_env.get(root) {
+        } else if let Some(&fun) = self.fun_env.get(root) {
+            let fun = fun.clone().instantiate(self.ctx.arena);
             let name = root;
             // Check the number of arguments.
             if args.len() != fun.params.len() {
@@ -494,8 +495,12 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 ),
             ) in args.iter().zip(fun.params.iter()).enumerate()
             {
+                println!("Unifying {param_ty:?} {arg_ty:?}");
                 match arg_ty.unify(param_ty, self.ctx.arena)  {
-                    Some(subst) => self.subst += &subst,
+                    Some(subst) => {
+                        println!("Unified with {subst:?}");
+                        self.subst += &subst
+                    },
                     None => self.ctx.emit(
                         Diagnostic::error()
                             .with_code(TYPE_MISMATCH_ERROR)
@@ -1310,6 +1315,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
         Fun {
             name: f.name,
+            ty_params: f.ty_params,
             params: f
                 .params
                 .into_iter()
@@ -1420,13 +1426,14 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         for var in p.free_ty_vars() {
             match var {
                 TyVar::Named(..) => unreachable!(), // Only generated variables should be free
-                TyVar::Gen(_, span) => self.ctx.emit(
+                TyVar::Gen(id, span) => self.ctx.emit(
                     Diagnostic::error()
                         .with_code(TYPE_INFER_ERROR)
                         .with_message("could not infer type")
                         .with_labels(vec![span.as_label()])
                         .with_notes(vec![
-                            "Please consider adding an explicit type to it".to_string()
+                            "Please consider adding an explicit type to it".to_string(),
+                            format!("{:?} {id:?}", self.subst),
                         ]),
                 ),
             }

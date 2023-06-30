@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::default::default;
 use std::fmt;
-use std::ops::{Add, AddAssign};
+use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use super::*;
 use crate::Arena;
@@ -57,6 +57,23 @@ impl<'ctx> Add<&TySubst<'ctx>> for TySubst<'ctx> {
 
     fn add(mut self, rhs: &TySubst<'ctx>) -> Self::Output {
         self += rhs;
+        self
+    }
+}
+
+impl<'a, 'ctx: 'a, I: IntoIterator<Item = &'a TyVar<'ctx>>> SubAssign<I> for TySubst<'ctx> {
+    fn sub_assign(&mut self, rhs: I) {
+        for i in rhs {
+            self.subst.remove(&i);
+        }
+    }
+}
+
+impl<'a, 'ctx: 'a, I: IntoIterator<Item = &'a TyVar<'ctx>>> Sub<I> for TySubst<'ctx> {
+    type Output = Self;
+
+    fn sub(mut self, rhs: I) -> Self::Output {
+        self -= rhs;
         self
     }
 }

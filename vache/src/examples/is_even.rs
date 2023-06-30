@@ -1,7 +1,5 @@
 //! Basic "is_even" function.
 
-use std::default::default;
-
 use super::*;
 
 /// Is n even.
@@ -10,7 +8,6 @@ pub fn is_even() -> Fun<'static> {
         name: "is_even",
         params: vec![vardef("n", intT())],
         ret_ty: boolT(),
-        span: default(),
         body: Block {
             stmts: vec![
                 declare(vardef("x", intT()), int(2)),
@@ -19,6 +16,7 @@ pub fn is_even() -> Fun<'static> {
             ret: binop(var("res"), "==", int(0)),
             span: default(),
         },
+        ..default()
     }
 }
 

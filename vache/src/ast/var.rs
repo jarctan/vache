@@ -5,8 +5,9 @@ use std::fmt;
 
 use pest::iterators::Pair;
 
-use super::{Context, Parsable, Span, Ty, TyUse};
+use super::{Context, Parsable, Span, Ty, TySubst, TyUse};
 use crate::grammar::*;
+use crate::Arena;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// A variable.
@@ -265,6 +266,16 @@ impl<'ctx> VarDef<'ctx> {
             name: self.name,
             ty: Some(self.ty),
             span: self.var_span,
+        }
+    }
+
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> VarDef<'ctx> {
+        Self {
+            name: self.name,
+            var_span: self.var_span,
+            ty: self.ty.subst(arena, subst),
+            span: self.span,
         }
     }
 }

@@ -23,7 +23,7 @@ pub enum TyVar<'ctx> {
 
 impl<'ctx> TyVar<'ctx> {
     /// Creates a new, fresh type variable related to a given codespan.
-    pub(super) fn fresh(span: impl Into<Span>) -> Self {
+    pub(crate) fn fresh(span: impl Into<Span>) -> Self {
         let id = TY_VAR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Self::Gen(id, span.into())
     }

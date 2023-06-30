@@ -7,15 +7,18 @@ use pest::iterators::Pair;
 use Ty::*;
 
 use super::var::vardef;
-use super::{Block, Context, Parsable, Span, Ty, VarDef};
+use super::{Block, Context, Parsable, Span, Ty, TySubst, TyVar, VarDef};
 use crate::examples::TyUse;
 use crate::grammar::*;
+use crate::Arena;
 
 /// A function in the parser AST.
 #[derive(Debug, Clone)]
 pub struct Fun<'ctx> {
     /// Name of that function.
     pub name: &'ctx str,
+    /// Type parameters.
+    pub ty_params: Vec<TyVar<'ctx>>,
     /// Parameters to that function, with their types
     /// and stratum.
     pub params: Vec<VarDef<'ctx>>,
@@ -36,6 +39,7 @@ impl Default for Fun<'_> {
             name: "",
             params: vec![],
             ret_ty: UnitT.into(),
+            ty_params: default(),
             body: default(),
             span: default(),
         }
@@ -51,7 +55,9 @@ impl<'ctx> Fun<'ctx> {
         FunSig {
             name: self.name,
             params: self.params.clone(),
+            ty_params: self.ty_params.clone(),
             ret_ty: self.ret_ty.kind,
+            span: self.span,
         }
     }
 }
@@ -61,16 +67,55 @@ impl<'ctx> Fun<'ctx> {
 pub struct FunSig<'ctx> {
     /// Name of that function.
     pub name: &'ctx str,
+    /// Type parameters.
+    pub ty_params: Vec<TyVar<'ctx>>,
     /// Parameters to that function, with their types
     /// and stratum.
     pub params: Vec<VarDef<'ctx>>,
     /// Return type.
     pub ret_ty: Ty<'ctx>,
+    /// Codespan.
+    pub span: Span,
+}
+
+impl<'ctx> FunSig<'ctx> {
+    pub fn instantiate(self, arena: &'ctx Arena<'ctx>) -> Self {
+        let subst = TySubst::from(
+            arena,
+            self.ty_params
+                .iter()
+                .map(|&p| (p, VarT(TyVar::fresh(self.span)))),
+        );
+        Self {
+            name: self.name,
+            ty_params: vec![],
+            params: self
+                .params
+                .into_iter()
+                .map(|p| p.subst_ty(arena, &subst))
+                .collect(),
+            ret_ty: self.ret_ty.subst(arena, &subst),
+            span: self.span,
+        }
+    }
 }
 
 impl<'ctx> From<Fun<'ctx>> for FunSig<'ctx> {
     fn from(f: Fun<'ctx>) -> Self {
         f.signature()
+    }
+}
+
+/// Shortcut to create function signatures for generic binary operators.
+///
+/// Typically used to sign builtin functions.
+pub fn binop_gen_sig<'ctx>(op: &'ctx str, ty_var: TyVar<'ctx>, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
+    FunSig {
+        name: op,
+        ty_params: vec![ty_var],
+        params: vec![vardef("n1", VarT(ty_var)), vardef("n2", VarT(ty_var))],
+        ret_ty,
+        span: default(),
     }
 }
 
@@ -80,8 +125,10 @@ impl<'ctx> From<Fun<'ctx>> for FunSig<'ctx> {
 pub fn binop_int_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
     FunSig {
         name: op,
+        ty_params: vec![],
         params: vec![vardef("n1", IntT), vardef("n2", IntT)],
         ret_ty,
+        span: default(),
     }
 }
 
@@ -91,8 +138,10 @@ pub fn binop_int_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
 pub fn binop_bool_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
     FunSig {
         name: op,
+        ty_params: vec![],
         params: vec![vardef("b1", BoolT), vardef("b2", BoolT)],
         ret_ty,
+        span: default(),
     }
 }
 
@@ -102,8 +151,10 @@ pub fn binop_bool_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
 pub fn unop_bool_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
     FunSig {
         name: op,
+        ty_params: vec![],
         params: vec![vardef("b", BoolT)],
         ret_ty,
+        span: default(),
     }
 }
 
@@ -141,6 +192,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Fun<'ctx> {
 
         Fun {
             name,
+            ty_params: default(),
             params,
             ret_ty,
             body,
