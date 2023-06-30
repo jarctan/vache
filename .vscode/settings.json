@@ -61,6 +61,7 @@
         "Tpng",
         "typecheck",
         "typer",
+        "tyuse",
         "uninit",
         "unop",
         "unparse",
