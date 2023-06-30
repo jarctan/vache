@@ -17,9 +17,15 @@ use crate::{grammar::*, Arena};
 /// Global to avoid any confusion between type variable names.
 pub static TY_VAR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// A type substitution: collection of type variables and their type mapping.
 #[derive(Clone)]
 pub struct TySubst<'ctx> {
+    /// Actual substitutions.
     substs: Vec<(TyVar<'ctx>, Ty<'ctx>)>,
+    /// Reference to the [`Arena`].
+    ///
+    /// Used when we merge two [`TySubst`], since we need to apply one
+    /// [`TySubst`] to the other.
     arena: &'ctx Arena<'ctx>,
 }
 
@@ -30,6 +36,7 @@ impl<'ctx> fmt::Debug for TySubst<'ctx> {
 }
 
 impl<'ctx> TySubst<'ctx> {
+    /// Creates a new, empty type substitution with a given arena.
     pub fn new(arena: &'ctx Arena<'ctx>) -> Self {
         Self {
             substs: default(),
@@ -52,19 +59,25 @@ impl<'ctx> AddAssign<&TySubst<'ctx>> for TySubst<'ctx> {
         self.substs.extend(
             rhs.substs
                 .iter()
-                .map(|&(var, ty)| (var, ty.subst(self.arena, &self)))
+                .map(|&(var, ty)| (var, ty.subst(self.arena, self)))
                 .collect::<Vec<_>>(),
         );
     }
 }
 
+/// Type variables (abstract types).
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TyVar<'ctx> {
+    /// User-defined type variable.
     Named(&'ctx str),
+    /// Compiler-generated type variable.
+    ///
+    /// It has a unique `u64` id, and a span to which it is tied.
     Gen(u64, Span),
 }
 
 impl<'ctx> TyVar<'ctx> {
+    /// Creates a new, fresh type variable related to a given codespan.
     fn fresh(span: impl Into<Span>) -> Self {
         let id = TY_VAR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Self::Gen(id, span.into())
@@ -98,6 +111,8 @@ pub struct TyUse<'ctx> {
 }
 
 impl<'ctx> TyUse<'ctx> {
+    /// Applies a type substitution from `subst` in `self`, returning a
+    /// new type.
     pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         Self {
             kind: self.kind.subst(arena, subst),
@@ -105,8 +120,10 @@ impl<'ctx> TyUse<'ctx> {
         }
     }
 
-    pub fn free_vars(&self) -> Set<TyVar<'ctx>> {
-        self.kind.free_vars()
+    /// Returns the free type variables in `self`.
+    pub fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self { kind, span: _ } = self;
+        kind.free_vars()
     }
 }
 
@@ -204,20 +221,24 @@ impl fmt::Debug for TyUse<'_> {
 /// Parametrized type.
 #[derive(Debug, Clone, Copy)]
 pub struct GenTy<'ctx> {
-    quantifiers: &'ctx [TyVar<'ctx>],
+    /// Type parameters.
+    params: &'ctx [TyVar<'ctx>],
+    /// Actual type.
     ty: Ty<'ctx>,
 }
 
 impl<'ctx> GenTy<'ctx> {
+    /// Substitutes a type variable `from` for `to` in `self`, returning a new
+    /// type.
     pub(crate) fn subst_var(
         &self,
         arena: &'ctx Arena<'ctx>,
         from: TyVar<'ctx>,
         to: Ty<'ctx>,
     ) -> Self {
-        if self.quantifiers.iter().all(|&el| el != from) {
+        if self.params.iter().all(|&el| el != from) {
             Self {
-                quantifiers: self.quantifiers,
+                params: self.params,
                 ty: self.ty.subst_var(arena, from, to),
             }
         } else {
@@ -225,6 +246,8 @@ impl<'ctx> GenTy<'ctx> {
         }
     }
 
+    /// Applies a type substitution from `subst` in `self`, returning a
+    /// new type.
     pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         subst
             .substs
@@ -232,8 +255,9 @@ impl<'ctx> GenTy<'ctx> {
             .fold(*self, |acc, &(var, ty)| acc.subst_var(arena, var, ty))
     }
 
+    /// Returns the free type variables in `self`.
     pub fn free_vars(&self) -> Set<TyVar<'ctx>> {
-        self.ty.free_vars() - self.quantifiers.iter()
+        self.ty.free_vars() - self.params.iter()
     }
 }
 
@@ -272,10 +296,19 @@ pub enum Ty<'ctx> {
 use Ty::*;
 
 impl<'ctx> Ty<'ctx> {
+    /// The hole type. Takes a `span` as argument to relate that hole type to
+    /// some actual codespan (useful for error reporting).
     pub fn hole(span: Span) -> Self {
         VarT(TyVar::fresh(span))
     }
 
+    /// Inner function to substitute a type variable `from` for `to` in `self`,
+    /// returning a new type. DO NOT use this function directly.
+    ///
+    /// Result:
+    /// * if `Ok(x)`, then some changes/substitutions have been made
+    /// * if `Err(y)`, then y is guaranteed to be the original type without
+    ///   change, NO substitution has been made/could be applied.
     fn _subst_var(
         &self,
         arena: &'ctx Arena<'ctx>,
@@ -319,6 +352,8 @@ impl<'ctx> Ty<'ctx> {
         }
     }
 
+    /// Substitutes a type variable `from` for `to` in `self`, returning a new
+    /// type.
     pub(crate) fn subst_var(
         &self,
         arena: &'ctx Arena<'ctx>,
@@ -328,6 +363,8 @@ impl<'ctx> Ty<'ctx> {
         self._subst_var(arena, from, to).unwrap_or_else(|x| x)
     }
 
+    /// Applies a type substitution from `subst` in `self`, returning a
+    /// new type.
     pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         subst
             .substs
@@ -335,6 +372,7 @@ impl<'ctx> Ty<'ctx> {
             .fold(*self, |acc, &(var, ty)| acc.subst_var(arena, var, ty))
     }
 
+    /// Returns the free type variables in `self`.
     pub fn free_vars(&self) -> Set<TyVar<'ctx>> {
         match *self {
             UnitT | BoolT | IntT | StrT => default(),
@@ -346,6 +384,7 @@ impl<'ctx> Ty<'ctx> {
         }
     }
 
+    /// Does this type variable occur in this type?
     pub fn occurs(&self, var: TyVar<'ctx>) -> bool {
         match *self {
             UnitT | BoolT | IntT | StrT => false,
@@ -375,6 +414,10 @@ impl<'ctx> Ty<'ctx> {
         }
     }
 
+    /// Tries to unify two types.
+    ///
+    /// If it succeeds, it returns the substitution that need to be applied to
+    /// see both types as "equal". Otherwise, returns `None`.
     pub fn unify(&self, other: &Self, arena: &'ctx Arena<'ctx>) -> Option<TySubst<'ctx>> {
         // Convoluted way of pattern matching, but this way we will get a compile
         // error if we add a new variant but forget to handle it here.

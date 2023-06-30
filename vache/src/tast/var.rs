@@ -45,12 +45,14 @@ impl<'ctx> VarUse<'ctx> {
         }
     }
 
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, _arena: &'ctx Arena<'ctx>, _substs: &TySubst<'ctx>) -> Self {
         // Subst is a no-op
         self
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         default()
     }
 }
@@ -140,16 +142,22 @@ impl<'ctx> VarDef<'ctx> {
         self.var.name()
     }
 
-    pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> VarDef<'ctx> {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(
+        &self,
+        arena: &'ctx Arena<'ctx>,
+        substs: &TySubst<'ctx>,
+    ) -> VarDef<'ctx> {
         Self {
-            var: self.var.subst(arena, substs),
+            var: self.var.subst_ty(arena, substs),
             ty: self.ty.subst(arena, substs),
             stm: self.stm,
             span: self.span,
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self {
             var: _,
             ty,
@@ -207,8 +215,6 @@ impl<'ctx> From<VarDef<'ctx>> for crate::ast::VarDef<'ctx> {
 /// Shortcut to create a new variable definition.
 #[cfg(test)]
 pub fn vardef<'ctx>(name: &'ctx str, ty: Ty<'ctx>, stm: Stratum) -> VarDef<'ctx> {
-    use std::default::default;
-
     let var = name.into();
     VarDef {
         var,

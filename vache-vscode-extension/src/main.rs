@@ -9,7 +9,6 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use vache_lib::examples::parse_file;
 use vache_lib::reporter::Diagnostics;
-use vache_lib::typecheck;
 use vache_lib::{config::Config, Arena, Context};
 
 #[derive(Debug)]

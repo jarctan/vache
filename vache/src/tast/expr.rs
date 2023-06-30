@@ -51,23 +51,25 @@ impl<'ctx> Expr<'ctx> {
         }
     }
 
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
         Self {
-            kind: self.kind.subst(arena, substs),
+            kind: self.kind.subst_ty(arena, substs),
             ty: self.ty.subst(arena, substs),
             stm: self.stm,
             span: self.span,
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self {
             kind,
             ty,
             stm: _,
             span: _,
         } = self;
-        ty.free_vars() + kind.free_vars()
+        ty.free_vars() + kind.free_ty_vars()
     }
 }
 
@@ -132,51 +134,52 @@ pub enum ExprKind<'ctx> {
 use ExprKind::*;
 
 impl<'ctx> ExprKind<'ctx> {
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
         match self {
             prim @ (UnitE | BoolE(_) | IntegerE(_) | StringE(_) | HoleE) => prim,
-            PlaceE(place) => PlaceE(place.subst(arena, substs)),
+            PlaceE(place) => PlaceE(place.subst_ty(arena, substs)),
             RangeE(box e1, box e2) => RangeE(
-                boxed(e1.subst(arena, substs)),
-                boxed(e2.subst(arena, substs)),
+                boxed(e1.subst_ty(arena, substs)),
+                boxed(e2.subst_ty(arena, substs)),
             ),
             StructE { name, fields } => StructE {
                 name,
                 fields: fields
                     .into_iter()
-                    .map(|(name, e)| (name, e.subst(arena, substs)))
+                    .map(|(name, e)| (name, e.subst_ty(arena, substs)))
                     .collect(),
             },
             ArrayE(items) => ArrayE(
                 items
                     .into_iter()
-                    .map(|item| item.subst(arena, substs))
+                    .map(|item| item.subst_ty(arena, substs))
                     .collect(),
             ),
             TupleE(elems) => TupleE(
                 elems
                     .into_iter()
-                    .map(|elem| elem.subst(arena, substs))
+                    .map(|elem| elem.subst_ty(arena, substs))
                     .collect(),
             ),
             CallE { name, args } => CallE {
                 name,
                 args: args
                     .into_iter()
-                    .map(|arg| arg.subst(arena, substs))
+                    .map(|arg| arg.subst_ty(arena, substs))
                     .collect(),
             },
             IfE(box cond, box iftrue, box iffalse) => IfE(
-                boxed(cond.subst(arena, substs)),
-                boxed(iftrue.subst(arena, substs)),
-                boxed(iffalse.subst(arena, substs)),
+                boxed(cond.subst_ty(arena, substs)),
+                boxed(iftrue.subst_ty(arena, substs)),
+                boxed(iffalse.subst_ty(arena, substs)),
             ),
-            BlockE(box b) => BlockE(boxed(b.subst(arena, substs))),
+            BlockE(box b) => BlockE(boxed(b.subst_ty(arena, substs))),
             MatchE(box matched, variants) => MatchE(
-                boxed(matched.subst(arena, substs)),
+                boxed(matched.subst_ty(arena, substs)),
                 variants
                     .into_iter()
-                    .map(|(pat, e)| (pat.subst(arena, substs), e.subst(arena, substs)))
+                    .map(|(pat, e)| (pat.subst_ty(arena, substs), e.subst_ty(arena, substs)))
                     .collect(),
             ),
             VariantE {
@@ -188,37 +191,38 @@ impl<'ctx> ExprKind<'ctx> {
                 variant,
                 args: args
                     .into_iter()
-                    .map(|arg| arg.subst(arena, substs))
+                    .map(|arg| arg.subst_ty(arena, substs))
                     .collect(),
             },
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         match self {
             UnitE | BoolE(_) | IntegerE(_) | StringE(_) | HoleE => default(),
-            PlaceE(place) => place.free_vars(),
-            RangeE(e1, e2) => e1.free_vars() + e2.free_vars(),
-            StructE { name, fields } => fields.iter().map(|(_, e)| e.free_vars()).sum(),
-            ArrayE(items) => items.iter().map(Expr::free_vars).sum(),
-            TupleE(elems) => elems.iter().map(Expr::free_vars).sum(),
-            CallE { name: _, args } => args.iter().map(Expr::free_vars).sum(),
+            PlaceE(place) => place.free_ty_vars(),
+            RangeE(e1, e2) => e1.free_ty_vars() + e2.free_ty_vars(),
+            StructE { name: _, fields } => fields.iter().map(|(_, e)| e.free_ty_vars()).sum(),
+            ArrayE(items) => items.iter().map(Expr::free_ty_vars).sum(),
+            TupleE(elems) => elems.iter().map(Expr::free_ty_vars).sum(),
+            CallE { name: _, args } => args.iter().map(Expr::free_ty_vars).sum(),
             IfE(box cond, box iftrue, box iffalse) => {
-                cond.free_vars() + iftrue.free_vars() + iffalse.free_vars()
+                cond.free_ty_vars() + iftrue.free_ty_vars() + iffalse.free_ty_vars()
             }
-            BlockE(box b) => b.free_vars(),
+            BlockE(box b) => b.free_ty_vars(),
             MatchE(box matched, branches) => {
-                matched.free_vars()
+                matched.free_ty_vars()
                     + branches
                         .iter()
-                        .map(|(pat, e)| pat.free_vars() + e.free_vars())
+                        .map(|(pat, e)| pat.free_ty_vars() + e.free_ty_vars())
                         .sum::<Set<_>>()
             }
             VariantE {
                 enun: _,
                 variant: _,
                 args,
-            } => args.into_iter().map(Expr::free_vars).sum(),
+            } => args.iter().map(Expr::free_ty_vars).sum(),
         }
     }
 }

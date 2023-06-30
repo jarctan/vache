@@ -20,26 +20,30 @@ pub struct Fun<'ctx> {
 }
 
 impl<'ctx> Fun<'ctx> {
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
         Self {
             name: self.name,
             params: self
                 .params
                 .into_iter()
-                .map(|param| param.subst(arena, substs))
+                .map(|param| param.subst_ty(arena, substs))
                 .collect(),
             ret_ty: self.ret_ty.subst(arena, substs),
-            body: self.body.subst(arena, substs),
+            body: self.body.subst_ty(arena, substs),
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self {
             name: _,
             params,
             ret_ty,
             body,
         } = self;
-        params.iter().map(VarDef::free_vars).sum::<Set<_>>() + ret_ty.free_vars() + body.free_vars()
+        params.iter().map(VarDef::free_ty_vars).sum::<Set<_>>()
+            + ret_ty.free_ty_vars()
+            + body.free_ty_vars()
     }
 }

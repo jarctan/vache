@@ -24,16 +24,17 @@ pub struct Program<'ctx> {
 }
 
 impl<'ctx> Program<'ctx> {
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self {
             arena: _,
             funs,
             structs,
             enums,
         } = self;
-        funs.values().map(Fun::free_vars).sum::<Set<_>>()
-            + structs.values().map(Struct::free_vars).sum::<Set<_>>()
-            + enums.values().map(Enum::free_vars).sum::<Set<_>>()
+        funs.values().map(Fun::free_ty_vars).sum::<Set<_>>()
+            + structs.values().map(Struct::free_ty_vars).sum::<Set<_>>()
+            + enums.values().map(Enum::free_ty_vars).sum::<Set<_>>()
     }
 }
 

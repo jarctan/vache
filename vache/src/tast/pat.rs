@@ -52,17 +52,19 @@ impl<'ctx> Pat<'ctx> {
         }
     }
 
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
         Self {
-            kind: self.kind.subst(arena, substs),
+            kind: self.kind.subst_ty(arena, substs),
             ty: self.ty.subst(arena, substs),
             span: self.span,
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self { kind, ty, span: _ } = self;
-        kind.free_vars() + ty.free_vars()
+        kind.free_ty_vars() + ty.free_vars()
     }
 }
 
@@ -93,10 +95,11 @@ pub enum PatKind<'ctx> {
 use PatKind::*;
 
 impl<'ctx> PatKind<'ctx> {
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
         match self {
             pat @ (BoolM(_) | IntegerM(_) | StringM(_)) => pat,
-            IdentM(vardef) => IdentM(vardef.subst(arena, substs)),
+            IdentM(vardef) => IdentM(vardef.subst_ty(arena, substs)),
             VariantM {
                 enun,
                 variant,
@@ -106,21 +109,22 @@ impl<'ctx> PatKind<'ctx> {
                 variant,
                 args: args
                     .into_iter()
-                    .map(|arg| arg.subst(arena, substs))
+                    .map(|arg| arg.subst_ty(arena, substs))
                     .collect(),
             },
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         match self {
             BoolM(_) | IntegerM(_) | StringM(_) => default(),
-            IdentM(vardef) => vardef.free_vars(),
+            IdentM(vardef) => vardef.free_ty_vars(),
             VariantM {
                 enun: _,
                 variant: _,
                 args,
-            } => args.iter().map(Pat::free_vars).sum(),
+            } => args.iter().map(Pat::free_ty_vars).sum(),
         }
     }
 }

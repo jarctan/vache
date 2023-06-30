@@ -15,16 +15,18 @@ pub struct Stmt<'ctx> {
     pub span: Span,
 }
 impl<'ctx> Stmt<'ctx> {
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
         Self {
-            kind: self.kind.subst(arena, substs),
+            kind: self.kind.subst_ty(arena, substs),
             span: self.span,
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self { kind, span: _ } = self;
-        kind.free_vars()
+        kind.free_ty_vars()
     }
 }
 
@@ -71,34 +73,38 @@ impl<'ctx> StmtKind<'ctx> {
         Stmt { kind: self, span }
     }
 
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
         match self {
-            AssignS(lhs, rhs) => AssignS(lhs.subst(arena, substs), rhs.subst(arena, substs)),
-            ExprS(e) => ExprS(e.subst(arena, substs)),
+            AssignS(lhs, rhs) => AssignS(lhs.subst_ty(arena, substs), rhs.subst_ty(arena, substs)),
+            ExprS(e) => ExprS(e.subst_ty(arena, substs)),
             BreakS => BreakS,
             ContinueS => ContinueS,
-            ReturnS(e) => ReturnS(e.subst(arena, substs)),
+            ReturnS(e) => ReturnS(e.subst_ty(arena, substs)),
             WhileS { cond, body } => WhileS {
-                cond: cond.subst(arena, substs),
-                body: body.subst(arena, substs),
+                cond: cond.subst_ty(arena, substs),
+                body: body.subst_ty(arena, substs),
             },
             ForS { item, iter, body } => ForS {
-                item: item.subst(arena, substs),
-                iter: iter.subst(arena, substs),
-                body: body.subst(arena, substs),
+                item: item.subst_ty(arena, substs),
+                iter: iter.subst_ty(arena, substs),
+                body: body.subst_ty(arena, substs),
             },
             HoleS => HoleS,
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         match self {
-            AssignS(lhs, rhs) => lhs.free_vars() + rhs.free_vars(),
-            ExprS(e) => e.free_vars(),
+            AssignS(lhs, rhs) => lhs.free_ty_vars() + rhs.free_ty_vars(),
+            ExprS(e) => e.free_ty_vars(),
             BreakS | ContinueS | HoleS => default(),
-            ReturnS(e) => e.free_vars(),
-            WhileS { cond, body } => cond.free_vars() + body.free_vars(),
-            ForS { item, iter, body } => item.free_vars() + iter.free_vars() + body.free_vars(),
+            ReturnS(e) => e.free_ty_vars(),
+            WhileS { cond, body } => cond.free_ty_vars() + body.free_ty_vars(),
+            ForS { item, iter, body } => {
+                item.free_ty_vars() + iter.free_ty_vars() + body.free_ty_vars()
+            }
         }
     }
 }

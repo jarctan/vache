@@ -1398,15 +1398,15 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         // Finally, apply type inference substitutions recursively.
         let structs = structs
             .into_iter()
-            .map(|(name, s)| (name, s.subst(self.ctx.arena, &self.substs)))
+            .map(|(name, s)| (name, s.subst_ty(self.ctx.arena, &self.substs)))
             .collect();
         let enums = enums
             .into_iter()
-            .map(|(name, e)| (name, e.subst(self.ctx.arena, &self.substs)))
+            .map(|(name, e)| (name, e.subst_ty(self.ctx.arena, &self.substs)))
             .collect();
         let funs: HashMap<_, _> = funs
             .into_iter()
-            .map(|(name, f)| (name, f.subst(self.ctx.arena, &self.substs)))
+            .map(|(name, f)| (name, f.subst_ty(self.ctx.arena, &self.substs)))
             .collect();
 
         let p = Program {
@@ -1417,7 +1417,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         };
 
         // Any free variable left is a type inference error
-        for var in p.free_vars() {
+        for var in p.free_ty_vars() {
             match var {
                 TyVar::Named(..) => unreachable!(), // Only generated variables should be free
                 TyVar::Gen(_, span) => self.ctx.emit(

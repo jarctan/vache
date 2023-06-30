@@ -39,7 +39,8 @@ impl fmt::Debug for Struct<'_> {
 }
 
 impl<'ctx> Struct<'ctx> {
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         Self {
             name: self.name,
             fields: self
@@ -56,13 +57,14 @@ impl<'ctx> Struct<'ctx> {
         self.fields.get(field.as_ref()).map(|ty| ty.kind)
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self {
             name: _,
             fields,
             span: _,
         } = self;
-        self.fields.values().map(TyUse::free_vars).sum()
+        fields.values().map(TyUse::free_ty_vars).sum()
     }
 }
 

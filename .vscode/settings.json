@@ -45,6 +45,7 @@
         "preneighbors",
         "prettyplease",
         "repr",
+        "ropey",
         "rsplit",
         "rustfmt",
         "rval",

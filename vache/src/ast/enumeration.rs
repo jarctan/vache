@@ -43,7 +43,8 @@ impl<'ctx> Enum<'ctx> {
         self.variants.get(variant.as_ref()).map(|args| &**args)
     }
 
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Enum<'ctx> {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Enum<'ctx> {
         Self {
             name: self.name,
             variants: self
@@ -62,7 +63,8 @@ impl<'ctx> Enum<'ctx> {
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self {
             variants,
             name: _,
@@ -70,8 +72,7 @@ impl<'ctx> Enum<'ctx> {
         } = self;
         variants
             .values()
-            .map(|variant| variant.iter().map(TyUse::free_vars))
-            .flatten()
+            .flat_map(|variant| variant.iter().map(TyUse::free_ty_vars))
             .sum()
     }
 }

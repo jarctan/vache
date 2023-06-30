@@ -38,9 +38,10 @@ impl<'ctx> Place<'ctx> {
         }
     }
 
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
         Self {
-            kind: self.kind.subst(arena, substs),
+            kind: self.kind.subst_ty(arena, substs),
             ty: self.ty.subst(arena, substs),
             stm: self.stm,
             mode: self.mode,
@@ -48,7 +49,8 @@ impl<'ctx> Place<'ctx> {
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self {
             kind,
             ty,
@@ -56,7 +58,7 @@ impl<'ctx> Place<'ctx> {
             mode: _,
             span: _,
         } = self;
-        self.kind.free_vars() + ty.free_vars()
+        kind.free_ty_vars() + ty.free_vars()
     }
 }
 
@@ -93,9 +95,10 @@ impl<'ctx> LhsPlace<'ctx> {
         }
     }
 
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
         Self {
-            kind: self.kind.subst(arena, substs),
+            kind: self.kind.subst_ty(arena, substs),
             ty: self.ty.subst(arena, substs),
             stm: self.stm,
             mode: self.mode,
@@ -103,7 +106,8 @@ impl<'ctx> LhsPlace<'ctx> {
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self {
             kind,
             ty,
@@ -111,7 +115,7 @@ impl<'ctx> LhsPlace<'ctx> {
             mode: _,
             span: _,
         } = self;
-        kind.free_vars() + ty.free_vars()
+        kind.free_ty_vars() + ty.free_vars()
     }
 }
 
@@ -131,24 +135,26 @@ pub enum PlaceKind<'ctx> {
 use PlaceKind::*;
 
 impl<'ctx> PlaceKind<'ctx> {
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
         match self {
-            VarP(var) => VarP(var.subst(arena, substs)),
+            VarP(var) => VarP(var.subst_ty(arena, substs)),
             IndexP(box array, box index) => IndexP(
-                boxed(array.subst(arena, substs)),
-                boxed(index.subst(arena, substs)),
+                boxed(array.subst_ty(arena, substs)),
+                boxed(index.subst_ty(arena, substs)),
             ),
-            FieldP(box strukt, field) => FieldP(boxed(strukt.subst(arena, substs)), field),
-            ElemP(box tuple, index) => ElemP(boxed(tuple.subst(arena, substs)), index),
+            FieldP(box strukt, field) => FieldP(boxed(strukt.subst_ty(arena, substs)), field),
+            ElemP(box tuple, index) => ElemP(boxed(tuple.subst_ty(arena, substs)), index),
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         match self {
-            VarP(var) => var.free_vars(),
-            IndexP(box array, box index) => array.free_vars() + index.free_vars(),
-            FieldP(box strukt, _) => strukt.free_vars(),
-            ElemP(box tuple, _) => tuple.free_vars(),
+            VarP(var) => var.free_ty_vars(),
+            IndexP(box array, box index) => array.free_ty_vars() + index.free_ty_vars(),
+            FieldP(box strukt, _) => strukt.free_ty_vars(),
+            ElemP(box tuple, _) => tuple.free_ty_vars(),
         }
     }
 }

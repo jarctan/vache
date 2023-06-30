@@ -259,6 +259,7 @@ impl<'ctx> VarDef<'ctx> {
         self.name
     }
 
+    /// Returns the variable use corresponding to that variable definition.
     pub fn var(&self) -> VarUse<'ctx> {
         VarUse {
             name: self.name,

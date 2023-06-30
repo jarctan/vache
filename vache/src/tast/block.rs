@@ -18,24 +18,26 @@ pub struct Block<'ctx> {
 }
 
 impl<'ctx> Block<'ctx> {
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
         Self {
             stmts: self
                 .stmts
                 .into_iter()
-                .map(|stmt| stmt.subst(arena, substs))
+                .map(|stmt| stmt.subst_ty(arena, substs))
                 .collect(),
-            ret: self.ret.subst(arena, substs),
+            ret: self.ret.subst_ty(arena, substs),
             span: self.span,
         }
     }
 
-    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self {
             stmts,
             ret,
             span: _,
         } = self;
-        stmts.iter().map(Stmt::free_vars).sum::<Set<_>>() + ret.free_vars()
+        stmts.iter().map(Stmt::free_ty_vars).sum::<Set<_>>() + ret.free_ty_vars()
     }
 }
