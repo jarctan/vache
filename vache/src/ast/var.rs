@@ -2,18 +2,11 @@
 
 use std::default::default;
 use std::fmt;
-use std::sync::atomic::AtomicU64;
 
 use pest::iterators::Pair;
 
-use super::{Context, Parsable, Span, Ty, TySubst, TyUse};
+use super::{Context, Parsable, Span, Ty, TyUse};
 use crate::grammar::*;
-use crate::Arena;
-
-/// Fresh variable counter.
-///
-/// Global to avoid any confusion between variable names.
-pub static VAR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// A variable.
@@ -23,6 +16,24 @@ impl<'ctx> Varname<'ctx> {
     /// See the variable as a string.
     pub fn as_str(&self) -> &'ctx str {
         self.0
+    }
+}
+
+impl<'ctx> PartialEq<str> for Varname<'ctx> {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl<'ctx> PartialEq<&str> for Varname<'ctx> {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl<'ctx> From<VarUse<'ctx>> for Varname<'ctx> {
+    fn from(val: VarUse<'ctx>) -> Self {
+        val.name
     }
 }
 
@@ -37,27 +48,9 @@ pub struct VarUse<'ctx> {
     span: Span,
 }
 
-impl<'ctx> From<VarUse<'ctx>> for Varname<'ctx> {
-    fn from(val: VarUse<'ctx>) -> Self {
-        val.name
-    }
-}
-
 impl PartialEq for VarUse<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
-    }
-}
-
-impl<'ctx> PartialEq<str> for Varname<'ctx> {
-    fn eq(&self, other: &str) -> bool {
-        self.0 == other
-    }
-}
-
-impl<'ctx> PartialEq<&str> for Varname<'ctx> {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
     }
 }
 
@@ -86,20 +79,6 @@ impl<'ctx> PartialEq<&str> for VarUse<'ctx> {
 }
 
 impl<'ctx> VarUse<'ctx> {
-    /// A fresh variable, related to some code`span`.
-    ///
-    /// These are variables used internally by the CFG, that starts with `__cfg`
-    /// followed by a unique numeral ID.
-    pub(crate) fn fresh(arena: &'ctx Arena, span: Span) -> VarUse<'ctx> {
-        let number = VAR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let name: &str = arena.alloc(format!("時{number:?}"));
-        VarUse {
-            name: name.into(),
-            span,
-            ty: None,
-        }
-    }
-
     /// Returns the annotation type of this variable use.
     ///
     /// Returns `None` if there is no type annotation for this variable use.
@@ -136,20 +115,13 @@ impl<'ctx> VarUse<'ctx> {
     /// none (otherwise, it will **keep** the original type).
     pub fn as_vardef(self, ty: Ty<'ctx>) -> VarDef<'ctx> {
         VarDef {
-            var: self,
+            name: self.name,
             ty: self.ty.unwrap_or(ty.with_span(self.span)), /* We'll say that the span of the
                                                              * `type` in the code is
                                                              * the same as the variable
                                                              * declaration */
             span: self.span,
-        }
-    }
-
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
-        Self {
-            name: self.name,
-            ty: self.ty.map(|ty| ty.subst(arena, substs)),
-            span: self.span,
+            var_span: self.span,
         }
     }
 }
@@ -267,44 +239,62 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for VarUse<'ctx> {
 #[derive(Clone, Copy)]
 pub struct VarDef<'ctx> {
     /// Variable name.
-    pub(crate) var: VarUse<'ctx>,
+    pub(crate) name: Varname<'ctx>,
+    /// Span of the variable name.
+    pub(crate) var_span: Span,
     /// Type of the variable.
     ///
     /// Note: is a `TyUse`, not `Ty`, so we can track its location in the code.
     pub(crate) ty: TyUse<'ctx>,
-    /// Span where the variable is used.
+    /// Span of the entire variable definition.
+    ///
+    /// Different from `var_span` if there is some type (which adds some extra
+    /// codespan to `var_span`).
     pub(crate) span: Span,
 }
 
 impl<'ctx> VarDef<'ctx> {
     /// Returns the name of the variable (w/o codespan information).
     pub fn name(&self) -> Varname<'ctx> {
-        self.var.name()
+        self.name
+    }
+
+    pub fn var(&self) -> VarUse<'ctx> {
+        VarUse {
+            name: self.name,
+            ty: Some(self.ty),
+            span: self.var_span,
+        }
     }
 }
 
 impl<'ctx> PartialEq for VarDef<'ctx> {
     fn eq(&self, other: &Self) -> bool {
-        let Self { var, ty, span: _ } = self;
-        var == &other.var && ty == &other.ty
+        let Self {
+            name,
+            ty,
+            span: _,
+            var_span: _,
+        } = self;
+        name == &other.name && ty == &other.ty
     }
 }
 
 impl fmt::Debug for VarDef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}:{}", self.var, self.ty)
+        write!(f, "{:?}:{}", self.name, self.ty)
     }
 }
 
 impl<'ctx> AsRef<Varname<'ctx>> for VarDef<'ctx> {
     fn as_ref(&self) -> &Varname<'ctx> {
-        &self.var.name
+        &self.name
     }
 }
 
 impl<'ctx> From<VarDef<'ctx>> for VarUse<'ctx> {
     fn from(vardef: VarDef<'ctx>) -> Self {
-        vardef.var
+        vardef.var()
     }
 }
 
@@ -314,20 +304,28 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for VarDef<'ctx> {
         let span = Span::from(pair.as_span());
         let mut pairs = pair.into_inner();
 
-        let var = ctx.parse(consume!(pairs));
+        let var_pair = consume!(pairs);
+        let var_span = Span::from(var_pair.as_span());
+        let name = ctx.parse(var_pair);
         consume!(pairs, Rule::cln);
         let ty = ctx.parse(consume!(pairs));
 
-        VarDef { var, ty, span }
+        VarDef {
+            name,
+            ty,
+            span,
+            var_span,
+        }
     }
 }
 
 /// Shortcut to create a new variable definition.
 pub fn vardef<'ctx>(name: &'ctx str, ty: impl Into<TyUse<'ctx>>) -> VarDef<'ctx> {
-    let var = VarUse::from(name);
+    let name = Varname::from(name);
     VarDef {
-        var,
+        name,
         span: default(),
+        var_span: default(),
         ty: ty.into(),
     }
 }
@@ -348,7 +346,7 @@ mod tests {
     #[parses("test: str" as vardef)]
     #[test]
     fn simple_vardef(vardef: VarDef) {
-        assert_eq!(vardef.var, "test");
+        assert_eq!(vardef.name, "test");
         assert_eq!(vardef.ty, StrT);
     }
 }

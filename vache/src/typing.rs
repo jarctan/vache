@@ -1090,7 +1090,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     };
 
                     self.add_var(VarDef {
-                        var,
+                        var: var.into(),
                         ty: var_ty,
                         stm,
                         span: var.as_span(),

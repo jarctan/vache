@@ -150,7 +150,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
                 let mut pairs = pair.into_inner();
                 consume!(pairs, Rule::var_kw);
                 // Match the lhs, possibly with a type annotation
-                let varuse = if let Some(pair) = consume_opt!(pairs, Rule::ident) {
+                let var_use = if let Some(pair) = consume_opt!(pairs, Rule::ident) {
                     // Without type annotation
                     ctx.parse(pair)
                 } else {
@@ -159,7 +159,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
                 };
                 consume!(pairs, Rule::eq);
                 let rhs = ctx.parse(consume!(pairs));
-                DeclareS(varuse, rhs)
+                DeclareS(var_use, rhs)
             }
             Rule::assign => {
                 let mut pairs = pair.into_inner();

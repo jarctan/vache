@@ -69,7 +69,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Struct<'ctx> {
             .filter(|field| !matches!(field.as_rule(), Rule::cma | Rule::rcb))
             .map(|field| {
                 let vardef: VarDef = ctx.parse(field);
-                (vardef.var.as_str(), vardef.ty)
+                (vardef.name.as_str(), vardef.ty)
             })
             .collect();
         Struct { name, fields, span }

@@ -22,14 +22,14 @@ pub struct Place<'ctx> {
 impl<'ctx> Place<'ctx> {
     /// Shortcut to create a place that is a variable.
     pub fn var(
-        var: VarUse<'ctx>,
+        var: impl Into<VarUse<'ctx>>,
         ty: impl Into<Ty<'ctx>>,
         stm: Stratum,
         mode: Mode,
         span: impl Into<Span>,
     ) -> Self {
         Self {
-            kind: PlaceKind::VarP(var),
+            kind: PlaceKind::VarP(var.into()),
             ty: ty.into(),
             stm,
             mode,
@@ -66,14 +66,14 @@ pub struct LhsPlace<'ctx> {
 impl<'ctx> LhsPlace<'ctx> {
     /// Shortcut to create a place that is a variable.
     pub fn var(
-        var: VarUse<'ctx>,
+        var: impl Into<VarUse<'ctx>>,
         ty: impl Into<Ty<'ctx>>,
         stm: Stratum,
         mode: LhsMode,
         span: impl Into<Span>,
     ) -> Self {
         Self {
-            kind: PlaceKind::VarP(var),
+            kind: PlaceKind::VarP(var.into()),
             ty: ty.into(),
             stm,
             mode,

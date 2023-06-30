@@ -25,8 +25,6 @@ pub use stmt::{Stmt, StmtKind};
 pub use stratum::Stratum;
 #[cfg(test)]
 pub use var::vardef;
-pub use var::VarDef;
+pub use var::{VarDef, VarUse};
 
-pub use crate::ast::{
-    Enum, Mode, Namespaced, Span, Struct, Ty, TySubst, TyUse, TyVar, VarUse, Varname,
-};
+pub use crate::ast::{Enum, Mode, Namespaced, Span, Struct, Ty, TySubst, TyUse, TyVar, Varname};
