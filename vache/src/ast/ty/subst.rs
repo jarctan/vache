@@ -12,7 +12,7 @@ use crate::Arena;
 #[derive(Clone)]
 pub struct TySubst<'ctx> {
     /// Actual substitutions.
-    pub(super) substs: HashMap<TyVar<'ctx>, Ty<'ctx>>,
+    pub(super) subst: HashMap<TyVar<'ctx>, Ty<'ctx>>,
     /// Reference to the [`Arena`].
     ///
     /// Used when we merge two [`TySubst`], since we need to apply one
@@ -24,7 +24,7 @@ impl<'ctx> TySubst<'ctx> {
     /// Creates a new, empty type substitution with a given arena.
     pub fn new(arena: &'ctx Arena<'ctx>) -> Self {
         Self {
-            substs: default(),
+            subst: default(),
             arena,
         }
     }
@@ -32,23 +32,23 @@ impl<'ctx> TySubst<'ctx> {
     /// Creates a new type substitution out of an iterator.
     pub fn from(
         arena: &'ctx Arena<'ctx>,
-        substs: impl IntoIterator<Item = (TyVar<'ctx>, Ty<'ctx>)>,
+        subst: impl IntoIterator<Item = (TyVar<'ctx>, Ty<'ctx>)>,
     ) -> Self {
         Self {
-            substs: substs.into_iter().collect(),
+            subst: subst.into_iter().collect(),
             arena,
         }
     }
 
     /// Gets the substitution for a given type variable, if any.
     pub fn get(&self, var: TyVar<'ctx>) -> Option<Ty<'ctx>> {
-        Some(*self.substs.get(&var)?)
+        Some(*self.subst.get(&var)?)
     }
 }
 
 impl<'ctx> fmt::Debug for TySubst<'ctx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.substs)
+        write!(f, "{:?}", self.subst)
     }
 }
 
@@ -63,8 +63,8 @@ impl<'ctx> Add<&TySubst<'ctx>> for TySubst<'ctx> {
 
 impl<'ctx> AddAssign<&TySubst<'ctx>> for TySubst<'ctx> {
     fn add_assign(&mut self, rhs: &TySubst<'ctx>) {
-        self.substs.extend(
-            rhs.substs
+        self.subst.extend(
+            rhs.subst
                 .iter()
                 .map(|(var, ty)| (*var, ty.subst(self.arena, self)))
                 .collect::<Vec<_>>(),

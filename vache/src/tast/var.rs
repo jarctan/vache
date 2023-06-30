@@ -46,7 +46,7 @@ impl<'ctx> VarUse<'ctx> {
     }
 
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, _arena: &'ctx Arena<'ctx>, _substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, _arena: &'ctx Arena<'ctx>, _subst: &TySubst<'ctx>) -> Self {
         // Subst is a no-op
         self
     }
@@ -143,14 +143,10 @@ impl<'ctx> VarDef<'ctx> {
     }
 
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(
-        &self,
-        arena: &'ctx Arena<'ctx>,
-        substs: &TySubst<'ctx>,
-    ) -> VarDef<'ctx> {
+    pub(crate) fn subst_ty(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> VarDef<'ctx> {
         Self {
-            var: self.var.subst_ty(arena, substs),
-            ty: self.ty.subst(arena, substs),
+            var: self.var.subst_ty(arena, subst),
+            ty: self.ty.subst(arena, subst),
             stm: self.stm,
             span: self.span,
         }

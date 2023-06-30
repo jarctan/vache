@@ -53,10 +53,10 @@ impl<'ctx> Pat<'ctx> {
     }
 
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         Self {
-            kind: self.kind.subst_ty(arena, substs),
-            ty: self.ty.subst(arena, substs),
+            kind: self.kind.subst_ty(arena, subst),
+            ty: self.ty.subst(arena, subst),
             span: self.span,
         }
     }
@@ -96,10 +96,10 @@ use PatKind::*;
 
 impl<'ctx> PatKind<'ctx> {
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         match self {
             pat @ (BoolM(_) | IntegerM(_) | StringM(_)) => pat,
-            IdentM(vardef) => IdentM(vardef.subst_ty(arena, substs)),
+            IdentM(vardef) => IdentM(vardef.subst_ty(arena, subst)),
             VariantM {
                 enun,
                 variant,
@@ -109,7 +109,7 @@ impl<'ctx> PatKind<'ctx> {
                 variant,
                 args: args
                     .into_iter()
-                    .map(|arg| arg.subst_ty(arena, substs))
+                    .map(|arg| arg.subst_ty(arena, subst))
                     .collect(),
             },
         }

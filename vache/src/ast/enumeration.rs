@@ -44,7 +44,7 @@ impl<'ctx> Enum<'ctx> {
     }
 
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Enum<'ctx> {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Enum<'ctx> {
         Self {
             name: self.name,
             variants: self
@@ -54,7 +54,7 @@ impl<'ctx> Enum<'ctx> {
                     (
                         name,
                         args.into_iter()
-                            .map(|arg| arg.subst(arena, substs))
+                            .map(|arg| arg.subst(arena, subst))
                             .collect(),
                     )
                 })

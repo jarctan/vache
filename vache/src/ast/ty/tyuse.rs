@@ -183,9 +183,9 @@ mod tests {
         let ty1 = Ty::hole(Span::default());
         let ty2 = Ty::hole(Span::default());
         let expected = TupleT(arena.alloc(vec![ty1, ty2]));
-        let substs = ty.unify(&expected, &arena).context("expected a tuple")?;
-        let ty1 = ty1.subst(&arena, &substs);
-        let ty2 = ty2.subst(&arena, &substs);
+        let subst = ty.unify(&expected, &arena).context("expected a tuple")?;
+        let ty1 = ty1.subst(&arena, &subst);
+        let ty2 = ty2.subst(&arena, &subst);
         ensure!(ty1 == BoolT);
         ensure!(ty2 == IntT);
     }

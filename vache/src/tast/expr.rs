@@ -52,10 +52,10 @@ impl<'ctx> Expr<'ctx> {
     }
 
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         Self {
-            kind: self.kind.subst_ty(arena, substs),
-            ty: self.ty.subst(arena, substs),
+            kind: self.kind.subst_ty(arena, subst),
+            ty: self.ty.subst(arena, subst),
             stm: self.stm,
             span: self.span,
         }
@@ -135,51 +135,51 @@ use ExprKind::*;
 
 impl<'ctx> ExprKind<'ctx> {
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         match self {
             prim @ (UnitE | BoolE(_) | IntegerE(_) | StringE(_) | HoleE) => prim,
-            PlaceE(place) => PlaceE(place.subst_ty(arena, substs)),
+            PlaceE(place) => PlaceE(place.subst_ty(arena, subst)),
             RangeE(box e1, box e2) => RangeE(
-                boxed(e1.subst_ty(arena, substs)),
-                boxed(e2.subst_ty(arena, substs)),
+                boxed(e1.subst_ty(arena, subst)),
+                boxed(e2.subst_ty(arena, subst)),
             ),
             StructE { name, fields } => StructE {
                 name,
                 fields: fields
                     .into_iter()
-                    .map(|(name, e)| (name, e.subst_ty(arena, substs)))
+                    .map(|(name, e)| (name, e.subst_ty(arena, subst)))
                     .collect(),
             },
             ArrayE(items) => ArrayE(
                 items
                     .into_iter()
-                    .map(|item| item.subst_ty(arena, substs))
+                    .map(|item| item.subst_ty(arena, subst))
                     .collect(),
             ),
             TupleE(elems) => TupleE(
                 elems
                     .into_iter()
-                    .map(|elem| elem.subst_ty(arena, substs))
+                    .map(|elem| elem.subst_ty(arena, subst))
                     .collect(),
             ),
             CallE { name, args } => CallE {
                 name,
                 args: args
                     .into_iter()
-                    .map(|arg| arg.subst_ty(arena, substs))
+                    .map(|arg| arg.subst_ty(arena, subst))
                     .collect(),
             },
             IfE(box cond, box iftrue, box iffalse) => IfE(
-                boxed(cond.subst_ty(arena, substs)),
-                boxed(iftrue.subst_ty(arena, substs)),
-                boxed(iffalse.subst_ty(arena, substs)),
+                boxed(cond.subst_ty(arena, subst)),
+                boxed(iftrue.subst_ty(arena, subst)),
+                boxed(iffalse.subst_ty(arena, subst)),
             ),
-            BlockE(box b) => BlockE(boxed(b.subst_ty(arena, substs))),
+            BlockE(box b) => BlockE(boxed(b.subst_ty(arena, subst))),
             MatchE(box matched, variants) => MatchE(
-                boxed(matched.subst_ty(arena, substs)),
+                boxed(matched.subst_ty(arena, subst)),
                 variants
                     .into_iter()
-                    .map(|(pat, e)| (pat.subst_ty(arena, substs), e.subst_ty(arena, substs)))
+                    .map(|(pat, e)| (pat.subst_ty(arena, subst), e.subst_ty(arena, subst)))
                     .collect(),
             ),
             VariantE {
@@ -191,7 +191,7 @@ impl<'ctx> ExprKind<'ctx> {
                 variant,
                 args: args
                     .into_iter()
-                    .map(|arg| arg.subst_ty(arena, substs))
+                    .map(|arg| arg.subst_ty(arena, subst))
                     .collect(),
             },
         }

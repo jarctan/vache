@@ -36,7 +36,7 @@ impl<'ctx> GenTy<'ctx> {
     /// new type.
     pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         subst
-            .substs
+            .subst
             .iter()
             .fold(*self, |acc, (var, ty)| acc.subst_var(arena, *var, *ty))
     }

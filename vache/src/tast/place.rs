@@ -39,10 +39,10 @@ impl<'ctx> Place<'ctx> {
     }
 
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         Self {
-            kind: self.kind.subst_ty(arena, substs),
-            ty: self.ty.subst(arena, substs),
+            kind: self.kind.subst_ty(arena, subst),
+            ty: self.ty.subst(arena, subst),
             stm: self.stm,
             mode: self.mode,
             span: self.span,
@@ -96,10 +96,10 @@ impl<'ctx> LhsPlace<'ctx> {
     }
 
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         Self {
-            kind: self.kind.subst_ty(arena, substs),
-            ty: self.ty.subst(arena, substs),
+            kind: self.kind.subst_ty(arena, subst),
+            ty: self.ty.subst(arena, subst),
             stm: self.stm,
             mode: self.mode,
             span: self.span,
@@ -136,15 +136,15 @@ use PlaceKind::*;
 
 impl<'ctx> PlaceKind<'ctx> {
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         match self {
-            VarP(var) => VarP(var.subst_ty(arena, substs)),
+            VarP(var) => VarP(var.subst_ty(arena, subst)),
             IndexP(box array, box index) => IndexP(
-                boxed(array.subst_ty(arena, substs)),
-                boxed(index.subst_ty(arena, substs)),
+                boxed(array.subst_ty(arena, subst)),
+                boxed(index.subst_ty(arena, subst)),
             ),
-            FieldP(box strukt, field) => FieldP(boxed(strukt.subst_ty(arena, substs)), field),
-            ElemP(box tuple, index) => ElemP(boxed(tuple.subst_ty(arena, substs)), index),
+            FieldP(box strukt, field) => FieldP(boxed(strukt.subst_ty(arena, subst)), field),
+            ElemP(box tuple, index) => ElemP(boxed(tuple.subst_ty(arena, subst)), index),
         }
     }
 

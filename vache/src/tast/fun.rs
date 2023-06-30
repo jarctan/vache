@@ -21,16 +21,16 @@ pub struct Fun<'ctx> {
 
 impl<'ctx> Fun<'ctx> {
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         Self {
             name: self.name,
             params: self
                 .params
                 .into_iter()
-                .map(|param| param.subst_ty(arena, substs))
+                .map(|param| param.subst_ty(arena, subst))
                 .collect(),
-            ret_ty: self.ret_ty.subst(arena, substs),
-            body: self.body.subst_ty(arena, substs),
+            ret_ty: self.ret_ty.subst(arena, subst),
+            body: self.body.subst_ty(arena, subst),
         }
     }
 

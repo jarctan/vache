@@ -19,14 +19,14 @@ pub struct Block<'ctx> {
 
 impl<'ctx> Block<'ctx> {
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         Self {
             stmts: self
                 .stmts
                 .into_iter()
-                .map(|stmt| stmt.subst_ty(arena, substs))
+                .map(|stmt| stmt.subst_ty(arena, subst))
                 .collect(),
-            ret: self.ret.subst_ty(arena, substs),
+            ret: self.ret.subst_ty(arena, subst),
             span: self.span,
         }
     }

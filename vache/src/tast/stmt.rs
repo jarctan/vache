@@ -16,9 +16,9 @@ pub struct Stmt<'ctx> {
 }
 impl<'ctx> Stmt<'ctx> {
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         Self {
-            kind: self.kind.subst_ty(arena, substs),
+            kind: self.kind.subst_ty(arena, subst),
             span: self.span,
         }
     }
@@ -74,21 +74,21 @@ impl<'ctx> StmtKind<'ctx> {
     }
 
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+    pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         match self {
-            AssignS(lhs, rhs) => AssignS(lhs.subst_ty(arena, substs), rhs.subst_ty(arena, substs)),
-            ExprS(e) => ExprS(e.subst_ty(arena, substs)),
+            AssignS(lhs, rhs) => AssignS(lhs.subst_ty(arena, subst), rhs.subst_ty(arena, subst)),
+            ExprS(e) => ExprS(e.subst_ty(arena, subst)),
             BreakS => BreakS,
             ContinueS => ContinueS,
-            ReturnS(e) => ReturnS(e.subst_ty(arena, substs)),
+            ReturnS(e) => ReturnS(e.subst_ty(arena, subst)),
             WhileS { cond, body } => WhileS {
-                cond: cond.subst_ty(arena, substs),
-                body: body.subst_ty(arena, substs),
+                cond: cond.subst_ty(arena, subst),
+                body: body.subst_ty(arena, subst),
             },
             ForS { item, iter, body } => ForS {
-                item: item.subst_ty(arena, substs),
-                iter: iter.subst_ty(arena, substs),
-                body: body.subst_ty(arena, substs),
+                item: item.subst_ty(arena, subst),
+                iter: iter.subst_ty(arena, subst),
+                body: body.subst_ty(arena, subst),
             },
             HoleS => HoleS,
         }

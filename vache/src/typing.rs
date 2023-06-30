@@ -87,14 +87,14 @@ pub(crate) struct Typer<'t, 'ctx> {
     /// The typing environment stack.
     env: Vec<Env<'ctx>>,
     /// Type variable substitutions.
-    substs: TySubst<'ctx>,
+    subst: TySubst<'ctx>,
 }
 
 impl<'t, 'ctx> Typer<'t, 'ctx> {
     /// Creates a new typer.
     pub fn new(ctx: &'t mut Context<'ctx>) -> Self {
         let mut typer = Self {
-            substs: TySubst::new(ctx.arena),
+            subst: TySubst::new(ctx.arena),
             ctx,
             fun_env: default(),
             struct_env: default(),
@@ -266,8 +266,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     ix.ty.unify(&IntT, self.ctx.arena),
                 ) {
                     (Some(subst1), Some(subst2)) => {
-                        self.substs += &subst1;
-                        self.substs += &subst2;
+                        self.subst += &subst1;
+                        self.subst += &subst2;
                         let ty = array_ty.subst(self.ctx.arena, &subst1);
                         let e_stm = e.stm; // Needed now because we move e after
                         Some(LhsPlace {
@@ -450,7 +450,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ) in args.iter().zip(params.iter()).enumerate()
             {
                 match arg_ty.unify(param_ty, self.ctx.arena)  {
-                    Some(substs) => self.substs += &substs,
+                    Some(subst) => self.subst += &subst,
                     None => self.ctx.emit(
                             Diagnostic::error()
                                 .with_code(TYPE_MISMATCH_ERROR)
@@ -495,7 +495,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ) in args.iter().zip(fun.params.iter()).enumerate()
             {
                 match arg_ty.unify(param_ty, self.ctx.arena)  {
-                    Some(substs) => self.substs += &substs,
+                    Some(subst) => self.subst += &subst,
                     None => self.ctx.emit(
                         Diagnostic::error()
                             .with_code(TYPE_MISMATCH_ERROR)
@@ -665,8 +665,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         ix.ty.unify(&IntT, self.ctx.arena),
                     ) {
                         (Some(subst1), Some(subst2)) => {
-                            self.substs += &subst1;
-                            self.substs += &subst2;
+                            self.subst += &subst1;
+                            self.subst += &subst2;
                             let ty = array_ty.subst(self.ctx.arena, &subst1);
                             let e_stm = e.stm; // Needed now because we move e after
                             Expr::new(
@@ -737,7 +737,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                 // Condition must be a bool
                 match cond.ty.unify(&BoolT, self.ctx.arena) {
-                    Some(substs) => self.substs += &substs,
+                    Some(subst) => self.subst += &subst,
                     None => self.ctx.emit(
                         Diagnostic::error()
                             .with_code(TYPE_MISMATCH_ERROR)
@@ -895,7 +895,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 };
 
                 match subst {
-                    Some(subst) => self.substs += &subst,
+                    Some(subst) => self.subst += &subst,
                     None => self.ctx.emit(
                         Diagnostic::error()
                             .with_code(HETEROGENEOUS_LISTS_ERROR)
@@ -934,7 +934,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                 // Check that the type of both ends is `int`
                 match start.ty.unify(&IntT, self.ctx.arena) {
-                    Some(substs) => self.substs += &substs,
+                    Some(subst) => self.subst += &subst,
                     None => {
                         self.ctx.emit(
                             Diagnostic::error()
@@ -946,7 +946,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     }
                 }
                 match end.ty.unify(&IntT, self.ctx.arena) {
-                    Some(substs) => self.substs += &substs,
+                    Some(subst) => self.subst += &subst,
                     None => {
                         self.ctx.emit(
                             Diagnostic::error()
@@ -1069,9 +1069,9 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                     // Check the type
                     let var_ty = match &var_ty.unify(expr_ty, self.ctx.arena) {
-                        Some(substs) => {
-                            self.substs += substs;
-                            var_ty.subst(self.ctx.arena, substs)
+                        Some(subst) => {
+                            self.subst += subst;
+                            var_ty.subst(self.ctx.arena, subst)
                         }
                         None => {
                             self.ctx.emit(
@@ -1110,7 +1110,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                     // Check the type
                     match &place.ty.unify(expr_ty, self.ctx.arena) {
-                        Some(substs) => self.substs += substs,
+                        Some(subst) => self.subst += subst,
                         None => self.ctx.emit(
                             Diagnostic::error()
                                 .with_code(TYPE_MISMATCH_ERROR)
@@ -1156,9 +1156,9 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                     let item_ty = self.ctx.alloc(Ty::hole(item.as_span()));
                     let item_ty = match iter.ty.unify(&IterT(item_ty), self.ctx.arena) {
-                        Some(substs) => {
-                            self.substs += &substs;
-                            item_ty.subst(self.ctx.arena, &substs)
+                        Some(subst) => {
+                            self.subst += &subst;
+                            item_ty.subst(self.ctx.arena, &subst)
                         }
                         None => {
                             self.ctx.emit(
@@ -1398,15 +1398,15 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         // Finally, apply type inference substitutions recursively.
         let structs = structs
             .into_iter()
-            .map(|(name, s)| (name, s.subst_ty(self.ctx.arena, &self.substs)))
+            .map(|(name, s)| (name, s.subst_ty(self.ctx.arena, &self.subst)))
             .collect();
         let enums = enums
             .into_iter()
-            .map(|(name, e)| (name, e.subst_ty(self.ctx.arena, &self.substs)))
+            .map(|(name, e)| (name, e.subst_ty(self.ctx.arena, &self.subst)))
             .collect();
         let funs: HashMap<_, _> = funs
             .into_iter()
-            .map(|(name, f)| (name, f.subst_ty(self.ctx.arena, &self.substs)))
+            .map(|(name, f)| (name, f.subst_ty(self.ctx.arena, &self.subst)))
             .collect();
 
         let p = Program {
