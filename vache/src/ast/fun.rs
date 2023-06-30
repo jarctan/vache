@@ -79,7 +79,8 @@ pub struct FunSig<'ctx> {
 }
 
 impl<'ctx> FunSig<'ctx> {
-    pub fn instantiate(self, arena: &'ctx Arena<'ctx>) -> Self {
+    /// Instantiate the type variables in the function signature.
+    pub fn instantiate_tys(self, arena: &'ctx Arena<'ctx>) -> Self {
         let subst = TySubst::from(
             arena,
             self.ty_params

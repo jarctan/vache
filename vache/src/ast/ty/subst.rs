@@ -44,6 +44,11 @@ impl<'ctx> TySubst<'ctx> {
     pub fn get(&self, var: TyVar<'ctx>) -> Option<Ty<'ctx>> {
         Some(*self.subst.get(&var)?)
     }
+
+    /// Inserts a new type substitution for `from` to `to`.
+    pub(crate) fn insert(&mut self, from: TyVar<'ctx>, to: Ty<'ctx>) {
+        self.subst.insert(from, to);
+    }
 }
 
 impl<'ctx> fmt::Debug for TySubst<'ctx> {
@@ -64,7 +69,7 @@ impl<'ctx> Add<&TySubst<'ctx>> for TySubst<'ctx> {
 impl<'a, 'ctx: 'a, I: IntoIterator<Item = &'a TyVar<'ctx>>> SubAssign<I> for TySubst<'ctx> {
     fn sub_assign(&mut self, rhs: I) {
         for i in rhs {
-            self.subst.remove(&i);
+            self.subst.remove(i);
         }
     }
 }

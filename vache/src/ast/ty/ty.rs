@@ -152,52 +152,55 @@ impl<'ctx> Ty<'ctx> {
         }
     }
 
-    /// Tries to unify two types.
+    /// Tries to unify two types, retuning `true` on success.
     ///
-    /// If it succeeds, it returns the substitution that need to be applied to
-    /// see both types as "equal". Otherwise, returns `None`.
-    pub fn unify(&self, other: &Self, arena: &'ctx Arena<'ctx>) -> Option<TySubst<'ctx>> {
+    /// Along the way, it looks up for the substitutions you provided, and
+    /// updates them so  with substitutions needed to see both types as
+    /// "equal".
+    pub fn unify(&self, other: &Self, subst: &mut TySubst<'ctx>) -> bool {
         // Convoluted way of pattern matching, but this way we will get a compile
         // error if we add a new variant but forget to handle it here.
         match (*self, *other) {
+            // If we have a type variable, first check if there is a substitution for it
+            (VarT(name), ty) | (ty, VarT(name)) if let Some(mapped) = subst.get(name) => {
+                mapped.unify(&ty, subst)
+            }
+            // Otherwise, introduce a substitution for it
             (VarT(name), ty) | (ty, VarT(name)) => {
                 if !ty.occurs(name) {
-                    Some(TySubst::from(arena,[(name, ty)]))
+                    subst.insert(name, ty);
+                    true
                 } else {
-                    None
+                    false
                 }
             }
-            (UnitT, UnitT) => Some(TySubst::new(arena)),
-            (UnitT, _) => None,
-            (BoolT, BoolT) => Some(TySubst::new(arena)),
-            (BoolT, _) => None,
-            (IntT, IntT) => Some(TySubst::new(arena)),
-            (IntT, _) => None,
-            (StrT, StrT) => Some(TySubst::new(arena)),
-            (StrT, _) => None,
-            (ArrayT(inner1), ArrayT(inner2)) => inner1.unify(inner2, arena),
-            (ArrayT(..), _) => None,
+            (UnitT, UnitT) => true,
+            (UnitT, _) => false,
+            (BoolT, BoolT) => true,
+            (BoolT, _) => false,
+            (IntT, IntT) => true,
+            (IntT, _) => false,
+            (StrT, StrT) => true,
+            (StrT, _) => false,
+            (ArrayT(inner1), ArrayT(inner2)) => inner1.unify(inner2, subst),
+            (ArrayT(..), _) => false,
             (TupleT(items1), TupleT(items2)) => {
                 if items1.len() == items2.len() {
                     items1
                         .iter()
                         .zip(items2.iter())
-                        .map(|(i1, i2)| i1.unify(i2, arena))
-                        .fold(Some(TySubst::new(arena)), |acc, el| match (acc, el) {
-                            (Some(acc), Some(el)) => Some(acc + &el),
-                            _ => None,
-                        })
+                        .all(|(i1, i2)| i1.unify(i2, subst))
                 } else {
-                    None
+                    false
                 }
             }
-            (TupleT(..), _) => None,
-            (IterT(inner1), IterT(inner2)) => inner1.unify(inner2, arena),
-            (IterT(..), _) => None,
-            (StructT(name1), StructT(name2)) => (name1 == name2).then_some(TySubst::new(arena)),
-            (StructT(..), _) => None,
-            (EnumT(name1), EnumT(name2)) => (name1 == name2).then_some(TySubst::new(arena)),
-            (EnumT(..), _) => None,
+            (TupleT(..), _) => false,
+            (IterT(inner1), IterT(inner2)) => inner1.unify(inner2, subst),
+            (IterT(..), _) => false,
+            (StructT(name1), StructT(name2)) => name1 == name2,
+            (StructT(..), _) => false,
+            (EnumT(name1), EnumT(name2)) => name1 == name2,
+            (EnumT(..), _) => false,
         }
     }
 }

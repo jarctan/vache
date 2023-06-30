@@ -173,8 +173,10 @@ mod tests {
     #[test]
     fn bool_iter(ty: TyUse) {
         let expected = IterT(arena.alloc(Ty::hole(Span::default())));
-        ty.unify(&expected, &arena)
-            .context("expected an iterator")?;
+        ensure!(
+            ty.unify(&expected, &mut TySubst::new(&arena)),
+            "expected an iterator"
+        );
     }
 
     #[parses("(bool, int)" as ty)]
@@ -183,7 +185,8 @@ mod tests {
         let ty1 = Ty::hole(Span::default());
         let ty2 = Ty::hole(Span::default());
         let expected = TupleT(arena.alloc(vec![ty1, ty2]));
-        let subst = ty.unify(&expected, &arena).context("expected a tuple")?;
+        let mut subst = TySubst::new(&arena);
+        ensure!(ty.unify(&expected, &mut subst), "expected a tuple");
         let ty1 = ty1.subst(&arena, &subst);
         let ty2 = ty2.subst(&arena, &subst);
         ensure!(ty1 == BoolT);
@@ -194,8 +197,11 @@ mod tests {
     #[test]
     fn bool_iter_iter(ty: TyUse) -> Result<()> {
         let expected = IterT(arena.alloc(IterT(arena.alloc(Ty::hole(Span::default())))));
-        ty.unify(&expected, &arena)
-            .context("expected an iterator of iterators")?;
+        let mut subst = TySubst::new(&arena);
+        ensure!(
+            ty.unify(&expected, &mut subst),
+            "expected an iterator of iterators"
+        );
     }
 
     #[parses("blah" as ty)]
