@@ -1,5 +1,6 @@
 //! Defining substitutions for types.
 
+use std::collections::HashMap;
 use std::default::default;
 use std::fmt;
 use std::ops::{Add, AddAssign};
@@ -11,18 +12,12 @@ use crate::Arena;
 #[derive(Clone)]
 pub struct TySubst<'ctx> {
     /// Actual substitutions.
-    pub(super) substs: Vec<(TyVar<'ctx>, Ty<'ctx>)>,
+    pub(super) substs: HashMap<TyVar<'ctx>, Ty<'ctx>>,
     /// Reference to the [`Arena`].
     ///
     /// Used when we merge two [`TySubst`], since we need to apply one
     /// [`TySubst`] to the other.
     pub(super) arena: &'ctx Arena<'ctx>,
-}
-
-impl<'ctx> fmt::Debug for TySubst<'ctx> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.substs)
-    }
 }
 
 impl<'ctx> TySubst<'ctx> {
@@ -32,6 +27,28 @@ impl<'ctx> TySubst<'ctx> {
             substs: default(),
             arena,
         }
+    }
+
+    /// Creates a new type substitution out of an iterator.
+    pub fn from(
+        arena: &'ctx Arena<'ctx>,
+        substs: impl IntoIterator<Item = (TyVar<'ctx>, Ty<'ctx>)>,
+    ) -> Self {
+        Self {
+            substs: substs.into_iter().collect(),
+            arena,
+        }
+    }
+
+    /// Gets the substitution for a given type variable, if any.
+    pub fn get(&self, var: TyVar<'ctx>) -> Option<Ty<'ctx>> {
+        Some(*self.substs.get(&var)?)
+    }
+}
+
+impl<'ctx> fmt::Debug for TySubst<'ctx> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.substs)
     }
 }
 
@@ -49,7 +66,7 @@ impl<'ctx> AddAssign<&TySubst<'ctx>> for TySubst<'ctx> {
         self.substs.extend(
             rhs.substs
                 .iter()
-                .map(|&(var, ty)| (var, ty.subst(self.arena, self)))
+                .map(|(var, ty)| (*var, ty.subst(self.arena, self)))
                 .collect::<Vec<_>>(),
         );
     }

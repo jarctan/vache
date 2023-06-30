@@ -38,7 +38,7 @@ impl<'ctx> GenTy<'ctx> {
         subst
             .substs
             .iter()
-            .fold(*self, |acc, &(var, ty)| acc.subst_var(arena, var, ty))
+            .fold(*self, |acc, (var, ty)| acc.subst_var(arena, *var, *ty))
     }
 
     /// Returns the free type variables in `self`.

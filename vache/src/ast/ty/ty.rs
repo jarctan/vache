@@ -51,33 +51,25 @@ impl<'ctx> Ty<'ctx> {
         VarT(TyVar::fresh(span))
     }
 
-    /// Inner function to substitute a type variable `from` for `to` in `self`,
+    /// Inner function to apply a type substitution,
     /// returning a new type. DO NOT use this function directly.
     ///
     /// Result:
     /// * if `Ok(x)`, then some changes/substitutions have been made
     /// * if `Err(y)`, then y is guaranteed to be the original type without
     ///   change, NO substitution has been made/could be applied.
-    fn _subst_var(
-        &self,
-        arena: &'ctx Arena<'ctx>,
-        from: TyVar<'ctx>,
-        to: Ty<'ctx>,
-    ) -> Result<Self, Self> {
+    fn _subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Result<Self, Self> {
         match *self {
             self_ty @ (UnitT | BoolT | IntT | StrT | StructT(_) | EnumT(_)) => Err(self_ty),
             self_ty @ VarT(v) => {
-                if v == from {
+                if let Some(to) = subst.get(v) {
                     Ok(to)
                 } else {
                     Err(self_ty)
                 }
             }
             self_ty @ TupleT(items) => {
-                let items: Vec<_> = items
-                    .iter()
-                    .map(|item| item._subst_var(arena, from, to))
-                    .collect();
+                let items: Vec<_> = items.iter().map(|item| item._subst(arena, subst)).collect();
                 if items.iter().any(|item| item.is_ok()) {
                     let items: &[Ty] = arena.alloc(
                         items
@@ -90,11 +82,11 @@ impl<'ctx> Ty<'ctx> {
                     Err(self_ty)
                 }
             }
-            self_ty @ ArrayT(inner) => match inner._subst_var(arena, from, to) {
+            self_ty @ ArrayT(inner) => match inner._subst(arena, subst) {
                 Ok(new) => Ok(ArrayT(arena.alloc(new))),
                 Err(_) => Err(self_ty),
             },
-            self_ty @ IterT(inner) => match inner._subst_var(arena, from, to) {
+            self_ty @ IterT(inner) => match inner._subst(arena, subst) {
                 Ok(new) => Ok(IterT(arena.alloc(new))),
                 Err(_) => Err(self_ty),
             },
@@ -109,16 +101,13 @@ impl<'ctx> Ty<'ctx> {
         from: TyVar<'ctx>,
         to: Ty<'ctx>,
     ) -> Self {
-        self._subst_var(arena, from, to).unwrap_or_else(|x| x)
+        self.subst(arena, &TySubst::from(arena, [(from, to)]))
     }
 
     /// Applies a type substitution from `subst` in `self`, returning a
     /// new type.
     pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
-        subst
-            .substs
-            .iter()
-            .fold(*self, |acc, &(var, ty)| acc.subst_var(arena, var, ty))
+        self._subst(arena, subst).unwrap_or_else(|x| x)
     }
 
     /// Returns the free type variables in `self`.
@@ -173,10 +162,7 @@ impl<'ctx> Ty<'ctx> {
         match (*self, *other) {
             (VarT(name), ty) | (ty, VarT(name)) => {
                 if !ty.occurs(name) {
-                    Some(TySubst {
-                        arena,
-                        substs: vec![(name, ty)],
-                    })
+                    Some(TySubst::from(arena,[(name, ty)]))
                 } else {
                     None
                 }
