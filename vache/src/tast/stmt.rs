@@ -1,6 +1,9 @@
 //! Defining statements.
 
-use super::{Block, Expr, LhsPlace, Span, TySubst, VarDef};
+use std::default::default;
+
+use super::{Block, Expr, LhsPlace, Span, TySubst, TyVar, VarDef};
+use crate::utils::set::Set;
 use crate::Arena;
 
 /// A statement.
@@ -17,6 +20,11 @@ impl<'ctx> Stmt<'ctx> {
             kind: self.kind.subst(arena, substs),
             span: self.span,
         }
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self { kind, span: _ } = self;
+        kind.free_vars()
     }
 }
 
@@ -80,6 +88,17 @@ impl<'ctx> StmtKind<'ctx> {
                 body: body.subst(arena, substs),
             },
             HoleS => HoleS,
+        }
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        match self {
+            AssignS(lhs, rhs) => lhs.free_vars() + rhs.free_vars(),
+            ExprS(e) => e.free_vars(),
+            BreakS | ContinueS | HoleS => default(),
+            ReturnS(e) => e.free_vars(),
+            WhileS { cond, body } => cond.free_vars() + body.free_vars(),
+            ForS { item, iter, body } => item.free_vars() + iter.free_vars() + body.free_vars(),
         }
     }
 }

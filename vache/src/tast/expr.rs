@@ -1,9 +1,12 @@
 //! Defining typed expressions.
 
+use std::default::default;
+
 use num_bigint::BigInt;
 
-use super::{Block, Namespaced, Pat, Place, Span, Stratum, Ty, TySubst};
+use super::{Block, Namespaced, Pat, Place, Span, Stratum, Ty, TySubst, TyVar};
 use crate::utils::boxed;
+use crate::utils::set::Set;
 use crate::Arena;
 
 /// An expression in the typed AST.
@@ -39,12 +42,12 @@ impl<'ctx> Expr<'ctx> {
 
     /// Creates a new `hole`/placeholder expression that holds the place for
     /// some code located at `span`.
-    pub fn hole(span: impl Into<Span>) -> Self {
+    pub fn hole(span: Span) -> Self {
         Self {
             kind: HoleE,
-            ty: Ty::hole(),
+            ty: Ty::hole(span),
             stm: Stratum::static_stm(),
-            span: span.into(),
+            span,
         }
     }
 
@@ -55,6 +58,16 @@ impl<'ctx> Expr<'ctx> {
             stm: self.stm,
             span: self.span,
         }
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self {
+            kind,
+            ty,
+            stm: _,
+            span: _,
+        } = self;
+        ty.free_vars() + kind.free_vars()
     }
 }
 
@@ -178,6 +191,34 @@ impl<'ctx> ExprKind<'ctx> {
                     .map(|arg| arg.subst(arena, substs))
                     .collect(),
             },
+        }
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        match self {
+            UnitE | BoolE(_) | IntegerE(_) | StringE(_) | HoleE => default(),
+            PlaceE(place) => place.free_vars(),
+            RangeE(e1, e2) => e1.free_vars() + e2.free_vars(),
+            StructE { name, fields } => fields.iter().map(|(_, e)| e.free_vars()).sum(),
+            ArrayE(items) => items.iter().map(Expr::free_vars).sum(),
+            TupleE(elems) => elems.iter().map(Expr::free_vars).sum(),
+            CallE { name: _, args } => args.iter().map(Expr::free_vars).sum(),
+            IfE(box cond, box iftrue, box iffalse) => {
+                cond.free_vars() + iftrue.free_vars() + iffalse.free_vars()
+            }
+            BlockE(box b) => b.free_vars(),
+            MatchE(box matched, branches) => {
+                matched.free_vars()
+                    + branches
+                        .iter()
+                        .map(|(pat, e)| pat.free_vars() + e.free_vars())
+                        .sum::<Set<_>>()
+            }
+            VariantE {
+                enun: _,
+                variant: _,
+                args,
+            } => args.into_iter().map(Expr::free_vars).sum(),
         }
     }
 }

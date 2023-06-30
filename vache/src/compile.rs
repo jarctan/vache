@@ -74,7 +74,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let name = format_ident!("{}", name);
                 quote!(#wrapper<#lft #name>)
             }
-            VarT(TyVar::Gen(_)) => {
+            VarT(TyVar::Gen(..)) => {
                 // We should not have free, compiler-generated type variables at this stage
                 unreachable!()
             }

@@ -1,6 +1,9 @@
 //! Defining (pattern matching) patterns.
 
-use super::{Span, Ty, TySubst, VarDef};
+use std::default::default;
+
+use super::{Span, Ty, TySubst, TyVar, VarDef};
+use crate::utils::set::Set;
 use crate::Arena;
 
 /// Code pattern, that represents some data structure to match.
@@ -56,6 +59,11 @@ impl<'ctx> Pat<'ctx> {
             span: self.span,
         }
     }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self { kind, ty, span: _ } = self;
+        kind.free_vars() + ty.free_vars()
+    }
 }
 
 /// Pattern kinds.
@@ -101,6 +109,18 @@ impl<'ctx> PatKind<'ctx> {
                     .map(|arg| arg.subst(arena, substs))
                     .collect(),
             },
+        }
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        match self {
+            BoolM(_) | IntegerM(_) | StringM(_) => default(),
+            IdentM(vardef) => vardef.free_vars(),
+            VariantM {
+                enun: _,
+                variant: _,
+                args,
+            } => args.iter().map(Pat::free_vars).sum(),
         }
     }
 }

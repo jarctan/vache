@@ -61,13 +61,13 @@ impl<'ctx> AddAssign<&TySubst<'ctx>> for TySubst<'ctx> {
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TyVar<'ctx> {
     Named(&'ctx str),
-    Gen(u64),
+    Gen(u64, Span),
 }
 
 impl<'ctx> TyVar<'ctx> {
-    fn fresh() -> Self {
+    fn fresh(span: impl Into<Span>) -> Self {
         let id = TY_VAR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        Self::Gen(id)
+        Self::Gen(id, span.into())
     }
 }
 
@@ -75,7 +75,7 @@ impl<'ctx> fmt::Display for TyVar<'ctx> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             TyVar::Named(name) => write!(f, "{name}"),
-            TyVar::Gen(id) => write!(f, "τ{id}"),
+            TyVar::Gen(id, _) => write!(f, "τ{id}"),
         }
     }
 }
@@ -103,6 +103,10 @@ impl<'ctx> TyUse<'ctx> {
             kind: self.kind.subst(arena, subst),
             span: self.span,
         }
+    }
+
+    pub fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        self.kind.free_vars()
     }
 }
 
@@ -268,8 +272,8 @@ pub enum Ty<'ctx> {
 use Ty::*;
 
 impl<'ctx> Ty<'ctx> {
-    pub fn hole() -> Self {
-        VarT(TyVar::fresh())
+    pub fn hole(span: Span) -> Self {
+        VarT(TyVar::fresh(span))
     }
 
     fn _subst_var(
@@ -422,7 +426,7 @@ impl<'ctx> Ty<'ctx> {
 
 impl Default for Ty<'_> {
     fn default() -> Self {
-        Self::hole()
+        Self::hole(Span::default())
     }
 }
 
@@ -544,7 +548,7 @@ mod tests {
     #[parses("bool.." as ty)]
     #[test]
     fn bool_iter(ty: TyUse) {
-        let expected = IterT(arena.alloc(Ty::hole()));
+        let expected = IterT(arena.alloc(Ty::hole(Span::default())));
         ty.unify(&expected, &arena)
             .context("expected an iterator")?;
     }
@@ -552,8 +556,8 @@ mod tests {
     #[parses("(bool, int)" as ty)]
     #[test]
     fn tuple_ty(ty: TyUse) {
-        let ty1 = Ty::hole();
-        let ty2 = Ty::hole();
+        let ty1 = Ty::hole(Span::default());
+        let ty2 = Ty::hole(Span::default());
         let expected = TupleT(arena.alloc(vec![ty1, ty2]));
         let substs = ty.unify(&expected, &arena).context("expected a tuple")?;
         let ty1 = ty1.subst(&arena, &substs);
@@ -565,7 +569,7 @@ mod tests {
     #[parses("bool......" as ty)]
     #[test]
     fn bool_iter_iter(ty: TyUse) -> Result<()> {
-        let expected = IterT(arena.alloc(IterT(arena.alloc(Ty::hole()))));
+        let expected = IterT(arena.alloc(IterT(arena.alloc(Ty::hole(Span::default())))));
         ty.unify(&expected, &arena)
             .context("expected an iterator of iterators")?;
     }

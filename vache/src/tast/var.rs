@@ -4,8 +4,9 @@ use std::default::default;
 use std::fmt;
 use std::sync::atomic::AtomicU64;
 
-use super::{Span, Stratum, Ty, TySubst, Varname};
+use super::{Span, Stratum, Ty, TySubst, TyVar, Varname};
 use crate::ast;
+use crate::utils::set::Set;
 use crate::Arena;
 
 /// Fresh variable counter.
@@ -31,11 +32,6 @@ impl<'ctx> VarUse<'ctx> {
         self.name
     }
 
-    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
-        // Subst is a no-op
-        self
-    }
-
     /// A fresh variable, related to some code`span`.
     ///
     /// These are variables used internally by the CFG, that starts with `__cfg`
@@ -47,6 +43,15 @@ impl<'ctx> VarUse<'ctx> {
             name: name.into(),
             span,
         }
+    }
+
+    pub(crate) fn subst(self, arena: &'ctx Arena<'ctx>, substs: &TySubst<'ctx>) -> Self {
+        // Subst is a no-op
+        self
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        default()
     }
 }
 
@@ -142,6 +147,16 @@ impl<'ctx> VarDef<'ctx> {
             stm: self.stm,
             span: self.span,
         }
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self {
+            var: _,
+            ty,
+            stm: _,
+            span: _,
+        } = self;
+        ty.free_vars()
     }
 }
 

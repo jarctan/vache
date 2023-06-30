@@ -1,7 +1,8 @@
 //! Defining places in the typed AST.
 
-use super::{Expr, LhsMode, Mode, Span, Stratum, Ty, TySubst, VarUse};
+use super::{Expr, LhsMode, Mode, Span, Stratum, Ty, TySubst, TyVar, VarUse};
 use crate::utils::boxed;
+use crate::utils::set::Set;
 use crate::Arena;
 
 /// A place in the AST: allowed left hand side expressions.
@@ -45,6 +46,17 @@ impl<'ctx> Place<'ctx> {
             mode: self.mode,
             span: self.span,
         }
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self {
+            kind,
+            ty,
+            stm: _,
+            mode: _,
+            span: _,
+        } = self;
+        self.kind.free_vars() + ty.free_vars()
     }
 }
 
@@ -90,6 +102,17 @@ impl<'ctx> LhsPlace<'ctx> {
             span: self.span,
         }
     }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self {
+            kind,
+            ty,
+            stm: _,
+            mode: _,
+            span: _,
+        } = self;
+        kind.free_vars() + ty.free_vars()
+    }
 }
 
 /// Kinds of places.
@@ -117,6 +140,15 @@ impl<'ctx> PlaceKind<'ctx> {
             ),
             FieldP(box strukt, field) => FieldP(boxed(strukt.subst(arena, substs)), field),
             ElemP(box tuple, index) => ElemP(boxed(tuple.subst(arena, substs)), index),
+        }
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        match self {
+            VarP(var) => var.free_vars(),
+            IndexP(box array, box index) => array.free_vars() + index.free_vars(),
+            FieldP(box strukt, _) => strukt.free_vars(),
+            ElemP(box tuple, _) => tuple.free_vars(),
         }
     }
 }

@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use super::{Enum, Fun, Struct};
+use super::{Enum, Fun, Struct, TyVar};
+use crate::utils::set::Set;
 use crate::Arena;
 
 /// A program: a collection of:
@@ -20,6 +21,20 @@ pub struct Program<'ctx> {
     /// Collection of enumerations defined in the program, indexed by their
     /// names.
     pub enums: &'ctx HashMap<&'ctx str, Enum<'ctx>>,
+}
+
+impl<'ctx> Program<'ctx> {
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self {
+            arena: _,
+            funs,
+            structs,
+            enums,
+        } = self;
+        funs.values().map(Fun::free_vars).sum::<Set<_>>()
+            + structs.values().map(Struct::free_vars).sum::<Set<_>>()
+            + enums.values().map(Enum::free_vars).sum::<Set<_>>()
+    }
 }
 
 impl<'ctx> fmt::Debug for Program<'ctx> {

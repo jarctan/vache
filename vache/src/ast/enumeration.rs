@@ -6,7 +6,8 @@ use std::fmt;
 use pest::iterators::Pair;
 
 use super::{Context, Parsable};
-use super::{Span, TySubst, TyUse};
+use super::{Span, TySubst, TyUse, TyVar};
+use crate::utils::set::Set;
 use crate::{grammar::*, Arena};
 
 /// An enumerated type (tag union of types).
@@ -59,6 +60,19 @@ impl<'ctx> Enum<'ctx> {
                 .collect(),
             span: self.span,
         }
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self {
+            variants,
+            name: _,
+            span: _,
+        } = self;
+        variants
+            .values()
+            .map(|variant| variant.iter().map(TyUse::free_vars))
+            .flatten()
+            .sum()
     }
 }
 

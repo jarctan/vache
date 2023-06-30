@@ -1,6 +1,7 @@
 //! Defining typed functions.
 
-use super::{Block, TySubst, TyUse, VarDef};
+use super::{Block, TySubst, TyUse, TyVar, VarDef};
+use crate::utils::set::Set;
 use crate::Arena;
 
 /// A function in the typed AST.
@@ -30,5 +31,15 @@ impl<'ctx> Fun<'ctx> {
             ret_ty: self.ret_ty.subst(arena, substs),
             body: self.body.subst(arena, substs),
         }
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self {
+            name: _,
+            params,
+            ret_ty,
+            body,
+        } = self;
+        params.iter().map(VarDef::free_vars).sum::<Set<_>>() + ret_ty.free_vars() + body.free_vars()
     }
 }

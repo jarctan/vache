@@ -6,8 +6,9 @@ use std::fmt;
 use pest::iterators::Pair;
 
 use super::{Context, Parsable};
-use super::{Span, Ty, TySubst, TyUse, VarDef};
+use super::{Span, Ty, TySubst, TyUse, TyVar, VarDef};
 use crate::grammar::*;
+use crate::utils::set::Set;
 use crate::Arena;
 
 /// A C-like `struct`.
@@ -53,6 +54,15 @@ impl<'ctx> Struct<'ctx> {
     /// Gets the type of a field in the structure.
     pub fn get_field(&self, field: impl AsRef<str>) -> Option<Ty<'ctx>> {
         self.fields.get(field.as_ref()).map(|ty| ty.kind)
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self {
+            name: _,
+            fields,
+            span: _,
+        } = self;
+        self.fields.values().map(TyUse::free_vars).sum()
     }
 }
 

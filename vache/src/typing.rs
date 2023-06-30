@@ -204,7 +204,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
             }
             IterT(item) => self.check_ty(&mut item.with_span(ty.span)),
-            VarT(TyVar::Gen(_)) => (),
+            VarT(TyVar::Gen(..)) => (),
             VarT(TyVar::Named(name)) => match self.valid_type_names.get(name) {
                 Some(TypeNameKind::Struct) => {
                     ty.kind = StructT(name);
@@ -260,7 +260,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ast::PlaceKind::IndexP(box e, box ix) => {
                 let e = self.visit_expr(e, ret_ty, in_loop);
                 let ix = self.visit_expr(ix, ret_ty, in_loop);
-                let array_ty = self.ctx.alloc(Ty::hole());
+                let array_ty = self.ctx.alloc(Ty::hole(e.span));
                 match (
                     e.ty.unify(&ArrayT(array_ty), self.ctx.arena),
                     ix.ty.unify(&IntT, self.ctx.arena),
@@ -344,7 +344,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         stm: s.stm,
                         kind: FieldP(boxed(s), field),
                         mode: LhsMode::Assigning,
-                        ty: Ty::hole(),
+                        ty: Ty::hole(place.span),
                         span: place.span,
                     }),
                     _ => {
@@ -390,7 +390,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         stm: tuple.stm,
                         kind: ElemP(boxed(tuple), elem),
                         mode: LhsMode::Assigning,
-                        ty: Ty::hole(),
+                        ty: Ty::hole(place.span),
                         span: place.span,
                     }),
                     _ => {
@@ -587,7 +587,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                                 .join(", ")
                                         )]),
                                 );
-                                Ty::hole()
+                                Ty::hole(span)
                             }
                         };
                         let stm = s.stm; // Needed now because we move s after
@@ -628,7 +628,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                             format!("has only {} elements", elems.len()),
                                         )]),
                                 );
-                                Ty::hole()
+                                Ty::hole(span)
                             }
                         };
                         let stm = tuple.stm; // Needed now because we move `tuple` after
@@ -659,7 +659,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 ast::PlaceKind::IndexP(box e, box ix) => {
                     let e = self.visit_expr(e, ret_ty, in_loop);
                     let ix = self.visit_expr(ix, ret_ty, in_loop);
-                    let array_ty = self.ctx.alloc(Ty::hole());
+                    let array_ty = self.ctx.alloc(Ty::hole(e.span));
                     match (
                         e.ty.unify(&ArrayT(array_ty), self.ctx.arena),
                         ix.ty.unify(&IntT, self.ctx.arena),
@@ -891,7 +891,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     ArrayT(self.ctx.alloc(item1.ty))
                 } else {
                     // no item in array, so we must use a type variable
-                    ArrayT(self.ctx.alloc(Ty::hole()))
+                    ArrayT(self.ctx.alloc(Ty::hole(span)))
                 };
 
                 match subst {
@@ -1030,7 +1030,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             .with_message("Empty `match`es are not supported yet")
                             .with_labels(vec![e.span.as_label()]),
                     );
-                    Ty::hole()
+                    Ty::hole(span)
                 };
 
                 // Compute the common stm of all the branches, which is the max of the stratum
@@ -1064,7 +1064,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             self.check_ty(&mut ty);
                             ty.kind
                         }
-                        None => Ty::hole(),
+                        None => Ty::hole(expr.span),
                     };
 
                     // Check the type
@@ -1154,7 +1154,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                     let iter = self.visit_expr(iter, ret_ty, in_loop);
 
-                    let item_ty = self.ctx.alloc(Ty::hole());
+                    let item_ty = self.ctx.alloc(Ty::hole(item.as_span()));
                     let item_ty = match iter.ty.unify(&IterT(item_ty), self.ctx.arena) {
                         Some(substs) => {
                             self.substs += &substs;
@@ -1173,7 +1173,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                         "For loop requires an iterator here".to_string()
                                     ]),
                             );
-                            Ty::hole()
+                            *item_ty
                         }
                     };
                     let item = item.as_vardef(item_ty);
@@ -1391,7 +1391,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             self.ctx.emit(
                 Diagnostic::error()
                     .with_code(NO_MAIN_FN_ERROR)
-                    .with_message("Please add a `main` function to your program"),
+                    .with_message("please add a `main` function to your program"),
             );
         }
 
@@ -1409,12 +1409,30 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             .map(|(name, f)| (name, f.subst(self.ctx.arena, &self.substs)))
             .collect();
 
-        Program {
+        let p = Program {
             arena: self.ctx.arena,
             structs: self.ctx.alloc(structs),
             enums: self.ctx.alloc(enums),
             funs,
+        };
+
+        // Any free variable left is a type inference error
+        for var in p.free_vars() {
+            match var {
+                TyVar::Named(..) => unreachable!(), // Only generated variables should be free
+                TyVar::Gen(_, span) => self.ctx.emit(
+                    Diagnostic::error()
+                        .with_code(TYPE_INFER_ERROR)
+                        .with_message("could not infer type")
+                        .with_labels(vec![span.as_label()])
+                        .with_notes(vec![
+                            "Please consider adding an explicit type to it".to_string()
+                        ]),
+                ),
+            }
         }
+
+        p
     }
 
     /// Type-checks a structure.

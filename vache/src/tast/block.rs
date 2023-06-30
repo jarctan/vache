@@ -1,6 +1,7 @@
 //! Defining typed blocks.
 
-use super::{Expr, Span, Stmt, TySubst};
+use super::{Expr, Span, Stmt, TySubst, TyVar};
+use crate::utils::set::Set;
 use crate::Arena;
 
 /// A block in the typed AST.
@@ -27,5 +28,14 @@ impl<'ctx> Block<'ctx> {
             ret: self.ret.subst(arena, substs),
             span: self.span,
         }
+    }
+
+    pub(crate) fn free_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self {
+            stmts,
+            ret,
+            span: _,
+        } = self;
+        stmts.iter().map(Stmt::free_vars).sum::<Set<_>>() + ret.free_vars()
     }
 }

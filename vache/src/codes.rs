@@ -37,5 +37,7 @@ pub const TUPLE_ACCESS_ERROR: &str = "E0016";
 pub const BORROW_ERROR: &str = "E0017";
 /// Error if there is no main function.
 pub const NO_MAIN_FN_ERROR: &str = "E0018";
+/// Type inference error.
+pub const TYPE_INFER_ERROR: &str = "E0019";
 /// Temporary: empty match error.
 pub const EMPTY_MATCH_ERROR: &str = "E0101";
