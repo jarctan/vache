@@ -1337,8 +1337,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         .with_message("could not infer type")
                         .with_labels(vec![span.as_label()])
                         .with_notes(vec![
-                            "Please consider adding an explicit type to it".to_string(),
-                            format!("{:?} {id:?}", self.subst),
+                            "Please consider adding an explicit type to it".to_string()
                         ]),
                 ),
             }

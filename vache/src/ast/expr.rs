@@ -318,11 +318,36 @@ pub(super) fn parse_if_then_else<'ctx>(ctx: &Context<'ctx>, pair: Pair<'ctx, Rul
     let if_block: Block = ctx.parse(consume!(pairs));
     let mut pairs = pairs.rev().peekable();
 
-    // Check if we have at least one else branch
+    // Check if we have at least one other branch
     if pairs.peek().is_some() {
-        // Parse the final else { }
-        let mut else_block: Block = ctx.parse(consume!(pairs));
-        consume!(pairs, Rule::else_kw);
+        // Parse the final `else if? { }`.
+        let final_block: Block = ctx.parse(consume!(pairs));
+        // If the next thing we got (backwards, remember) is an expression, then we are
+        // facing an else if block
+        let mut else_block = if let Some(cond) = consume_opt!(pairs, Rule::expr) {
+            // If the final block is an `else if`, generate a dummy else block out of it
+
+            consume!(pairs, Rule::if_kw);
+            consume!(pairs, Rule::else_kw);
+
+            let cond = ctx.parse(cond);
+
+            // Generate a dummy else block
+            let else_block = Block {
+                span: Span::at(final_block.span.end()), /* Put the position of the dummy else
+                                                         * block
+                                                         * at
+                                                         * the end of the final if block */
+                ..default()
+            };
+            return Expr {
+                kind: IfE(boxed(cond), boxed(final_block), boxed(else_block)),
+                span,
+            };
+        } else {
+            consume!(pairs, Rule::else_kw);
+            final_block
+        };
 
         // Split the iterator with the `else` keyword. Awkward way to do it but could
         // not find better.
