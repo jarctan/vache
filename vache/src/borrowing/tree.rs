@@ -12,7 +12,7 @@ use std::ops::Sub;
 
 use Loc::*;
 
-use super::{Borrow, Borrows, Loans};
+use super::{Borrow, BorrowSet, Borrows, Loans};
 use crate::mir::Loc;
 use crate::utils::boxed;
 
@@ -253,10 +253,13 @@ impl<'ctx, T> LocTreeNode<'ctx, T> {
 }
 
 impl<'ctx> LocTree<'ctx, Borrows<'ctx>> {
-    /// Gets the `Borrows` for a given path.
+    /// Gets the `Borrow`s for a given path.
+    ///
+    /// If the path is an alias, it will return the borrows of the aliased
+    /// location.
     pub fn get_all<'a>(&'a self, loc: Loc<'ctx>) -> Box<dyn Iterator<Item = Borrow<'ctx>> + 'a> {
         if let Some(node) = self.get_node(loc) {
-            node.get_all()
+            node.get_all(self)
         } else {
             boxed(std::iter::empty())
         }
@@ -278,13 +281,21 @@ impl<'ctx> LocTree<'ctx, Borrows<'ctx>> {
 }
 
 impl<'ctx> LocTreeNode<'ctx, Borrows<'ctx>> {
-    /// Gets *all* the `Borrows`.
-    fn get_all<'a>(&'a self) -> Box<dyn Iterator<Item = Borrow<'ctx>> + 'a> {
+    /// Gets *all* the `Borrow`s of `self`.
+    ///
+    /// If the location of `self` is an alias, it will return the borrows of the
+    /// aliased location.
+    fn get_all<'a>(
+        &'a self,
+        tree: &'a LocTree<'ctx, Borrows<'ctx>>,
+    ) -> Box<dyn Iterator<Item = Borrow<'ctx>> + 'a> {
         match &self.kind {
-            AtomL(set) => boxed(set.iter().copied()),
+            AtomL(Borrows::None) => boxed(std::iter::empty()),
+            AtomL(Borrows::Distinct(set)) => boxed(set.iter().copied()),
+            AtomL(Borrows::Aliased(alias)) => boxed(tree.get_all(alias.borrowed_loc())),
             CompoundL(map) => map
                 .values()
-                .map(|v| v.get_all())
+                .map(|v| v.get_all(tree))
                 .fold(boxed(std::iter::empty()), |acc, set| boxed(acc.chain(set))),
         }
     }
@@ -292,7 +303,11 @@ impl<'ctx> LocTreeNode<'ctx, Borrows<'ctx>> {
     /// Concatenates `self` and `other`.
     fn append(&mut self, other: Self) {
         match (&mut self.kind, other.kind) {
-            (AtomL(s), AtomL(o)) => s.extend(o.iter().copied()),
+            (AtomL(s @ Borrows::None), AtomL(o)) => *s = o,
+            (AtomL(_), AtomL(Borrows::None)) => (),
+            (AtomL(Borrows::Distinct(s)), AtomL(Borrows::Distinct(o))) => {
+                s.extend(o.iter().copied())
+            }
             (CompoundL(s), CompoundL(o)) => {
                 for (k, v) in o {
                     s.entry(k)
@@ -303,7 +318,10 @@ impl<'ctx> LocTreeNode<'ctx, Borrows<'ctx>> {
                         .append(v);
                 }
             }
-            (AtomL(..), CompoundL(..)) | (CompoundL(..), AtomL(..)) => panic!("Not append-able"),
+            (AtomL(..), CompoundL(..))
+            | (CompoundL(..), AtomL(..))
+            | (AtomL(Borrows::Aliased(_)), AtomL(_))
+            | (AtomL(_), AtomL(Borrows::Aliased(_))) => panic!("Not append-able"),
         }
     }
 }
@@ -320,8 +338,8 @@ impl<'ctx> LocTree<'ctx, Loans<'ctx>> {
 
     /// Concatenates `self` and `other`.
     #[must_use = "Add these loans to your immutable invalidations"]
-    pub fn append(&mut self, other: Self) -> Borrows<'ctx> {
-        let mut set = Borrows::new();
+    pub fn append(&mut self, other: Self) -> BorrowSet<'ctx> {
+        let mut set = BorrowSet::new();
         for (var, other_tree) in other.0 {
             match self.0.entry(var) {
                 hash_map::Entry::Occupied(mut entry) => {
@@ -350,11 +368,11 @@ impl<'ctx> LocTreeNode<'ctx, Loans<'ctx>> {
 
     /// Concatenates `self` and `other`.
     #[must_use = "Add these loans to your immutable invalidations"]
-    fn append(&mut self, other: Self) -> Borrows<'ctx> {
+    fn append(&mut self, other: Self) -> BorrowSet<'ctx> {
         match (&mut self.kind, other.kind) {
             (AtomL(s), AtomL(o)) => s.extend(o.iter().copied()),
             (CompoundL(s), CompoundL(o)) => {
-                let mut set = Borrows::new();
+                let mut set = BorrowSet::new();
                 for (k, v) in o {
                     set.extend(
                         s.entry(k)
@@ -375,8 +393,16 @@ impl<'ctx> LocTreeNode<'ctx, Loans<'ctx>> {
 impl<'ctx> From<LocTreeNode<'ctx, Borrows<'ctx>>> for Borrows<'ctx> {
     fn from(value: LocTreeNode<'ctx, Borrows<'ctx>>) -> Self {
         match value.kind {
-            AtomL(set) => set,
-            CompoundL(map) => map.into_values().map(|v| v.into()).sum(),
+            AtomL(borrows) => borrows,
+            CompoundL(map) => Borrows::Distinct(
+                map.into_values()
+                    .flat_map(|v| match Borrows::from(v) {
+                        Borrows::None => None,
+                        Borrows::Aliased(_) => None,
+                        Borrows::Distinct(set) => Some(set),
+                    })
+                    .sum(),
+            ),
         }
     }
 }

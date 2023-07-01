@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use super::borrow::Borrows;
+use super::borrow::{BorrowSet, Borrows};
 use super::flow::Flow;
 use super::tree::LocTree;
 use crate::borrowing::borrow::Borrow;
@@ -116,7 +116,7 @@ fn loan_liveness<'ctx>(
                         .collect::<Vec<_>>();
                     let borrows = ledger.flatten(borrows.into_iter());
                     if var_flow[&label].outs.contains(lhs.loc()) {
-                        ledger.set_borrows(lhs.place(), borrows);
+                        ledger.set_borrows(lhs.place(), Borrows::Distinct(borrows));
                     } else {
                         ledger.flush_place(lhs.place(), true);
                     }
@@ -178,10 +178,6 @@ pub fn liveness<'mir, 'ctx>(
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
     reporter: &mut Reporter<'ctx>,
 ) -> Result<CfgI<'mir, 'ctx>, Diagnostics<'ctx>> {
-    //cfg.print_image("cfg");
-
-    let mut invalidated = Borrows::new();
-
     // Compute the var analysis first
     let var_flow = var_liveness(&cfg, entry_l);
 
@@ -225,13 +221,13 @@ pub fn liveness<'mir, 'ctx>(
                             {
                                 updated = true;
                                 reference.set_mode(Mode::Moved);
-                            } else {
-                                /*#[cfg(not(test))]
-                                println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
-                                panic!(
-                                    "Cannot move {loc:?} out  because {loans:?} are still active in {instr:?}"
-                                );*/
-                            }
+                            } /*else {
+                                  //#[cfg(not(test))]
+                                  println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
+                                  panic!(
+                                      "Cannot move {loc:?} out  because {loans:?} are still active in {instr:?}"
+                                  );
+                              }*/
                         }
                     }
                     Mode::Cloned => (), // We clone, there's a reason fot that. So you can't move
@@ -244,6 +240,9 @@ pub fn liveness<'mir, 'ctx>(
             break loan_flow;
         }
     };
+
+    // Now, collect all invalidations.
+    let mut invalidated = BorrowSet::new();
 
     // List all borrows that are invalidated by mutation of the variable afterwards.
     for (label, instr) in cfg.bfs(entry_l, false) {
@@ -370,6 +369,8 @@ pub fn liveness<'mir, 'ctx>(
             }
         }
     }
+
+    //cfg.print_image("cfg");
 
     Ok(cfg)
 }

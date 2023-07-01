@@ -9,7 +9,7 @@
 use std::iter::Sum;
 use std::ops::Add;
 
-use super::{Borrow, Borrows};
+use super::{Borrow, BorrowSet};
 use crate::utils::boxed;
 use crate::utils::set::Set;
 
@@ -24,7 +24,7 @@ pub enum Loans<'ctx> {
     /// Only one mutable loan.
     Mut(Borrow<'ctx>),
     /// Only immutable loans.
-    Immut(Borrows<'ctx>),
+    Immut(BorrowSet<'ctx>),
     /// No loan.
     #[default]
     None,
@@ -62,7 +62,7 @@ impl<'ctx> Loans<'ctx> {
     /// # Errors
     /// Returns an error if the insertion cannot be done in any way. In that
     /// case, it returns the mutable borrow that contradicts the new borrow.
-    pub fn insert(&mut self, borrow: Borrow<'ctx>) -> Result<Borrows<'ctx>, Borrow<'ctx>> {
+    pub fn insert(&mut self, borrow: Borrow<'ctx>) -> Result<BorrowSet<'ctx>, Borrow<'ctx>> {
         match (borrow.mutable, &mut *self) {
             (true, Loans::None) => {
                 *self = Loans::Mut(borrow);
@@ -101,7 +101,7 @@ impl<'ctx> Loans<'ctx> {
     /// # Panics
     /// Panics if adding those loans breaks the law of loans.
     #[must_use = "Add these loans to your immutable invalidations"]
-    pub fn extend<I>(&mut self, iter: I) -> Borrows<'ctx>
+    pub fn extend<I>(&mut self, iter: I) -> BorrowSet<'ctx>
     where
         I: IntoIterator<Item = Borrow<'ctx>>,
     {
@@ -118,7 +118,7 @@ impl<'ctx> Loans<'ctx> {
     }
 }
 
-impl<'ctx> From<Loans<'ctx>> for Borrows<'ctx> {
+impl<'ctx> From<Loans<'ctx>> for BorrowSet<'ctx> {
     fn from(loans: Loans<'ctx>) -> Self {
         match loans {
             Loans::Mut(borrow) => {

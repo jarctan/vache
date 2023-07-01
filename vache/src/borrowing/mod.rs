@@ -11,7 +11,7 @@ mod liveness;
 mod loans;
 mod tree;
 
-use borrow::{Borrow, Borrows};
+use borrow::{Borrow, BorrowSet, Borrows};
 pub use checker::BorrowChecker;
 use liveness::liveness;
 use loans::Loans;
