@@ -131,6 +131,67 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
         }
     }
 
+    /// Checks if two values pointed by values references are equal.
+    /// 
+    /// Will perform nested/recursive comparison if we encounter value references.
+    /// In that regard, it's more lenient (and useful) than simple equality. But it relies on our ability to
+    /// [`Self::get_value`].
+    fn eq(&self, x: ValueRef, y: ValueRef) -> bool {
+        let (x, y) = (self.get_value(x), self.get_value(y));
+        match (x, y) {
+            (UninitV, _) | (_, UninitV) => unreachable!(),
+            (UnitV, UnitV) => true,
+            (UnitV, _) | (_, UnitV) => false,
+            (BoolV(x), BoolV(y)) => x == y,
+            (BoolV(_), _) | (_, BoolV(_)) => false,
+            (StrV(x), StrV(y)) => x == y,
+            (StrV(_), _) | (_, StrV(_)) => false,
+            (IntV(x), IntV(y)) => x == y,
+            (RangeV(e1, e2), RangeV(e3, e4)) => self.eq(*e1, *e2) && self.eq(*e3, *e4),
+            (RangeV(_, _), _) | (_, RangeV(_, _)) => false,
+            (StructV(name1, fields1), StructV(name2, fields2)) => {
+                name1 == name2
+                    && fields1.iter().all(|(k, &v1)| {
+                        let v2 = fields2[k]; // Same struct name so v2 must exist
+                        self.eq(v1, v2)
+                    })
+            }
+            (StructV(..), _) | (_, StructV(..)) => false,
+            (
+                VariantV {
+                    enun: enun1,
+                    variant: variant1,
+                    args: args1,
+                },
+                VariantV {
+                    enun: enun2,
+                    variant: variant2,
+                    args: args2,
+                },
+            ) => {
+                enun1 == enun2
+                    && variant1 == variant2
+                    && args1
+                        .iter()
+                        .zip(args2.iter()) // NB: same `Vec` length since they come from the same enum
+                        .all(|(&v1, &v2)| self.eq(v1, v2))
+            }
+            (VariantV { .. }, _) | (_, VariantV { .. }) => false,
+            (ArrayV(items1), ArrayV(items2)) =>
+                items1.len() == items2.len() && // NB: here we NEED to check for equality since they can be of different length
+                items1
+                    .iter()
+                    .zip(items2.iter()) 
+                    .all(|(&v1, &v2)| self.eq(v1, v2)),
+            (ArrayV(_), _) | (_, ArrayV(_)) => false,
+            (TupleV(tuple1), TupleV(tuple2)) => tuple1
+                .iter()
+                .zip(tuple2.iter()) // NB: same `Vec` length since they come from the same tuple type
+                .all(|(&v1, &v2)| self.eq(v1, v2)),
+            (TupleV(_), _) | (_, TupleV(_)) => false,
+        }
+    }
+
     /// Checks if we can apply builtin functions to the call to
     /// `f_name(..args)`.
     fn check_builtin(
@@ -145,8 +206,14 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
             "*" => self.int_binop(|x, y| IntV(x * y), args, stratum),
             "/" => self.int_binop(|x, y| IntV(x / y), args, stratum),
             "%" => self.int_binop(|x, y| IntV(x % y), args, stratum),
-            "==" => self.int_binop(|x, y| BoolV(x == y), args, stratum),
-            "!=" => self.int_binop(|x, y| BoolV(x != y), args, stratum),
+            "==" => {
+                assert!(args.len() == 2);
+                Some(self.add_value(BoolV(self.eq(args[0], args[1])), stratum))
+            }
+            "!=" => {
+                assert!(args.len() == 2);
+                Some(self.add_value(BoolV(!self.eq(args[0], args[1])), stratum))
+            }
             ">=" => self.int_binop(|x, y| BoolV(x >= y), args, stratum),
             ">" => self.int_binop(|x, y| BoolV(x > y), args, stratum),
             "<=" => self.int_binop(|x, y| BoolV(x <= y), args, stratum),

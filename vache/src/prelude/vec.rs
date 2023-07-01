@@ -55,5 +55,25 @@ pub fn vec() -> TokenStream {
                 write!(f, "]")
             }
         }
+
+        impl<'a, 'b, T: __PartialEq + Clone> __PartialEq for __Vec<Var<'a, 'b, T>> {
+            fn eq<'c, 'd>(
+                x: Var<'c, 'd, __Vec<Var<'a, 'b, T>>>,
+                y: Var<'c, 'd, __Vec<Var<'a, 'b, T>>>,
+            ) -> __Result<Cow<'b, bool>> {
+                let b1: &__Vec<Var<'a, 'b, T>> = (*x).borrow();
+                let b2: &__Vec<Var<'a, 'b, T>> = (*y).borrow();
+                if b1.0.len() == b2.0.len() {
+                    for (x, y) in b1.0.iter().zip(b2.0.iter()) {
+                        if *__PartialEq::ne(__ref(x), __ref(y))? {
+                            return Ok(Cow::Owned(false));
+                        }
+                    }
+                    Ok(Cow::Owned(true))
+                } else {
+                    Ok(Cow::owned(false))
+                }
+            }
+        }
     )
 }
