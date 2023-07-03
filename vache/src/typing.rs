@@ -1239,6 +1239,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 .collect(),
             ret_ty: f.ret_ty,
             body,
+            span: f.span,
         }
     }
 
@@ -1304,13 +1305,30 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             .map(|f| (f.name, self.visit_fun(f)))
             .collect();
 
-        // Emit an error if there is no `main` function
-        if !funs.contains_key("main") {
-            self.ctx.emit(
+        // Check the signature of the main function.
+        match funs.get("main") {
+            Some(main) => {
+                if !main.ret_ty.kind.unify(&UnitT, &mut self.subst)
+                    || !main.ty_params.is_empty()
+                    || !main.params.is_empty()
+                {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(BAD_SIGNATURE)
+                            .with_message("wrong signature for the `main` function")
+                            .with_labels(vec![main.span.as_label()])
+                            .with_notes(vec![
+                                "remember: `main` function has no (type) parameters and returns unit"
+                                    .to_string(),
+                            ]),
+                    );
+                }
+            }
+            None => self.ctx.emit(
                 Diagnostic::error()
                     .with_code(NO_MAIN_FN_ERROR)
                     .with_message("please add a `main` function to your program"),
-            );
+            ),
         }
 
         // Finally, apply type inference substitutions recursively.

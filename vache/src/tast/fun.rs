@@ -1,6 +1,6 @@
 //! Defining typed functions.
 
-use super::{Block, TySubst, TyUse, TyVar, VarDef};
+use super::{Block, Span, TySubst, TyUse, TyVar, VarDef};
 use crate::utils::set::Set;
 use crate::Arena;
 
@@ -19,6 +19,8 @@ pub struct Fun<'ctx> {
     /// Body of the function: a list of statements and
     /// a final expression.
     pub body: Block<'ctx>,
+    /// Codespan.
+    pub span: Span,
 }
 
 impl<'ctx> Fun<'ctx> {
@@ -38,6 +40,7 @@ impl<'ctx> Fun<'ctx> {
                 .collect(),
             ret_ty: self.ret_ty.subst(arena, &subst),
             body: self.body.subst_ty(arena, &subst),
+            span: self.span,
         }
     }
 
@@ -49,6 +52,7 @@ impl<'ctx> Fun<'ctx> {
             ret_ty,
             ty_params,
             body,
+            span: _,
         } = self;
         params.iter().map(VarDef::free_ty_vars).sum::<Set<_>>()
             + ret_ty.free_ty_vars()

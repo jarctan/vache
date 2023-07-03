@@ -39,5 +39,7 @@ pub const BORROW_ERROR: &str = "E0017";
 pub const NO_MAIN_FN_ERROR: &str = "E0018";
 /// Type inference error.
 pub const TYPE_INFER_ERROR: &str = "E0019";
+/// Bad signature for a function.
+pub const BAD_SIGNATURE: &str = "E0020";
 /// Temporary: empty match error.
 pub const EMPTY_MATCH_ERROR: &str = "E0101";
