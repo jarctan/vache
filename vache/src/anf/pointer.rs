@@ -4,7 +4,7 @@
 use std::fmt;
 use std::sync::atomic::AtomicU64;
 
-use super::{Loc, Place, Span, Reference};
+use super::{Loc, Place, Reference, Span};
 use crate::Arena;
 
 /// Fresh label counter.

@@ -83,7 +83,7 @@ fn main() -> anyhow::Result<()> {
                 let mir = borrow_check(&mut context, mir(&mut checked)?)?;
                 println!("{:#?}", mir);
 
-                for (name, f) in mir.funs.iter() {
+                for (&name, f) in mir.funs.iter() {
                     f.body.print_image(name)?;
                     println!("* CFG of function `{name}` has been saved to `{name}.png`");
                 }

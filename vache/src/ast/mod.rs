@@ -108,7 +108,7 @@ use reporting::pretty_print_rule;
 pub use span::Span;
 pub use stmt::{Stmt, StmtKind};
 pub use structure::Struct;
-pub use ty::{arrayT, boolT, intT, strT, unitT, varT, Ty, TyUse, TyVar, TySubst};
+pub use ty::{arrayT, boolT, intT, strT, unitT, varT, Ty, TySubst, TyUse, TyVar};
 pub use var::{VarDef, VarUse, Varname};
 
 use crate::codes::*;

@@ -133,9 +133,10 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     }
 
     /// Checks if two values pointed by values references are equal.
-    /// 
-    /// Will perform nested/recursive comparison if we encounter value references.
-    /// In that regard, it's more lenient (and useful) than simple equality. But it relies on our ability to
+    ///
+    /// Will perform nested/recursive comparison if we encounter value
+    /// references. In that regard, it's more lenient (and useful) than
+    /// simple equality. But it relies on our ability to
     /// [`Self::get_value`].
     fn eq(&self, x: ValueRef, y: ValueRef) -> bool {
         let (x, y) = (self.get_value(x), self.get_value(y));
@@ -178,12 +179,13 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                         .all(|(&v1, &v2)| self.eq(v1, v2))
             }
             (VariantV { .. }, _) | (_, VariantV { .. }) => false,
-            (ArrayV(items1), ArrayV(items2)) =>
+            (ArrayV(items1), ArrayV(items2)) => {
                 items1.len() == items2.len() && // NB: here we NEED to check for equality since they can be of different length
                 items1
                     .iter()
-                    .zip(items2.iter()) 
-                    .all(|(&v1, &v2)| self.eq(v1, v2)),
+                    .zip(items2.iter())
+                    .all(|(&v1, &v2)| self.eq(v1, v2))
+            }
             (ArrayV(_), _) | (_, ArrayV(_)) => false,
             (TupleV(tuple1), TupleV(tuple2)) => tuple1
                 .iter()
