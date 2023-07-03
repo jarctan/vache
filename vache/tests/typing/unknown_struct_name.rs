@@ -43,12 +43,18 @@ fn unknown_struct_in_params() -> Program {
     Program::new(
         vec![person_struct()],
         default(),
-        vec![Fun {
-            name: "main",
-            params: vec![vardef("a", varT("UnknownStruct"))], // should fail
-            body: expr(UnitE),
-            ..default()
-        }],
+        vec![
+            Fun {
+                name: "test",
+                params: vec![vardef("a", varT("UnknownStruct"))], // should fail
+                body: expr(UnitE),
+                ..default()
+            },
+            Fun {
+                name: "main",
+                ..default()
+            },
+        ],
     )
 }
 
