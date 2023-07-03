@@ -59,6 +59,17 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         typer.add_fun(binop_int_sig("/", IntT));
         typer.add_fun(binop_int_sig("%", IntT));
         typer.add_fun(binop_gen_sig("==", TyVar::Named("T"), BoolT));
+        let array_t = ArrayT(typer.ctx.alloc(VarT(TyVar::Named("T"))));
+        typer.add_fun(ast::FunSig {
+            name: "push",
+            ty_params: vec![TyVar::Named("T")],
+            params: vec![
+                ast::var::vardef("array", array_t),
+                ast::var::vardef("el", VarT(TyVar::Named("T"))),
+            ],
+            ret_ty: UnitT,
+            span: default(),
+        });
         typer.add_fun(binop_int_sig("<=", BoolT));
         typer.add_fun(binop_int_sig("<", BoolT));
         typer.add_fun(binop_int_sig(">=", BoolT));

@@ -75,5 +75,13 @@ pub fn vec() -> TokenStream {
                 }
             }
         }
+
+        pub(crate) fn __push<T: ::std::clone::Clone, 'a, 'b, 'c, 'd, 'e: 'c + 'd + 'a>(
+            mut array: Var<'c, 'd, __Vec<Var<'a, 'b, T>>>,
+            el: Var<'e, 'b, T>,
+        ) -> __Result<Cow<'b, ()>> {
+            (**array).0.push(el);
+            Ok(Cow::owned(()))
+        }
     )
 }
