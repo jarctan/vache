@@ -93,17 +93,6 @@ impl<'ctx> Ty<'ctx> {
         }
     }
 
-    /// Substitutes a type variable `from` for `to` in `self`, returning a new
-    /// type.
-    pub(crate) fn subst_var(
-        &self,
-        arena: &'ctx Arena<'ctx>,
-        from: TyVar<'ctx>,
-        to: Ty<'ctx>,
-    ) -> Self {
-        self.subst(arena, &TySubst::from(arena, [(from, to)]))
-    }
-
     /// Applies a type substitution from `subst` in `self`, returning a
     /// new type.
     pub(crate) fn subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {

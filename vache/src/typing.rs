@@ -92,13 +92,13 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     /// Creates a new scope.
     fn push_scope(&mut self) {
         self.env.push_scope();
-        self.subst.push_scope();
+        self.generic_types.push_scope();
     }
 
     /// Pops and removes the current scope.
     fn pop_scope(&mut self) -> anyhow::Result<()> {
         self.env.pop_scope()?;
-        self.subst.pop_scope()?;
+        self.generic_types.pop_scope()?;
         Ok(())
     }
 

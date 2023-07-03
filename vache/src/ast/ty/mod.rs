@@ -1,14 +1,12 @@
 //! Parsing types in their different shapes, and defining their representation
 //! in the AST.
 
-mod gen;
 mod subst;
 #[allow(clippy::module_inception)]
 mod ty;
 mod tyuse;
 mod var;
 
-pub use gen::GenTy;
 pub use subst::TySubst;
 pub use ty::Ty;
 pub use tyuse::TyUse;
