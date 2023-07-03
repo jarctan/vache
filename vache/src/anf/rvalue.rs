@@ -6,6 +6,7 @@ use std::fmt;
 use num_bigint::BigInt;
 
 use super::*;
+use crate::utils::boxed;
 
 /// Possible right values in the CFG.
 #[derive(PartialEq, Eq)]
@@ -44,6 +45,54 @@ pub enum RValue<'mir, 'ctx> {
         /// Variant arguments.
         args: Vec<Reference<'mir, 'ctx>>,
     },
+}
+impl<'mir, 'ctx> RValue<'mir, 'ctx> {
+    /// Returns mutable borrows into the references of this [`InstrKind`].
+    pub fn references_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Reference<'mir, 'ctx>> + 'a> {
+        match self {
+            RValue::Place(place) => boxed(std::iter::once(place)),
+            RValue::Array(items) => boxed(items.iter_mut()),
+            RValue::Tuple(items) => boxed(items.iter_mut()),
+            RValue::Range(start, end) => boxed([start, end].into_iter()),
+            RValue::Struct { name: _, fields } => boxed(fields.values_mut()),
+            RValue::Variant {
+                enun: _,
+                variant: _,
+                args,
+            } => boxed(args.iter_mut()),
+            RValue::Unit | RValue::Bool(..) | RValue::Integer(..) | RValue::String(..) => {
+                boxed(std::iter::empty())
+            }
+        }
+    }
+
+    /// Returns the references of this [`InstrKind`].
+    pub fn references<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Reference<'mir, 'ctx>> + 'a> {
+        match self {
+            RValue::Place(place) => boxed(std::iter::once(place)),
+            RValue::Array(items) => boxed(items.iter()),
+            RValue::Tuple(items) => boxed(items.iter()),
+            RValue::Range(start, end) => boxed([start, end].into_iter()),
+            RValue::Struct { name: _, fields } => boxed(fields.values()),
+            RValue::Variant {
+                enun: _,
+                variant: _,
+                args,
+            } => boxed(args.iter()),
+            RValue::Unit | RValue::Bool(..) | RValue::Integer(..) | RValue::String(..) => {
+                boxed(std::iter::empty())
+            }
+        }
+    }
+
+    /// Returns mutable variables inside this [`RValue`].
+    pub fn mut_vars<'a>(&'a self) -> impl Iterator<Item = Place<'ctx>> + 'a {
+        self.references()
+            .filter(|r| r.mode().is_mutable())
+            .map(|r| *r.place())
+    }
 }
 
 impl<'mir, 'ctx> fmt::Debug for RValue<'mir, 'ctx> {

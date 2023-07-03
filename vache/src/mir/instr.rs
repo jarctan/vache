@@ -67,26 +67,32 @@ pub enum InstrKind<'mir, 'ctx> {
 }
 
 impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
-    /// If this instruction mutates some variables, returns them.
-    /// Otherwise, returns [`None`].
-    pub fn mutated_place<'a>(&'a self) -> Box<dyn Iterator<Item = Place<'ctx>> + 'a> {
-        match self {
-            InstrKind::Noop | InstrKind::Branch(_) => boxed([].into_iter()),
+    /// Returns variables mutated by this instruction.
+    pub fn mutated_places<'a>(&'a self) -> Box<dyn Iterator<Item = Place<'ctx>> + 'a> {
+        // Mutated places are either lhs references...
+        let obvious_lhs: Box<dyn Iterator<Item = _>> = match self {
+            InstrKind::Noop
+            | InstrKind::Branch(..)
+            | InstrKind::Return(_)
+            | InstrKind::Call {
+                destination: None, ..
+            } => boxed(std::iter::empty()),
             InstrKind::Call {
                 destination: Some(v),
                 ..
-            } => boxed([*v.place()].into_iter()),
-            InstrKind::Call {
-                destination: None, ..
-            } => boxed([].into_iter()),
-            InstrKind::Assign(lhs, RValue::Place(rhs))
-                if matches!(rhs.mode(), Mode::MutBorrowed | Mode::SMutBorrowed) =>
-            {
-                boxed([*lhs.place(), *rhs.place()].into_iter())
+            } => boxed(std::iter::once(*v.place())),
+            InstrKind::Assign(lhs, rval) => {
+                boxed([*lhs.place()].into_iter().chain(rval.mut_vars()))
             }
-            InstrKind::Assign(lhs, _) => boxed([*lhs.place()].into_iter()),
-            InstrKind::Return(_) => boxed([].into_iter()),
-        }
+        };
+
+        // ...or mutably borrowed rhs references
+        let rhs_refs = self
+            .references()
+            .filter(|r| r.mode().is_mutable())
+            .map(|r| *r.place());
+
+        boxed(obvious_lhs.chain(rhs_refs))
     }
 
     /// Returns mutable borrows into the references of this [`InstrKind`].
@@ -94,62 +100,28 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut Reference<'mir, 'ctx>> + 'a> {
         match self {
-            InstrKind::Noop | InstrKind::Branch(_) | InstrKind::Return(_) => {
-                boxed(std::iter::empty())
-            }
-            InstrKind::Assign(_, RValue::Place(place)) => boxed(std::iter::once(place)),
-            InstrKind::Assign(_, RValue::Array(items)) => boxed(items.iter_mut()),
-            InstrKind::Assign(_, RValue::Tuple(items)) => boxed(items.iter_mut()),
-            InstrKind::Assign(_, RValue::Range(start, end)) => boxed([start, end].into_iter()),
-            InstrKind::Assign(_, RValue::Struct { name: _, fields }) => boxed(fields.values_mut()),
-            InstrKind::Assign(
-                _,
-                RValue::Variant {
-                    enun: _,
-                    variant: _,
-                    args,
-                },
-            ) => boxed(args.iter_mut()),
+            InstrKind::Noop | InstrKind::Return(_) => boxed(std::iter::empty()),
+            InstrKind::Branch(r) => boxed(std::iter::once(r)),
+            InstrKind::Assign(_, rval) => rval.references_mut(),
             InstrKind::Call {
                 name: _,
                 args,
                 destination: _,
             } => boxed(args.iter_mut()),
-            InstrKind::Assign(
-                _,
-                RValue::Unit | RValue::Bool(..) | RValue::Integer(..) | RValue::String(..),
-            ) => boxed(std::iter::empty()),
         }
     }
 
     /// Returns the references of this [`InstrKind`].
     pub fn references<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Reference<'mir, 'ctx>> + 'a> {
         match self {
-            InstrKind::Noop | InstrKind::Branch(_) | InstrKind::Return(_) => {
-                boxed(std::iter::empty())
-            }
-            InstrKind::Assign(_, RValue::Place(place)) => boxed(std::iter::once(place)),
-            InstrKind::Assign(_, RValue::Array(items)) => boxed(items.iter()),
-            InstrKind::Assign(_, RValue::Tuple(items)) => boxed(items.iter()),
-            InstrKind::Assign(_, RValue::Range(start, end)) => boxed([start, end].into_iter()),
-            InstrKind::Assign(_, RValue::Struct { name: _, fields }) => boxed(fields.values()),
-            InstrKind::Assign(
-                _,
-                RValue::Variant {
-                    enun: _,
-                    variant: _,
-                    args,
-                },
-            ) => boxed(args.iter()),
+            InstrKind::Noop | InstrKind::Return(_) => boxed(std::iter::empty()),
+            InstrKind::Branch(r) => boxed(std::iter::once(r)),
+            InstrKind::Assign(_, rval) => rval.references(),
             InstrKind::Call {
                 name: _,
                 args,
                 destination: _,
             } => boxed(args.iter()),
-            InstrKind::Assign(
-                _,
-                RValue::Unit | RValue::Bool(..) | RValue::Integer(..) | RValue::String(..),
-            ) => boxed(std::iter::empty()),
         }
     }
 
@@ -164,15 +136,13 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
             .filter(|reference| reference.as_ptr() == *to_find)
             .collect::<Vec<_>>();
 
-        if els.len() != 1 {
-            panic!(
-                "Could not find {to_find:?} to clone in {self:?} ({:?} possible entries)",
-                els.len()
-            )
-        } else {
-            let el = &mut els[0];
-            el.set_mode(Mode::Cloned);
-        }
+        assert_eq!(
+            els.len(),
+            1,
+            "Could not find {to_find:?} to clone in {self:?} ({:?} possible entries)",
+            els.len()
+        );
+        els[0].set_mode(Mode::Cloned);
     }
 }
 

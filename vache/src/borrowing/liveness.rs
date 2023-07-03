@@ -246,7 +246,7 @@ pub fn liveness<'mir, 'ctx>(
 
     // List all borrows that are invalidated by mutation of the variable afterwards.
     for (label, instr) in cfg.bfs(entry_l, false) {
-        for lhs in instr.mutated_place() {
+        for lhs in instr.mutated_places() {
             for borrow in loan_flow[&label].ins.loans(lhs.root()) {
                 debug_assert!(!borrow.mutable);
                 invalidated.insert(borrow);

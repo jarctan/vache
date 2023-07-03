@@ -30,14 +30,13 @@ pub enum Mode {
 use Mode::*;
 
 impl Mode {
-    /// Is this a borrowing mode?
-    pub fn is_borrowing(&self) -> bool {
+    /// Is this mode a mutable moe.
+    pub(crate) fn is_mutable(&self) -> bool {
         // Note: we state all cases explicitly to force an error if we were to add new
         // variants.
         match self {
-            Borrowed | MutBorrowed => true,
-            SBorrowed | SMutBorrowed => false, /* Note: a shallow borrow is not considered */
-            // borrowing.
+            MutBorrowed | SMutBorrowed => true,
+            Borrowed | SBorrowed => false,
             Cloned | Moved => false,
         }
     }

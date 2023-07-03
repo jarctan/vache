@@ -7,9 +7,7 @@ use std::iter::Extend;
 use std::iter::Sum;
 
 use super::{Borrow, BorrowSet, Borrows, Loans, LocTree};
-use crate::mir::Mode;
-use crate::mir::Reference;
-use crate::mir::{CfgLabel, Loc, Place};
+use crate::mir::{CfgLabel, Loc, Mode, Place, Reference};
 use crate::utils::set::Set;
 
 /// Borrows that cannot be recovered from.
