@@ -1221,7 +1221,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                             body_ty.subst(self.ctx.arena, &self.subst)
                         )),
                         f.ret_ty.span.as_secondary_label().with_message(format!(
-                            "function declared to return {:?}",
+                            "function declared to return type {:?}",
                             f.ret_ty.subst(self.ctx.arena, &self.subst)
                         )),
                     ]),
