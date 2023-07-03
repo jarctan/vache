@@ -3,6 +3,7 @@
 //! This is where the program is effectively being executed. This module brings
 //! all other submodules together.
 
+use std::borrow::Borrow;
 use std::collections::HashMap;
 
 use itertools::Itertools;
@@ -248,11 +249,11 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     /// Executes a call to a function in scope.
     pub fn call(
         &mut self,
-        f_name: impl AsRef<str>,
+        f_name: impl Borrow<str>,
         args: Vec<ValueRef>,
         stratum: Stratum,
     ) -> Option<ValueRef> {
-        let f_name = f_name.as_ref();
+        let f_name = f_name.borrow();
 
         // Override in case of builtin.
         if let Some(res) = self.check_builtin(f_name, &args, stratum) {
@@ -308,8 +309,8 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     }
 
     /// Gets the definition of a variable.
-    fn get_var(&self, v: impl AsRef<Varname<'ctx>>) -> Option<ValueRef> {
-        let v = v.as_ref();
+    fn get_var(&self, v: impl Borrow<Varname<'ctx>>) -> Option<ValueRef> {
+        let v = v.borrow();
         // Iterate over environments in reverse (last declared first processed)
         // order
         // Returns the first environment that has that variable declared

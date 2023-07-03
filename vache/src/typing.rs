@@ -1,5 +1,6 @@
 //! Typing.
 
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::default::default;
 
@@ -105,11 +106,11 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     ///
     /// It will return a reference into that definition, and the id of the
     /// stratum in which the variables resides.
-    fn get_var(&self, v: impl AsRef<Varname<'ctx>>) -> Option<(&ast::VarDef<'ctx>, Stratum)> {
+    fn get_var(&self, v: impl Borrow<Varname<'ctx>>) -> Option<(&ast::VarDef<'ctx>, Stratum)> {
         // Iterate over environments in reverse (last declared first processed)
         // order
         // Returns the first environment that has that variable declared
-        let v = v.as_ref();
+        let v = v.borrow();
         self.env
             .get_and_scope(v)
             .map(|(i, x)| (x, i.try_into().unwrap()))
@@ -755,8 +756,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     // Ok, so the field names match
                     // Check that the type of each field matches the expected one
                     for (fname, Expr { ty, span, .. }) in &fields {
-                        let expected = strukt.get_field(fname).unwrap(); // Ok because we checked just before our declaration matches the structure
-                                                                         // fields.
+                        let expected = strukt.get_field(*fname).unwrap(); // Ok because we checked just before our declaration matches the structure
+                                                                          // fields.
                         if expected != *ty {
                             self.ctx.emit(
                                 Diagnostic::error()

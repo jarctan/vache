@@ -1,5 +1,6 @@
 //! Enhancing variable definitions of the parser AST with stratum information.
 
+use std::borrow::Borrow;
 use std::default::default;
 use std::fmt;
 use std::sync::atomic::AtomicU64;
@@ -170,8 +171,8 @@ impl fmt::Debug for VarDef<'_> {
     }
 }
 
-impl<'ctx> AsRef<VarUse<'ctx>> for VarDef<'ctx> {
-    fn as_ref(&self) -> &VarUse<'ctx> {
+impl<'ctx> Borrow<VarUse<'ctx>> for VarDef<'ctx> {
+    fn borrow(&self) -> &VarUse<'ctx> {
         &self.var
     }
 }

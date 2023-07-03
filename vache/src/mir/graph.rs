@@ -1,5 +1,6 @@
 //! Representing control flow graphs.
 
+use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::default::default;
 use std::hash::Hash;
@@ -293,8 +294,8 @@ impl<'ctx, N: fmt::Debug, E: fmt::Debug> Cfg<'ctx, N, E> {
     /// directory.
     ///
     /// Note: it is very slow.
-    pub fn print_image(&self, name: impl AsRef<str>) -> Result<()> {
-        let name = name.as_ref();
+    pub fn print_image(&self, name: impl Borrow<str>) -> Result<()> {
+        let name = name.borrow();
         ensure!(
             !name.chars().any(|c| c == '/' || c == '.'),
             "not a valid name"

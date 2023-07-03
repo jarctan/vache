@@ -1,5 +1,6 @@
 //! Parsing structs, and defining their representation in the AST.
 
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -71,8 +72,8 @@ impl<'ctx> Struct<'ctx> {
     }
 
     /// Gets the type of a field in the structure.
-    pub fn get_field(&self, field: impl AsRef<str>) -> Option<Ty<'ctx>> {
-        self.fields.get(field.as_ref()).map(|ty| ty.kind)
+    pub fn get_field(&self, field: impl Borrow<str>) -> Option<Ty<'ctx>> {
+        self.fields.get(field.borrow()).map(|ty| ty.kind)
     }
 
     /// Returns the free type variables in `self`.

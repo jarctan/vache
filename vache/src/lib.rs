@@ -13,6 +13,7 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
+use std::borrow::Borrow;
 use std::time::Instant;
 
 mod anf;
@@ -69,7 +70,7 @@ use crate::reporter::Diagnostics;
 pub fn compile<'ctx>(
     ctx: &mut Context<'ctx>,
     p: impl Into<ast::Program<'ctx>>,
-    name: impl AsRef<str>,
+    name: impl Borrow<str>,
     dest_dir: &Path,
 ) -> Result<()> {
     match typecheck(ctx, p) {
@@ -78,7 +79,7 @@ pub fn compile<'ctx>(
                 diagnostics.display()?;
                 bail!("Compile errors found");
             }
-            steps::cargo(steps::compile(ctx, checked)?, name.as_ref(), dest_dir).unwrap();
+            steps::cargo(steps::compile(ctx, checked)?, name.borrow(), dest_dir).unwrap();
             Ok(())
         }
         Err(diagnostics) => {
@@ -102,7 +103,7 @@ pub fn check_all<'ctx>(
 pub fn execute<'ctx>(
     ctx: &mut Context<'ctx>,
     p: impl Into<ast::Program<'ctx>>,
-    name: impl AsRef<str>,
+    name: impl Borrow<str>,
     dest_dir: &Path,
 ) -> Result<String> {
     match typecheck(&mut *ctx, p) {
@@ -236,10 +237,10 @@ mod steps {
     pub fn run<'ctx>(
         ctx: &mut Context<'ctx>,
         p: impl Into<tast::Program<'ctx>>,
-        name: impl AsRef<str>,
+        name: impl Borrow<str>,
         dest_dir: &Path,
     ) -> Result<String> {
-        let name = name.as_ref();
+        let name = name.borrow();
         cargo(compile(ctx, p)?, name, dest_dir)?;
 
         println!("--------------------------------");

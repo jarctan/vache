@@ -1,5 +1,6 @@
 //! Parsing types, and defining their representation in the AST.
 
+use std::borrow::Borrow;
 use std::default::default;
 use std::fmt;
 
@@ -127,21 +128,9 @@ impl<'ctx> VarUse<'ctx> {
     }
 }
 
-impl<'ctx> AsRef<VarUse<'ctx>> for VarUse<'ctx> {
-    fn as_ref(&self) -> &VarUse<'ctx> {
-        self
-    }
-}
-
-impl<'ctx> AsRef<Varname<'ctx>> for VarUse<'ctx> {
-    fn as_ref(&self) -> &Varname<'ctx> {
+impl<'ctx> Borrow<Varname<'ctx>> for VarUse<'ctx> {
+    fn borrow(&self) -> &Varname<'ctx> {
         &self.name
-    }
-}
-
-impl<'ctx> AsRef<Varname<'ctx>> for Varname<'ctx> {
-    fn as_ref(&self) -> &Varname<'ctx> {
-        self
     }
 }
 
@@ -157,8 +146,8 @@ impl<'ctx> From<VarUse<'ctx>> for &'ctx str {
     }
 }
 
-impl AsRef<str> for VarUse<'_> {
-    fn as_ref(&self) -> &str {
+impl Borrow<str> for VarUse<'_> {
+    fn borrow(&self) -> &str {
         self.name.0
     }
 }
@@ -298,8 +287,8 @@ impl fmt::Debug for VarDef<'_> {
     }
 }
 
-impl<'ctx> AsRef<Varname<'ctx>> for VarDef<'ctx> {
-    fn as_ref(&self) -> &Varname<'ctx> {
+impl<'ctx> Borrow<Varname<'ctx>> for VarDef<'ctx> {
+    fn borrow(&self) -> &Varname<'ctx> {
         &self.name
     }
 }

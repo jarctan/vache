@@ -33,9 +33,3 @@ impl<'mir, 'ctx> fmt::Debug for Program<'mir, 'ctx> {
             .finish()
     }
 }
-
-impl<'mir, 'ctx> AsRef<Program<'mir, 'ctx>> for Program<'mir, 'ctx> {
-    fn as_ref(&self) -> &Program<'mir, 'ctx> {
-        self
-    }
-}

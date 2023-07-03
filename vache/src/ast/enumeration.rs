@@ -1,5 +1,6 @@
 //! Parsing structs, and defining their representation in the AST.
 
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -52,8 +53,8 @@ impl fmt::Debug for Enum<'_> {
 
 impl<'ctx> Enum<'ctx> {
     /// Gets the arguments of of a variant in the `enum`.
-    pub fn get_variant<'a>(&'a self, variant: impl AsRef<str>) -> Option<&'a [TyUse<'ctx>]> {
-        self.variants.get(variant.as_ref()).map(|args| &**args)
+    pub fn get_variant<'a>(&'a self, variant: impl Borrow<str>) -> Option<&'a [TyUse<'ctx>]> {
+        self.variants.get(variant.borrow()).map(|args| &**args)
     }
 
     /// Applies a [`TySubst`] to `self`.

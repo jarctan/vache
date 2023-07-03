@@ -1,5 +1,6 @@
 //! Defining the environment in which the program executes.
 
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -82,8 +83,8 @@ impl<'ctx> Env<'ctx> {
     }
 
     /// Gets the definition of a variable.
-    pub fn get_var(&self, v: impl AsRef<Varname<'ctx>>) -> Option<&ValueRef> {
-        self.var_env.get(v.as_ref())
+    pub fn get_var(&self, v: impl Borrow<Varname<'ctx>>) -> Option<&ValueRef> {
+        self.var_env.get(v.borrow())
     }
 
     /// Declares a new variable in the context.
