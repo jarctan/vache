@@ -396,7 +396,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
             Expr::new(VariantE { enun: root, variant, args }, EnumT(enun.name), self.current_stratum(), span)
         } else if let Some(&fun) = self.fun_env.get(root) {
-            let fun = fun.clone().instantiate_tys(self.ctx.arena);
+            let fun = fun.clone().instantiate_tys(self.ctx.arena, span);
             let name = root;
             // Check the number of arguments.
             if args.len() != fun.params.len() {
@@ -989,7 +989,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                     // Either get the annotation or create a fresh type variable
                     let var_ty = match var.ty_use() {
-                        Some(mut ty) => ty.kind,
+                        Some(ty) => ty.kind,
                         None => Ty::hole(expr.span),
                     };
 

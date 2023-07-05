@@ -80,13 +80,16 @@ pub struct FunSig<'ctx> {
 
 impl<'ctx> FunSig<'ctx> {
     /// Instantiate the type variables in the function signature.
-    pub fn instantiate_tys(self, arena: &'ctx Arena<'ctx>) -> Self {
+    ///
+    /// `span` should be the span of the call site.
+    pub fn instantiate_tys(self, arena: &'ctx Arena<'ctx>, span: Span) -> Self {
         let subst = TySubst::from(
             arena,
             self.ty_params
                 .iter()
-                .map(|&p| (p, VarT(TyVar::fresh(self.span)))),
+                .map(|&p| (p, VarT(TyVar::fresh(span)))),
         );
+        println!("Subst: {:?}", subst);
         Self {
             name: self.name,
             ty_params: vec![],
