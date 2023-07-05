@@ -39,6 +39,7 @@ pub fn pretty_print_rule(rule: &Rule) -> &'static str {
         Rule::integer => "an integer",
         Rule::boolean => "a boolean",
         Rule::string => "a string",
+        Rule::param => "a function parameter",
         Rule::ty => "a type",
         Rule::array_ty => "an array type",
         Rule::tuple_ty => "a tuple type",

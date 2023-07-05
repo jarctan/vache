@@ -656,7 +656,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             .into_iter()
             .map(|param| {
                 let name = format_ident!("{}", param.name().as_str());
-                let ty = Self::translate_type(&param.ty, true, true);
+                let ty = Self::translate_type(&param.ty(), true, true);
                 quote! {
                     mut #name: #ty
                 }

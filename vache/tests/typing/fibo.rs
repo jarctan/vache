@@ -6,7 +6,7 @@ fn fibo() -> Result<()> {
     test(vec![
         Fun {
             name: "fibo",
-            params: vec![vardef("n", IntT)],
+            params: vec![param("n", IntT)],
             ret_ty: intT(),
             body: Block {
                 stmts: vec![

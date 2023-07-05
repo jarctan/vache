@@ -1,6 +1,6 @@
 //! Defining typed functions.
 
-use super::{Block, Pointer, VarDef};
+use super::{Block, FunParam, Pointer};
 
 /// A function in the typed AST.
 #[derive(Debug)]
@@ -9,7 +9,7 @@ pub struct Fun<'mir, 'ctx> {
     pub name: &'ctx str,
     /// Parameters to that function, with their types
     /// and stratum.
-    pub params: Vec<VarDef<'ctx>>,
+    pub params: Vec<FunParam<'ctx>>,
     /// Return variable. The variable in which the return value is written.
     ///
     /// If `None`, the function returns nothing.

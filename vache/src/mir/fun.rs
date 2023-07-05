@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use super::{CfgI, CfgLabel, Pointer, Stratum, VarDef, Varname};
+use super::{CfgI, CfgLabel, FunParam, Pointer, Stratum, Varname};
 use crate::utils::set::Set;
 
 /// A function in the parser AST.
@@ -12,7 +12,7 @@ pub struct Fun<'mir, 'ctx> {
     pub name: &'ctx str,
     /// Parameters to that function, with their types
     /// and stratum.
-    pub params: Vec<VarDef<'ctx>>,
+    pub params: Vec<FunParam<'ctx>>,
     /// Return variable. The variable in which the return value is written.
     ///
     /// If `None`, the function returns nothing.

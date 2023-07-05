@@ -13,7 +13,7 @@ pub fn custom_addition() -> impl Into<Program<'static>> {
     vec![
         Fun {
             name: "add",
-            params: vec![vardef("n", intT()), vardef("m", intT())],
+            params: vec![param("n", intT()), param("m", intT())],
             ret_ty: intT(),
             body: expr(binop(var("m"), "+", var("n"))),
             ..default()

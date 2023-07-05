@@ -2,7 +2,9 @@ program = _{ SOI ~ (fun | struct_def | enum_def)* ~ &EOI }
 
 fun = { fn_kw ~ ident ~ (lt ~ (ident ~ (cma ~ ident)* ~ cma?)? ~ gt)? ~ params ~ (arw ~ ty)? ~ block }
 
-params = { lp ~ (vardef ~ (cma ~ vardef)*)? ~ rp }
+params = { lp ~ (param ~ (cma ~ param)*)? ~ rp }
+
+param = { as_mut? ~ vardef }
 
 struct_def = { struct_kw ~ ident ~ (lt ~ (ident ~ (cma ~ ident)* ~ cma?)? ~ gt)? ~ lcb ~ (vardef ~ (cma ~ vardef)* ~ cma?)? ~ rcb }
 

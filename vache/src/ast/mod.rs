@@ -94,7 +94,7 @@ pub use anyhow::Result;
 pub use block::Block;
 pub use enumeration::Enum;
 pub use expr::{if_e, Expr, ExprKind};
-pub use fun::{Fun, FunSig};
+pub use fun::{param, ref_param, Fun, FunParam, FunSig};
 use itertools::Itertools;
 pub use mode::Mode;
 pub use namespaced::{Namespace, Namespaced};

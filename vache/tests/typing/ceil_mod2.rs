@@ -6,7 +6,7 @@ fn ceil_mod_2() -> Result<()> {
     test({
         let f1 = Fun {
             name: "is_even",
-            params: vec![vardef("n", IntT)],
+            params: vec![param("n", IntT)],
             ret_ty: boolT(),
             body: Block {
                 stmts: vec![
@@ -21,7 +21,7 @@ fn ceil_mod_2() -> Result<()> {
 
         let f2 = Fun {
             name: "ceil_mod_2",
-            params: vec![vardef("n", IntT)],
+            params: vec![param("n", IntT)],
             ret_ty: intT(),
             body: expr(IfE(
                 boxed(call("is_even", vec![var("n")])),

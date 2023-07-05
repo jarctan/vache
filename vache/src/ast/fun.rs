@@ -6,11 +6,86 @@ use std::vec;
 use pest::iterators::Pair;
 use Ty::*;
 
-use super::var::vardef;
-use super::{Block, Context, Parsable, Span, Ty, TySubst, TyVar, VarDef};
+use super::{Block, Context, Parsable, Span, Ty, TySubst, TyVar, VarDef, Varname};
 use crate::examples::TyUse;
 use crate::grammar::*;
 use crate::Arena;
+
+/// A function parameter. Can optionally take by reference.
+#[derive(Debug, Clone, Copy)]
+pub struct FunParam<'ctx> {
+    /// Variable being defined.
+    pub var: VarDef<'ctx>,
+    /// Is it taking by reference.
+    pub byref: bool,
+    /// Codespan of the entire function parameter.
+    pub span: Span,
+}
+
+impl<'ctx> FunParam<'ctx> {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
+        Self {
+            var: self.var.subst_ty(arena, subst),
+            byref: self.byref,
+            span: self.span,
+        }
+    }
+
+    pub fn ty(&self) -> Ty<'ctx> {
+        self.var.ty.kind
+    }
+}
+
+impl<'ctx> From<FunParam<'ctx>> for VarDef<'ctx> {
+    fn from(param: FunParam<'ctx>) -> Self {
+        param.var
+    }
+}
+
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for FunParam<'ctx> {
+    fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
+        let span = Span::from(pair.as_span());
+        let mut pairs = pair.into_inner();
+
+        // If we see the @ operator, we are "by reference".
+        let byref = consume_opt!(pairs, Rule::as_mut).is_some();
+
+        let var = ctx.parse(consume!(pairs));
+
+        Self { var, byref, span }
+    }
+}
+
+/// Shortcut to create a new function parameter.
+pub fn param<'ctx>(name: &'ctx str, ty: impl Into<TyUse<'ctx>>) -> FunParam<'ctx> {
+    let name = Varname::from(name);
+    FunParam {
+        var: VarDef {
+            name,
+            span: default(),
+            var_span: default(),
+            ty: ty.into(),
+        },
+        span: default(),
+        byref: false,
+    }
+}
+
+/// Shortcut to create a new function parameter that takes by reference.
+pub fn ref_param<'ctx>(name: &'ctx str, ty: impl Into<TyUse<'ctx>>) -> FunParam<'ctx> {
+    let name = Varname::from(name);
+    FunParam {
+        var: VarDef {
+            name,
+            span: default(),
+            var_span: default(),
+            ty: ty.into(),
+        },
+        span: default(),
+        byref: true,
+    }
+}
 
 /// A function in the parser AST.
 #[derive(Debug, Clone)]
@@ -21,7 +96,7 @@ pub struct Fun<'ctx> {
     pub ty_params: Vec<TyVar<'ctx>>,
     /// Parameters to that function, with their types
     /// and stratum.
-    pub params: Vec<VarDef<'ctx>>,
+    pub params: Vec<FunParam<'ctx>>,
     /// Return type.
     pub ret_ty: TyUse<'ctx>,
     /// Body of the function: a list of statements and
@@ -71,7 +146,7 @@ pub struct FunSig<'ctx> {
     pub ty_params: Vec<TyVar<'ctx>>,
     /// Parameters to that function, with their types
     /// and stratum.
-    pub params: Vec<VarDef<'ctx>>,
+    pub params: Vec<FunParam<'ctx>>,
     /// Return type.
     pub ret_ty: Ty<'ctx>,
     /// Codespan.
@@ -117,7 +192,7 @@ pub fn binop_gen_sig<'ctx>(op: &'ctx str, ty_var: TyVar<'ctx>, ret_ty: Ty<'ctx>)
     FunSig {
         name: op,
         ty_params: vec![ty_var],
-        params: vec![vardef("n1", VarT(ty_var)), vardef("n2", VarT(ty_var))],
+        params: vec![param("n1", VarT(ty_var)), param("n2", VarT(ty_var))],
         ret_ty,
         span: default(),
     }
@@ -130,7 +205,7 @@ pub fn binop_int_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
     FunSig {
         name: op,
         ty_params: vec![],
-        params: vec![vardef("n1", IntT), vardef("n2", IntT)],
+        params: vec![param("n1", IntT), param("n2", IntT)],
         ret_ty,
         span: default(),
     }
@@ -143,7 +218,7 @@ pub fn binop_bool_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
     FunSig {
         name: op,
         ty_params: vec![],
-        params: vec![vardef("b1", BoolT), vardef("b2", BoolT)],
+        params: vec![param("b1", BoolT), param("b2", BoolT)],
         ret_ty,
         span: default(),
     }
@@ -156,7 +231,7 @@ pub fn unop_bool_sig<'ctx>(op: &'ctx str, ret_ty: Ty<'ctx>) -> FunSig<'ctx> {
     FunSig {
         name: op,
         ty_params: vec![],
-        params: vec![vardef("b", BoolT)],
+        params: vec![param("b", BoolT)],
         ret_ty,
         span: default(),
     }
@@ -235,8 +310,8 @@ mod tests {
         assert_eq!(fun.name, "main");
 
         assert!(matches!(fun.params.len(), 2));
-        assert!(matches!(fun.params[0].ty.kind, IntT));
-        assert!(matches!(fun.params[1].ty.kind, StrT));
+        assert!(matches!(fun.params[0].ty(), IntT));
+        assert!(matches!(fun.params[1].ty(), StrT));
 
         assert!(matches!(fun.ret_ty.kind, UnitT));
 
@@ -254,8 +329,8 @@ mod tests {
         assert_eq!(fun.name, "my_fn");
 
         assert!(matches!(fun.params.len(), 2));
-        assert!(matches!(fun.params[0].ty.kind, IntT));
-        assert!(matches!(fun.params[1].ty.kind, StrT));
+        assert!(matches!(fun.params[0].ty(), IntT));
+        assert!(matches!(fun.params[1].ty(), StrT));
 
         assert!(matches!(fun.ret_ty.kind, IntT));
 

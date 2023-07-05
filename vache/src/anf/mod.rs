@@ -26,5 +26,5 @@ pub use rvalue::RValue;
 pub use stmt::{Stmt, StmtKind};
 
 pub use crate::tast::{
-    Enum, LhsMode, Mode, Namespaced, Span, Stratum, Struct, Ty, VarDef, VarUse, Varname,
+    Enum, FunParam, LhsMode, Mode, Namespaced, Span, Stratum, Struct, Ty, VarDef, VarUse, Varname,
 };

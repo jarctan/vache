@@ -79,6 +79,7 @@ impl<K: Eq + Hash, V> Scoped<K, V> {
     }
 
     /// Iterates over the scopes directly.
+    #[allow(dead_code)]
     pub fn iter_scopes(&self) -> impl Iterator<Item = impl Iterator<Item = (&'_ K, &'_ V)>> {
         self.0.iter().map(|scope| scope.iter())
     }
@@ -99,6 +100,7 @@ impl<K: Eq + Hash, V> Scoped<K, V> {
     /// Removes an element from ALL the scopes.
     ///
     /// Returns true iff at least one element was removed.
+    #[allow(dead_code)]
     pub fn remove_all<Q>(&mut self, key: &Q) -> bool
     where
         K: Borrow<Q>,
@@ -114,6 +116,7 @@ impl<K: Eq + Hash, V> Scoped<K, V> {
     /// Extends `self` with some vector of scopes of `(keys, values)`.
     ///
     /// Scopes must be from oldest to newest.
+    #[allow(dead_code)]
     pub fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: Vec<I>) {
         self.0.resize_with(iter.len(), Default::default);
         // Extend in the latest scope.

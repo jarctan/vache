@@ -259,7 +259,7 @@ impl<'ctx> VarDef<'ctx> {
     }
 
     /// Applies a [`TySubst`] to `self`.
-    pub(crate) fn subst_ty(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> VarDef<'ctx> {
+    pub(crate) fn subst_ty(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         Self {
             name: self.name,
             var_span: self.var_span,

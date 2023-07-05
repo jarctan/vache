@@ -46,7 +46,7 @@ fn unknown_struct_in_params() -> Program {
         vec![
             Fun {
                 name: "test",
-                params: vec![vardef("a", varT("UnknownStruct"))], // should fail
+                params: vec![param("a", varT("UnknownStruct"))], // should fail
                 body: expr(UnitE),
                 ..default()
             },

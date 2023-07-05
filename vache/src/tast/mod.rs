@@ -16,7 +16,7 @@ pub mod var;
 
 pub use block::Block;
 pub use expr::{Expr, ExprKind};
-pub use fun::Fun;
+pub use fun::{Fun, FunParam};
 pub use mode::LhsMode;
 pub use pat::{Pat, PatKind};
 pub use place::{LhsPlace, Place, PlaceKind};

@@ -65,8 +65,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             name: "push",
             ty_params: vec![TyVar::Named("T")],
             params: vec![
-                ast::var::vardef("array", array_t),
-                ast::var::vardef("el", VarT(TyVar::Named("T"))),
+                ast::param("array", array_t),
+                ast::param("el", VarT(TyVar::Named("T"))),
             ],
             ret_ty: UnitT,
             span: default(),
@@ -418,7 +418,10 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     Expr {
                         ty: arg_ty, span, ..
                     },
-                    ast::VarDef { ty: param_ty, .. },
+                    ast::FunParam {
+                        var: ast::VarDef { ty: param_ty, .. },
+                        ..
+                    },
                 ),
             ) in args.iter().zip(fun.params.iter()).enumerate()
             {
@@ -1236,7 +1239,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             params: f
                 .params
                 .into_iter()
-                .map(|param| VarDef::with_stratum(param, stm))
+                .map(|param| FunParam::with_stratum(param, stm))
                 .collect(),
             ret_ty: f.ret_ty,
             body,
@@ -1361,7 +1364,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         .with_code(UNKNOWN_TYPE_VAR)
                         .with_message(format!("no type named `{name}` in context")),
                 ),
-                TyVar::Gen(id, span) => self.ctx.emit(
+                TyVar::Gen(_, span) => self.ctx.emit(
                     Diagnostic::error()
                         .with_code(TYPE_INFER_ERROR)
                         .with_message("could not infer type")

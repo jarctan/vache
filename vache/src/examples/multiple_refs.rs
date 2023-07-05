@@ -9,7 +9,7 @@ pub fn multiple_refs() -> impl Into<Program<'static>> {
     vec![
         Fun {
             name: "is_even",
-            params: vec![vardef("n", intT())],
+            params: vec![param("n", intT())],
             ret_ty: boolT(),
             body: Block {
                 stmts: vec![

@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use super::{Loc, Pointer, VarUse, Varname};
+use super::{FunParam, Loc, Pointer, VarUse, Varname};
 use crate::tast::VarDef;
 use crate::utils::boxed;
 
@@ -104,6 +104,12 @@ impl<'a, 'ctx> From<&'a VarDef<'ctx>> for Place<'ctx> {
 impl<'a, 'ctx> From<&'a Place<'ctx>> for Place<'ctx> {
     fn from(place: &Place<'ctx>) -> Self {
         *place
+    }
+}
+
+impl<'ctx> From<FunParam<'ctx>> for Place<'ctx> {
+    fn from(param: FunParam<'ctx>) -> Self {
+        param.var.into()
     }
 }
 

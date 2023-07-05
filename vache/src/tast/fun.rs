@@ -1,8 +1,77 @@
 //! Defining typed functions.
 
-use super::{Block, Span, TySubst, TyUse, TyVar, VarDef};
+use std::fmt;
+
+use super::{Block, Span, Stratum, Ty, TySubst, TyUse, TyVar, VarDef, Varname};
+use crate::ast;
 use crate::utils::set::Set;
 use crate::Arena;
+
+/// A function parameter. Can optionally take by reference.
+#[derive(Clone, Copy)]
+pub struct FunParam<'ctx> {
+    /// Variable being defined.
+    pub var: VarDef<'ctx>,
+    /// Is it taking by reference.
+    pub byref: bool,
+    /// Codespan of the entire function parameter.
+    pub span: Span,
+}
+
+impl<'ctx> fmt::Debug for FunParam<'ctx> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.byref {
+            write!(f, "@{:?}", self.var)
+        } else {
+            write!(f, "{:?}", self.var)
+        }
+    }
+}
+
+impl<'ctx> FunParam<'ctx> {
+    /// Applies a [`TySubst`] to `self`.
+    pub(crate) fn subst_ty(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
+        Self {
+            var: self.var.subst_ty(arena, subst),
+            byref: self.byref,
+            span: self.span,
+        }
+    }
+
+    /// Constructs a typed `VarDef` based on the parser `Vardef` by adding the
+    /// stratum information.
+    pub fn with_stratum(param: ast::FunParam<'ctx>, stm: Stratum) -> Self {
+        Self {
+            var: VarDef::with_stratum(param.var, stm),
+            byref: param.byref,
+            span: param.span,
+        }
+    }
+
+    /// Returns the free type variables in `self`.
+    pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
+        let Self {
+            var,
+            byref: _,
+            span: _,
+        } = self;
+        var.free_ty_vars()
+    }
+
+    pub fn name(&self) -> Varname<'ctx> {
+        self.var.name()
+    }
+
+    pub fn ty(&self) -> Ty<'ctx> {
+        self.var.ty
+    }
+}
+
+impl<'ctx> From<FunParam<'ctx>> for Varname<'ctx> {
+    fn from(param: FunParam<'ctx>) -> Self {
+        param.name()
+    }
+}
 
 /// A function in the typed AST.
 #[derive(Debug, Clone)]
@@ -13,7 +82,7 @@ pub struct Fun<'ctx> {
     pub ty_params: Vec<TyVar<'ctx>>,
     /// Parameters to that function, with their types
     /// and stratum.
-    pub params: Vec<VarDef<'ctx>>,
+    pub params: Vec<FunParam<'ctx>>,
     /// Return type.
     pub ret_ty: TyUse<'ctx>,
     /// Body of the function: a list of statements and
@@ -54,7 +123,7 @@ impl<'ctx> Fun<'ctx> {
             body,
             span: _,
         } = self;
-        params.iter().map(VarDef::free_ty_vars).sum::<Set<_>>()
+        params.iter().map(FunParam::free_ty_vars).sum::<Set<_>>()
             + ret_ty.free_ty_vars()
             + body.free_ty_vars()
             - ty_params.iter()

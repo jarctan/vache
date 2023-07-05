@@ -10,7 +10,7 @@ pub fn id_fn<'ctx>() -> Program<'ctx> {
     Program::from(vec![
         Fun {
             name: "id",
-            params: vec![vardef("n", intT())],
+            params: vec![param("n", intT())],
             ret_ty: intT(),
             body: expr(var("n")),
             ..default()
