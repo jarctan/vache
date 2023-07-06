@@ -82,7 +82,7 @@ pub struct LhsRef<'mir, 'ctx: 'mir> {
     /// It is a mutable reference into the typed AST, so that we can change it
     /// directly.
     ///
-    /// If [`None`], is [`LhsMode::Assigning`] by default.
+    /// If [`None`], is [`LhsMode::Declaring`] by default.
     mode: Option<&'mir mut LhsMode>,
 }
 

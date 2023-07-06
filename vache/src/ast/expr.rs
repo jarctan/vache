@@ -10,7 +10,7 @@ use pest::iterators::Pair;
 use pest::pratt_parser::*;
 use PlaceKind::*;
 
-use super::{Block, Context, Mode, Namespaced, Parsable, Place, PlaceKind, Span, VarUse};
+use super::{Arg, Block, Context, Mode, Namespaced, Parsable, Place, PlaceKind, Span, VarUse};
 use crate::codes::*;
 use crate::grammar::*;
 use crate::utils::boxed;
@@ -29,7 +29,7 @@ lazy_static! {
             | Op::infix(Rule::div, Assoc::Left)
             | Op::infix(Rule::rem, Assoc::Left))
         .op(Op::infix(Rule::pow, Assoc::Right)) // 2
-        .op(Op::prefix(Rule::bang) | Op::prefix(Rule::as_mut));
+        .op(Op::prefix(Rule::bang));
 }
 
 /// An located expression.
@@ -102,7 +102,7 @@ pub enum ExprKind<'ctx> {
         /// Name/identifier of the function.
         name: Namespaced<'ctx>,
         /// Arguments to that function.
-        args: Vec<Expr<'ctx>>,
+        args: Vec<Arg<'ctx>>,
     },
     /// An if expression.
     IfE(Box<Expr<'ctx>>, Box<Block<'ctx>>, Box<Block<'ctx>>),
@@ -151,7 +151,7 @@ impl<'ctx> Expr<'ctx> {
     ///
     /// # Errors
     /// Returns `None` if the expression is not a function call.
-    pub fn as_call(&self) -> Option<(Namespaced<'ctx>, &[Expr<'ctx>])> {
+    pub fn as_call(&self) -> Option<(Namespaced<'ctx>, &[Arg<'ctx>])> {
         if let CallE { name, args } = &self.kind {
             Some((*name, args.as_slice()))
         } else {
@@ -238,13 +238,13 @@ pub fn string(value: &str) -> Expr<'_> {
 }
 
 /// Shortcut to create a call `Expr`.
-pub fn call<'ctx>(
+pub fn call<'ctx, A: Into<Arg<'ctx>>>(
     name: impl Into<Namespaced<'ctx>>,
-    stmts: impl IntoIterator<Item = Expr<'ctx>>,
+    args: impl IntoIterator<Item = A>,
 ) -> Expr<'ctx> {
     CallE {
         name: name.into(),
-        args: stmts.into_iter().collect(),
+        args: args.into_iter().map(|arg| arg.into()).collect(),
     }
     .into()
 }
@@ -469,7 +469,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                 let span = lhs.span.merge(op_span).merge(rhs.span);
                                 let kind = CallE {
                                     name: Namespaced::name_with_span(op.as_str(), op_span),
-                                    args: vec![lhs, rhs],
+                                    args: vec![Arg::from(lhs), Arg::from(rhs)],
                                 };
                                 Expr { span, kind }
                             })
@@ -504,7 +504,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                     let span = rhs.span.merge(op_span);
                                     let kind = CallE {
                                         name: Namespaced::name_with_span(op.as_str(), op_span),
-                                        args: vec![rhs],
+                                        args: vec![Arg::from(rhs)],
                                     };
                                     Expr { span, kind }
                                 }
@@ -719,7 +719,13 @@ mod tests {
         assert!(call.name == "my_call");
         assert_eq!(
             args.iter()
-                .map(|arg| arg.as_var().unwrap().as_str().to_owned())
+                .map(|arg| arg
+                    .as_standard()
+                    .unwrap()
+                    .as_var()
+                    .unwrap()
+                    .as_str()
+                    .to_owned())
                 .collect::<Vec<String>>(),
             ["a", "b", "c"]
         );
@@ -778,7 +784,11 @@ mod tests {
     #[test]
     fn binary_operations(expr: Expr) {
         let (name1, args) = expr.as_call().context("a + b * c should be a call")?;
-        let (name2, _) = args[1].as_call().context("b * c should be a call")?;
+        let (name2, _) = args[1]
+            .as_standard()
+            .context("Should be a standard argument")?
+            .as_call()
+            .context("b * c should be a call")?;
         assert_eq!(name1.name, "+");
         assert_eq!(name2.name, "*");
     }

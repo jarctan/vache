@@ -485,17 +485,6 @@ impl<'ctx, 'a, T> Sub<&'a Loc<'ctx>> for LocTree<'ctx, T> {
     }
 }
 
-impl<'ctx, T, L: Into<Loc<'ctx>>> Sub<Option<L>> for LocTree<'ctx, T> {
-    type Output = Self;
-
-    fn sub(mut self, loc: Option<L>) -> Self {
-        if let Some(loc) = loc {
-            self.remove(loc);
-        }
-        self
-    }
-}
-
 impl<'ctx, T> Sub<Loc<'ctx>> for LocTree<'ctx, T> {
     type Output = Self;
 
@@ -522,6 +511,17 @@ impl<'ctx, L: Into<Loc<'ctx>>, I: IntoIterator<Item = L>> Add<I> for LocTree<'ct
     fn add(mut self, rhs: I) -> Self {
         for loc in rhs {
             self = self + loc.into();
+        }
+        self
+    }
+}
+
+impl<'ctx, L: Into<Loc<'ctx>>, I: IntoIterator<Item = L>> Sub<I> for LocTree<'ctx, ()> {
+    type Output = Self;
+
+    fn sub(mut self, rhs: I) -> Self {
+        for loc in rhs {
+            self.remove(loc.into());
         }
         self
     }

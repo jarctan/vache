@@ -58,10 +58,12 @@ impl<'ctx> FunParam<'ctx> {
         var.free_ty_vars()
     }
 
+    /// Returns the name of the function parameter.
     pub fn name(&self) -> Varname<'ctx> {
         self.var.name()
     }
 
+    /// Returns the type of the function parameter.
     pub fn ty(&self) -> Ty<'ctx> {
         self.var.ty
     }

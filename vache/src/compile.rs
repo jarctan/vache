@@ -13,8 +13,8 @@ use StmtKind::*;
 use Ty::*;
 
 use crate::tast::{
-    Block, Enum, Expr, ExprKind, Fun, LhsMode, LhsPlace, Mode, Pat, PatKind, Place, PlaceKind,
-    Program, Stmt, StmtKind, Struct, Ty, TyVar, Varname,
+    Arg, ArgKind, Block, Enum, Expr, ExprKind, Fun, LhsMode, LhsPlace, Mode, Pat, PatKind, Place,
+    PlaceKind, Program, Stmt, StmtKind, Struct, Ty, TyVar, Varname,
 };
 use crate::Context;
 
@@ -410,7 +410,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         )
     }
 
-    /// Compiles a expression kind.
+    /// Compiles a expression.
     fn visit_expr(&mut self, expr: Expr<'ctx>, wrap_var: bool) -> TokenStream {
         let wrapper = if wrap_var { quote!(Var) } else { quote!(Cow) };
         match expr.kind {
@@ -458,11 +458,11 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         builder.append(" {}");
                     }
 
-                    let args = args.into_iter().map(|arg| self.visit_expr(arg, true));
+                    let args = args.into_iter().map(|arg| self.visit_arg(arg, true));
                     let fmt_str = builder.string().unwrap();
                     quote!(println!(#fmt_str, #(#args),*))
                 } else {
-                    let args = args.into_iter().map(|arg| self.visit_expr(arg, true));
+                    let args = args.into_iter().map(|arg| self.visit_arg(arg, true));
                     let name = match name.name {
                         "+" => quote!(__add),
                         "-" => quote!(__sub),
@@ -542,6 +542,15 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let end = self.visit_expr(end, true);
                 quote!(#wrapper::owned(__Range::new(#start,#end)))
             }
+        }
+    }
+
+    /// Compiles a function argument.
+    fn visit_arg(&mut self, arg: Arg<'ctx>, wrap_var: bool) -> TokenStream {
+        match arg.kind {
+            ArgKind::Standard(arg) => self.visit_expr(arg, wrap_var),
+            ArgKind::InPlace(_) => todo!(),
+            ArgKind::Binding(_, _) => todo!(),
         }
     }
 

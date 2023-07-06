@@ -1,4 +1,4 @@
-fn incr(a: int) {
+fn incr(@a: int) {
     a = a + 1;
 }
 

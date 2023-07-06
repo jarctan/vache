@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use super::{Block, Branch, LhsRef, Namespaced, Pointer, Reference, Span};
+use super::{Arg, Block, Branch, LhsRef, Namespaced, Pointer, Reference, Span};
 use crate::mir::RValue;
 
 /// A statement.
@@ -31,7 +31,7 @@ pub enum StmtKind<'mir, 'ctx> {
         /// Name of the function to call.
         name: Namespaced<'ctx>,
         /// Arguments to that function.
-        args: Vec<Reference<'mir, 'ctx>>,
+        args: Vec<Arg<'mir, 'ctx>>,
         /// Destination variable to hold the result.
         destination: Option<LhsRef<'mir, 'ctx>>,
     },

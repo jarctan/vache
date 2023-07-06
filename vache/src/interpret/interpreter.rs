@@ -17,7 +17,7 @@ use Value::*;
 use super::env::Env;
 use super::value::{Value, ValueRef};
 use crate::mir::{
-    Branch, CfgI, CfgLabel, Fun, InstrKind, LhsMode, Mode, Place, Pointer, RValue, Reference,
+    Arg, Branch, CfgI, CfgLabel, Fun, InstrKind, LhsMode, Mode, Place, Pointer, RValue, Reference,
     Varname,
 };
 use crate::tast::Stratum;
@@ -487,6 +487,15 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
         self.add_value(value, stm)
     }
 
+    /// Visits a function argument, optionally choosing to clone the value.
+    pub fn visit_arg(&mut self, arg: &Arg<'mir, 'ctx>, stratum: Stratum) -> ValueRef {
+        match arg {
+            Arg::Standard(r) => self.visit_reference(r, stratum),
+            Arg::InPlace(_) => todo!(),
+            Arg::Binding(_, _) => todo!(),
+        }
+    }
+
     /// Visits a reference, optionally choosing to clone the value.
     pub fn visit_reference(&mut self, r: &Reference<'mir, 'ctx>, stratum: Stratum) -> ValueRef {
         let v_ref = self.get_ptr(r.as_ptr());
@@ -595,7 +604,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                         let stratum = self.get_ptr(destination.as_ptr()).stratum;
                         let args = args
                             .iter()
-                            .map(|r| self.visit_reference(r, stratum))
+                            .map(|arg| self.visit_arg(arg, stratum))
                             .collect();
                         let call_result = self.call(name.name, args, stratum).expect(
                             "if the destination is set, then the function should return a value",
@@ -607,7 +616,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                         let stratum = self.current_stratum();
                         let args = args
                             .iter()
-                            .map(|r| self.visit_reference(r, stratum))
+                            .map(|arg| self.visit_arg(arg, stratum))
                             .collect();
                         let call_result = self.call(name.name, args, stratum).expect(
                             "if the destination is set, then the function should return a value",

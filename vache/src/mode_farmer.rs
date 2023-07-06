@@ -105,6 +105,18 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
         }
     }
 
+    /// Collects referencing modes in a function argument.
+    fn visit_arg(&mut self, arg: &Arg<'ctx>) {
+        match &arg.kind {
+            ArgKind::Standard(e) => self.visit_expr(e),
+            ArgKind::InPlace(p) => self.visit_place(p),
+            ArgKind::Binding(e, p) => {
+                self.visit_expr(e);
+                self.visit_place(p);
+            }
+        }
+    }
+
     /// Collects referencing modes in an expression.
     fn visit_expr(&mut self, e: &Expr<'ctx>) {
         match &e.kind {
@@ -131,7 +143,7 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
             }
             CallE { name: _, args } => {
                 for arg in args {
-                    self.visit_expr(arg);
+                    self.visit_arg(arg);
                 }
             }
             IfE(cond, iftrue, iffalse) => {

@@ -156,15 +156,74 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
         }
     }
 
-    /// Visits an expression. It It will add the nodes for that
-    /// block in the CFG, and return the CFG label for it.
+    /// Visits an expression. It will append the ANF statements for that
+    /// expression to `stmts`.
     ///
-    /// It takes as arguments:
-    /// * The expression itself (as a parser AST node).
-    /// * The destination variable that will store the result of this
-    ///   expression.
-    /// * `mode`: Overriding mode, if any.
-    /// * The map of structures declarations.
+    /// The arguments to this function are:
+    /// * The current list of ANF statements.
+    /// * The expression itself (as a node in the typed AST).
+    /// * `mode`: overriding mode, if any.
+    /// * The pointer to the value that will be returned by the function.
+    fn visit_place<'a>(
+        &'a mut self,
+        stmts: &'a mut Vec<Stmt<'mir, 'ctx>>,
+        place: &'mir mut tast::Place<'ctx>,
+        ret_ptr: Pointer<'ctx>,
+    ) -> Reference<'mir, 'ctx> {
+        match &mut place.kind {
+            tast::PlaceKind::VarP(v) => {
+                let ptr = self
+                    .get_translation_ptr(*v, place.span)
+                    .unwrap_or_else(|| panic!("Could not find translation for {v:?}"));
+                Reference::new(ptr, &mut place.mode)
+            }
+            tast::PlaceKind::FieldP(box strukt, field) => {
+                let strukt_ptr = self.visit_expr(stmts, strukt, Some(Mode::SMutBorrowed), ret_ptr);
+                let final_ptr = Pointer::new(
+                    self.arena,
+                    self.arena.alloc(Place::FieldP(strukt_ptr.as_ptr(), field)),
+                    place.span,
+                );
+
+                Reference::new(final_ptr, &mut place.mode)
+            }
+            tast::PlaceKind::ElemP(box tuple, elem) => {
+                let tuple_ptr = self.visit_expr(stmts, tuple, Some(Mode::SMutBorrowed), ret_ptr);
+
+                // Write the element index as a string.
+                let field = self.arena.alloc(format!("{elem}"));
+
+                let final_ptr = Pointer::new(
+                    self.arena,
+                    self.arena.alloc(Place::FieldP(tuple_ptr.as_ptr(), field)),
+                    place.span,
+                );
+
+                Reference::new(final_ptr, &mut place.mode)
+            }
+            tast::PlaceKind::IndexP(box e, box ix) => {
+                let e_ptr = self.visit_expr(stmts, e, Some(Mode::SMutBorrowed), ret_ptr);
+                let ix_ptr = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), ret_ptr);
+                let final_ptr = Pointer::new(
+                    self.arena,
+                    self.arena
+                        .alloc(Place::IndexP(e_ptr.as_ptr(), ix_ptr.as_ptr())),
+                    place.span,
+                );
+
+                Reference::new(final_ptr, &mut place.mode)
+            }
+        }
+    }
+
+    /// Visits an expression. It will append the ANF statements for that
+    /// expression to `stmts`.
+    ///
+    /// The arguments to this function are:
+    /// * The current list of ANF statements.
+    /// * The expression itself (as a node in the typed AST).
+    /// * `mode`: overriding mode, if any.
+    /// * The pointer to the value that will be returned by the function.
     fn visit_expr<'a>(
         &'a mut self,
         stmts: &'a mut Vec<Stmt<'mir, 'ctx>>,
@@ -211,53 +270,12 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                     place.mode = mode;
                 }
 
-                match &mut place.kind {
-                    tast::PlaceKind::VarP(v) => {
-                        let ptr = self.get_translation_ptr(*v, place.span).unwrap_or_else(|| panic!("Could not find translation for {v:?}"));
-                        Reference::new(ptr, &mut place.mode)
-                    }
-                    tast::PlaceKind::FieldP(box strukt, field) => {
-                        let strukt_ptr = self.visit_expr(stmts, strukt, Some(Mode::SMutBorrowed), ret_ptr);
-                        let final_ptr = Pointer::new(
-                            self.arena,
-                            self.arena.alloc(Place::FieldP(strukt_ptr.as_ptr(), field)),
-                            place.span
-                        );
-
-                        Reference::new(final_ptr, &mut place.mode)
-                    }
-                    tast::PlaceKind::ElemP(box tuple, elem) => {
-                        let tuple_ptr = self.visit_expr(stmts, tuple, Some(Mode::SMutBorrowed), ret_ptr);
-
-                        // Write the element index as a string.
-                        let field = self.arena.alloc(format!("{elem}"));
-
-                        let final_ptr = Pointer::new(
-                            self.arena,
-                            self.arena.alloc(Place::FieldP(tuple_ptr.as_ptr(), field)),
-                            place.span
-                        );
-
-                        Reference::new(final_ptr, &mut place.mode)
-                    }
-                    tast::PlaceKind::IndexP(box e, box ix) => {
-                        let e_ptr = self.visit_expr(stmts, e, Some(Mode::SMutBorrowed), ret_ptr);
-                        let ix_ptr = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), ret_ptr);
-                        let final_ptr = Pointer::new(
-                            self.arena,
-                            self.arena
-                                .alloc(Place::IndexP(e_ptr.as_ptr(), ix_ptr.as_ptr())),
-                            place.span
-                        );
-
-                        Reference::new(final_ptr, &mut place.mode)
-                    }
-                }
+                self.visit_place(stmts, place, ret_ptr)
             }
             tast::ExprKind::CallE { name, args } => {
                 let arg_vars = args
                     .iter_mut()
-                    .map(|arg| self.visit_expr(stmts, arg, None, ret_ptr))
+                    .map(|arg| self.visit_arg(stmts, arg, None, ret_ptr))
                     .collect();
 
                 let vardef = self.fresh_vardef(e.ty, e.span);
@@ -404,13 +422,40 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
         }
     }
 
-    /// Visits a block. It It will add the nodes for that
-    /// block in the CFG, and return the (entry) CFG label for it.
+    /// Visits a function argument. It It will add the nodes for that
+    /// argument in the CFG, and return the CFG label for it.
+    ///
+    /// The arguments to this function are:
+    /// * The current list of ANF statements.
+    /// * The function argument to visit.
+    /// * The destination variable that will store the result of this
+    ///   expression.
+    /// * `mode`: Overriding mode, if any.
+    /// * The pointer to the value that will be returned by the function.
+    fn visit_arg<'a>(
+        &'a mut self,
+        stmts: &'a mut Vec<Stmt<'mir, 'ctx>>,
+        arg: &'mir mut tast::Arg<'ctx>,
+        mode: Option<Mode>,
+        ret_ptr: Pointer<'ctx>,
+    ) -> Arg<'mir, 'ctx> {
+        match &mut arg.kind {
+            tast::ArgKind::Standard(e) => Arg::Standard(self.visit_expr(stmts, e, mode, ret_ptr)),
+            tast::ArgKind::InPlace(p) => Arg::InPlace(self.visit_place(stmts, p, ret_ptr)),
+            tast::ArgKind::Binding(e, p) => {
+                let e = self.visit_expr(stmts, e, mode, ret_ptr);
+                let p = self.visit_place(stmts, p, ret_ptr);
+                Arg::Binding(e, LhsRef::declare(p.as_ptr()))
+            }
+        }
+    }
+
+    /// Visits a block. It will return the ANF'ed block and the reference to the
+    /// final value of the block.
     ///
     /// Takes as arguments:
-    /// * The block itself (as a parser AST node)
-    /// * The map of structures declarations.
-    /// * The _function_ return pointer.
+    /// * The block itself (as a node of the typed AST).
+    /// * The pointer to the value that will be returned by the function.
     fn visit_block(
         &mut self,
         b: &'mir mut tast::Block<'ctx>,
@@ -426,13 +471,12 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
         (reference, stmts)
     }
 
-    /// Visits a statements, producing the CFG nodes and returning the label for
-    /// the entry CFG node for that statement.
+    /// Visits a statement, appending the ANF'ed statements to `stmts`.
     ///
     /// Takes as arguments:
     /// * The statement to visit.
-    /// * The label to jump at in the CFG after the execution of the statement.
-    /// * A map of structures declarations.
+    /// * The list of ANF statements to append to.
+    /// * The pointer to the value that will be returned by the function.
     fn visit_stmt<'a>(
         &'a mut self,
         s: &'mir mut tast::Stmt<'ctx>,

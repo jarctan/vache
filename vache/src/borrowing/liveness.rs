@@ -10,6 +10,7 @@ use crate::borrowing::ledger::Ledger;
 use crate::codes::BORROW_ERROR;
 use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
 use crate::reporter::{Diagnostic, Diagnostics, Reporter};
+use crate::utils::boxed;
 use crate::utils::set::Set;
 
 /// Variable liveness analysis.
@@ -39,23 +40,25 @@ pub fn var_liveness<'ctx>(
             let outs: LocTree<()> = successors.map(|x| var_flow[&x].ins.clone()).sum();
             let ins: LocTree<()> = match &instr.kind {
                 InstrKind::Noop => outs.clone(),
-                InstrKind::Assign(lhs, _)
-                | InstrKind::Call {
-                    name: _,
-                    args: _,
-                    destination: Some(lhs),
-                } => {
+                InstrKind::Assign(lhs, rhs) => {
                     outs.clone() - lhs.place().def()
                         + lhs.place().uses_as_lhs()
-                        + instr
-                            .references()
-                            .flat_map(|item| item.place().uses_as_rhs())
+                        + rhs.references().flat_map(|r| r.place().uses_as_rhs())
                 }
                 InstrKind::Call {
                     name: _,
                     args,
-                    destination: None,
-                } => outs.clone() + args.iter().flat_map(|x| x.place().uses_as_rhs()),
+                    destination: lhs,
+                } => {
+                    outs.clone()
+                        - lhs.as_ref().and_then(|lhs| lhs.place().def())
+                        - args.iter().flat_map(|x| x.def())
+                        + lhs
+                            .as_ref()
+                            .map(|lhs| lhs.place().uses_as_lhs())
+                            .unwrap_or_else(|| boxed(std::iter::empty()))
+                        + args.iter().flat_map(|x| x.uses())
+                }
                 InstrKind::Branch(v) => outs.clone() + Loc::from(v),
                 InstrKind::Return(v) => outs.clone() + Loc::from(v),
             };

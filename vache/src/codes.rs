@@ -41,5 +41,7 @@ pub const NO_MAIN_FN_ERROR: &str = "E0018";
 pub const TYPE_INFER_ERROR: &str = "E0019";
 /// Bad signature for a function.
 pub const BAD_SIGNATURE: &str = "E0020";
+/// Wrong reference mode error.
+pub const WRONG_REF_MODE_ERROR: &str = "E0021";
 /// Temporary: empty match error.
 pub const EMPTY_MATCH_ERROR: &str = "E0101";

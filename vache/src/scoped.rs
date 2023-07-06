@@ -44,6 +44,7 @@ impl<K: Eq + Hash, V> Scoped<K, V> {
 
     /// Inserts a value in the oldest, static scope. Returns the previous value
     /// from **that scope**, if any.
+    #[allow(dead_code)]
     pub fn insert_in_static(&mut self, key: K, v: V) -> Option<V> {
         self.0
             .first_mut()
@@ -52,6 +53,7 @@ impl<K: Eq + Hash, V> Scoped<K, V> {
     }
 
     /// Gets a value from a key.
+    #[allow(dead_code)]
     pub fn get<Q>(&self, key: &Q) -> Option<&V>
     where
         K: Borrow<Q>,

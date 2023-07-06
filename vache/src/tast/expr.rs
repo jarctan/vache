@@ -4,7 +4,7 @@ use std::default::default;
 
 use num_bigint::BigInt;
 
-use super::{Block, Namespaced, Pat, Place, Span, Stratum, Ty, TySubst, TyVar};
+use super::{Arg, Block, Namespaced, Pat, Place, Span, Stratum, Ty, TySubst, TyVar};
 use crate::utils::boxed;
 use crate::utils::set::Set;
 use crate::Arena;
@@ -20,7 +20,7 @@ pub struct Expr<'ctx> {
     pub ty: Ty<'ctx>,
     /// Stratum of the expression.
     pub stm: Stratum,
-    /// Code span,
+    /// Code span.
     pub span: Span,
 }
 
@@ -110,7 +110,7 @@ pub enum ExprKind<'ctx> {
         /// Name/identifier of the function.
         name: Namespaced<'ctx>,
         /// Arguments to that function.
-        args: Vec<Expr<'ctx>>,
+        args: Vec<Arg<'ctx>>,
     },
     /// An if expression.
     IfE(Box<Expr<'ctx>>, Box<Block<'ctx>>, Box<Block<'ctx>>),
@@ -206,7 +206,7 @@ impl<'ctx> ExprKind<'ctx> {
             StructE { name: _, fields } => fields.iter().map(|(_, e)| e.free_ty_vars()).sum(),
             ArrayE(items) => items.iter().map(Expr::free_ty_vars).sum(),
             TupleE(elems) => elems.iter().map(Expr::free_ty_vars).sum(),
-            CallE { name: _, args } => args.iter().map(Expr::free_ty_vars).sum(),
+            CallE { name: _, args } => args.iter().map(Arg::free_ty_vars).sum(),
             IfE(box cond, box iftrue, box iffalse) => {
                 cond.free_ty_vars() + iftrue.free_ty_vars() + iffalse.free_ty_vars()
             }

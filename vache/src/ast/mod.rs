@@ -70,6 +70,7 @@ macro_rules! consume_opt {
     }};
 }
 
+pub mod arg;
 pub mod block;
 pub mod enumeration;
 pub mod expr;
@@ -91,6 +92,7 @@ use std::time::Instant;
 
 pub use anyhow::Context as AnyhowContext;
 pub use anyhow::Result;
+pub use arg::{Arg, ArgKind};
 pub use block::Block;
 pub use enumeration::Enum;
 pub use expr::{if_e, Expr, ExprKind};

@@ -3,6 +3,7 @@
 //! Each node in the tree = one file. Some parts are re-exported from the parser
 //! AST.
 
+pub mod arg;
 pub mod block;
 pub mod expr;
 pub mod fun;
@@ -14,6 +15,7 @@ pub mod stmt;
 pub mod stratum;
 pub mod var;
 
+pub use arg::{Arg, ArgKind};
 pub use block::Block;
 pub use expr::{Expr, ExprKind};
 pub use fun::{Fun, FunParam};

@@ -53,7 +53,7 @@ pub enum InstrKind<'mir, 'ctx> {
         /// Name of the function to call.
         name: Namespaced<'ctx>,
         /// Arguments to that function.
-        args: Vec<Reference<'mir, 'ctx>>,
+        args: Vec<Arg<'mir, 'ctx>>,
         /// Destination variable to hold the result.
         destination: Option<LhsRef<'mir, 'ctx>>,
     },
@@ -71,16 +71,21 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
     pub fn mutated_places<'a>(&'a self) -> Box<dyn Iterator<Item = Place<'ctx>> + 'a> {
         // Mutated places are either lhs references...
         let obvious_lhs: Box<dyn Iterator<Item = _>> = match self {
-            InstrKind::Noop
-            | InstrKind::Branch(..)
-            | InstrKind::Return(_)
-            | InstrKind::Call {
-                destination: None, ..
-            } => boxed(std::iter::empty()),
+            InstrKind::Noop | InstrKind::Branch(..) | InstrKind::Return(_) => {
+                boxed(std::iter::empty())
+            }
             InstrKind::Call {
-                destination: Some(v),
-                ..
-            } => boxed(std::iter::once(*v.place())),
+                name: _,
+                destination: lhs,
+                args,
+            } => {
+                let lhs: Box<dyn Iterator<Item = _>> = if let Some(lhs) = lhs {
+                    boxed(std::iter::once(*lhs.place()))
+                } else {
+                    boxed(std::iter::empty())
+                };
+                boxed(lhs.chain(args.iter().flat_map(Arg::mutated_place)))
+            }
             InstrKind::Assign(lhs, rval) => {
                 boxed([*lhs.place()].into_iter().chain(rval.mut_vars()))
             }
@@ -96,6 +101,8 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
     }
 
     /// Returns mutable borrows into the references of this [`InstrKind`].
+    ///
+    /// References are the variable uses + the addressing modes on them.
     pub fn references_mut<'a>(
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut Reference<'mir, 'ctx>> + 'a> {
@@ -107,11 +114,13 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
                 name: _,
                 args,
                 destination: _,
-            } => boxed(args.iter_mut()),
+            } => boxed(args.iter_mut().flat_map(|arg| arg.references_mut())),
         }
     }
 
     /// Returns the references of this [`InstrKind`].
+    ///
+    /// References are the variable uses + the addressing modes on them.
     pub fn references<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Reference<'mir, 'ctx>> + 'a> {
         match self {
             InstrKind::Noop | InstrKind::Return(_) => boxed(std::iter::empty()),
@@ -121,7 +130,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
                 name: _,
                 args,
                 destination: _,
-            } => boxed(args.iter()),
+            } => boxed(args.iter().flat_map(|arg| arg.references())),
         }
     }
 

@@ -63,7 +63,16 @@ tuple_idx = @{ (('1'..'9') ~ ('0'..'9')*) | "0" }
 
 index_postfix = { lb ~ primitive ~ rb }
 
-call_postfix = { lp ~ (expr ~ (cma ~ expr)*)? ~ rp }
+call_postfix = { lp ~ (arg ~ (cma ~ arg)*)? ~ rp }
+
+// std goes after binding because of greediness
+arg = { binding_arg | std_arg | in_place_arg }
+
+std_arg = { expr }
+
+in_place_arg = { as_mut ~ expr }
+
+binding_arg = { expr ~ as_mut ~ expr }
 
 range_postfix = { rg ~ expr }
 
@@ -94,7 +103,7 @@ int_ty = { "int" }
 
 keyword = { var_kw | struct_kw | if_kw | else_kw | while_kw | for_kw | in_kw | bool_ty | str_ty | int_ty | fn_kw | match_kw | break_kw | return_kw | continue_kw | loop_kw }
 
-prefix = { bang | as_mut }
+prefix = { bang }
 infix  = { add | sub | mul | div | rem | pow | le | lt | ge | gt | eqq | neq | and | or | not_in }
 
 // second case is a hack to also match identifiers that start with a keyword

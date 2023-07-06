@@ -342,7 +342,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     pub fn visit_call(
         &mut self,
         namespaced: Namespaced<'ctx>,
-        args: Vec<Expr<'ctx>>,
+        args: Vec<Arg<'ctx>>,
         span: Span,
     ) -> Expr<'ctx> {
         let mut path = namespaced.path();
@@ -364,37 +364,53 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             }
 
             // Check type of arguments.
+            let mut new_args = vec![];
             for (
                 i,
                 (
-                    Expr {
-                        ty: arg_ty, span, ..
-                    },
+                    arg,
                     ast::TyUse { kind: param_ty, .. },
                 ),
-            ) in args.iter().zip(params.iter()).enumerate()
+            ) in args.into_iter().zip(params.iter()).enumerate()
             {
-                if !arg_ty.unify(param_ty, &mut self.subst) {
-                    self.ctx.emit(
+                let arg_ty = arg.ty();
+                let span = arg.span;
+                match arg.into_standard() {
+                    Ok(arg) => {
+                        if !arg_ty.unify(param_ty, &mut self.subst) {
+                            self.ctx.emit(
+                                    Diagnostic::error()
+                                        .with_code(TYPE_MISMATCH_ERROR)
+                                        .with_message(format!(
+                                            "expected type {}, found type {}",
+                                            param_ty.subst(self.ctx.arena, &self.subst),
+                                            arg_ty.subst(self.ctx.arena, &self.subst)
+                                        ))
+                                        .with_labels(vec![span.as_label()])
+                                        .with_notes(vec![format!(
+                                            "{} is the expected type for argument #{} of `{}`",
+                                            param_ty.subst(self.ctx.arena, &self.subst),
+                                            i + 1,
+                                            root
+                                        )]),
+                                );
+                        }
+                        new_args.push(arg);
+                    }
+                    Err(arg) => {
+                        self.ctx.emit(
                             Diagnostic::error()
-                                .with_code(TYPE_MISMATCH_ERROR)
-                                .with_message(format!(
-                                    "expected type {}, found type {}",
-                                    param_ty.subst(self.ctx.arena, &self.subst),
-                                    arg_ty.subst(self.ctx.arena, &self.subst)
-                                ))
-                                .with_labels(vec![span.as_label()])
-                                .with_notes(vec![format!(
-                                    "{} is the expected type for argument #{} of `{}`",
-                                    param_ty.subst(self.ctx.arena, &self.subst),
-                                    i + 1,
-                                    root
-                                )]),
+                                .with_code(WRONG_REF_MODE_ERROR)
+                                .with_message("the `@` referencing mode is not allowed in patterns")
+                                .with_labels(vec![arg.span.as_label()])
+                                .with_notes(vec!["help: remove the @ symbol".to_string()])
                         );
+                        return Expr::hole(span);
+                    }
                 }
             }
 
-            Expr::new(VariantE { enun: root, variant, args }, EnumT(enun.name), self.current_stratum(), span)
+            Expr::new(VariantE { enun: root, variant, args: new_args }, EnumT(enun.name), self.current_stratum(), span)
         } else if let Some(&fun) = self.fun_env.get(root) {
             let fun = fun.clone().instantiate_tys(self.ctx.arena, span);
             let name = root;
@@ -415,9 +431,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             for (
                 i,
                 (
-                    Expr {
-                        ty: arg_ty, span, ..
-                    },
+                    arg,
                     ast::FunParam {
                         var: ast::VarDef { ty: param_ty, .. },
                         ..
@@ -425,6 +439,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 ),
             ) in args.iter().zip(fun.params.iter()).enumerate()
             {
+                let arg_ty = arg.ty();
                 if !arg_ty.unify(param_ty, &mut self.subst)  {
                     self.ctx.emit(
                         Diagnostic::error()
@@ -646,19 +661,54 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             },
             // Make a special case for `print` until we get generic functions so that we
             // can express `print` more elegantly with the other builtin functions.
-            ast::ExprKind::CallE { name, args } if name.name == "print" => {
-                let args: Vec<Expr> = args
-                    .into_iter()
-                    .map(|arg| self.visit_expr(arg, ret_ty, in_loop))
-                    .collect();
+            ast::ExprKind::CallE {
+                name,
+                args: old_args,
+            } if name.name == "print" => {
+                let mut args = vec![];
+                for arg in old_args.into_iter() {
+                    match arg.into_standard() {
+                        Ok(arg) => args.push(Arg::std(self.visit_expr(arg, ret_ty, in_loop))),
+                        Err(arg) => {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(WRONG_REF_MODE_ERROR)
+                                    .with_message("`@` referencing mode is not allowed for any argument to `print`")
+                                    .with_labels(vec![arg.span.as_label()])
+                                    .with_notes(vec![
+                                        "help: remove the `@` operator".to_string()
+                                    ]),
+                            );
+                            return Expr::hole(span);
+                        }
+                    }
+                }
 
                 Expr::new(CallE { name, args }, UnitT, self.current_stratum(), span)
             }
-            ast::ExprKind::CallE { name, args } => {
-                let args: Vec<Expr> = args
-                    .into_iter()
-                    .map(|arg| self.visit_expr(arg, ret_ty, in_loop))
-                    .collect();
+            ast::ExprKind::CallE {
+                name,
+                args: old_args,
+            } => {
+                let mut args = vec![];
+                for (i, arg) in old_args.into_iter().enumerate() {
+                    let arg = match arg.kind {
+                        ast::ArgKind::Standard(e) => Arg::std(self.visit_expr(e, ret_ty, in_loop)),
+                        ast::ArgKind::InPlace(_) | ast::ArgKind::Binding(_, _) => {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(WRONG_REF_MODE_ERROR)
+                                    .with_message(format!("`@` referencing mode is not allowed for argument #{i} to {name}"))
+                                    .with_labels(vec![arg.span.as_label()])
+                                    .with_notes(vec![
+                                        "help: remove the `@` operator".to_string()
+                                    ]),
+                            );
+                            return Expr::hole(span);
+                        }
+                    };
+                    args.push(arg);
+                }
                 self.visit_call(name, args, span)
             }
             ast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
@@ -1483,7 +1533,19 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     // Compute the pattern for the args
                     let (mut args, old_args): (Vec<_>, _) = (default(), args);
                     for (arg, ast::TyUse { kind: ty, .. }) in old_args.into_iter().zip(params.iter()) {
-                        args.push(self.visit_pattern(arg, *ty, stm)?);
+                        match arg.into_standard() {
+                            Ok(arg) => args.push(self.visit_pattern(arg, *ty, stm)?),
+                            Err(arg) => {
+                                self.ctx.emit(
+                                    Diagnostic::error()
+                                        .with_code(WRONG_REF_MODE_ERROR)
+                                        .with_message("the `@` referencing mode is not allowed in patterns")
+                                        .with_labels(vec![arg.span.as_label()])
+                                        .with_notes(vec!["help: remove the @ symbol".to_string()])
+                                );
+                                return None;
+                            }
+                        }
                     }
 
                     Some(Pat::new(VariantM { enun: root, variant, args }, EnumT(root), span))

@@ -205,7 +205,7 @@ impl<'ctx> Ledger<'ctx> {
 
             match borrows {
                 Borrows::None => (),
-                Borrows::Aliased(alias) => todo!(),
+                Borrows::Aliased(_) => todo!(),
                 Borrows::Distinct(borrows) => {
                     for borrow in borrows.iter() {
                         // If the borrow is not invalidated, remove it from the loans.

@@ -32,6 +32,7 @@ impl<'ctx> FunParam<'ctx> {
         }
     }
 
+    /// Returns the type of the function parameter.
     pub fn ty(&self) -> Ty<'ctx> {
         self.var.ty.kind
     }
