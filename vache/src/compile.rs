@@ -549,7 +549,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     fn visit_arg(&mut self, arg: Arg<'ctx>, wrap_var: bool) -> TokenStream {
         match arg.kind {
             ArgKind::Standard(arg) => self.visit_expr(arg, wrap_var),
-            ArgKind::InPlace(_) => todo!(),
+            ArgKind::InPlace(place) => self.visit_place(place, wrap_var),
             ArgKind::Binding(_, _) => todo!(),
         }
     }

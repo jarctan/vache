@@ -55,6 +55,15 @@ impl<'ctx> Arg<'ctx> {
         }
     }
 
+    /// Shortcut to create an in place (pass-by-reference) function argument.
+    pub(crate) fn in_place(place: Place<'ctx>) -> Arg<'ctx> {
+        Self {
+            stm: place.stm,
+            span: place.span,
+            kind: ArgKind::InPlace(place),
+        }
+    }
+
     /// Returns the type of that function argument.
     pub fn ty(&self) -> Ty<'ctx> {
         match &self.kind {
@@ -64,6 +73,16 @@ impl<'ctx> Arg<'ctx> {
                 debug_assert_eq!(e.ty, p.ty);
                 e.ty
             }
+        }
+    }
+
+    /// Is this argument passing by reference?
+    pub fn byref(&self) -> bool {
+        // We do exhaustive pattern matching to trigger an error if we add/modify
+        // variants
+        match &self.kind {
+            ArgKind::Standard(..) => false,
+            ArgKind::InPlace(..) | ArgKind::Binding(..) => true,
         }
     }
 }

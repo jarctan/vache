@@ -165,7 +165,6 @@ impl<'ctx> FunSig<'ctx> {
                 .iter()
                 .map(|&p| (p, VarT(TyVar::fresh(span)))),
         );
-        println!("Subst: {:?}", subst);
         Self {
             name: self.name,
             ty_params: vec![],

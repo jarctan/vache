@@ -334,12 +334,176 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         }
     }
 
+    /// Type-checks a **rhs** place expression.
+    ///
+    /// * `ret_ty`: Return type of the function.
+    /// * `mode`: Desired overriding mode. Put [`None`] if you do not wish to
+    ///   override the value set by the parser AST.
+    /// * `in_loop`: is this place in a loop?
+    fn visit_rhs_place(
+        &mut self,
+        place: ast::Place<'ctx>,
+        mode: Option<Mode>,
+        ret_ty: TyUse<'ctx>,
+        in_loop: bool,
+    ) -> Option<Place<'ctx>> {
+        let mut place = match place.kind {
+            ast::PlaceKind::VarP(v) => match self.get_var(v) {
+                Some((vardef, stm)) => Some(Place::var(v, vardef.ty, stm, place.mode, place.span)),
+                None => {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(UNKNOWN_VAR_ERROR)
+                            .with_message(format!("Unknown variable `{v}`"))
+                            .with_labels(vec![v.as_span().into()]),
+                    );
+                    None
+                }
+            },
+            ast::PlaceKind::FieldP(box s, field) => {
+                let s = self.visit_expr(s, ret_ty, in_loop);
+                if let StructT(strukt) = &s.ty {
+                    let strukt = self.struct_env[strukt];
+                    // Check that the field we want to access exists
+                    let ty = match strukt.get_field(field) {
+                        Some(ty) => ty,
+                        None => {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(FIELD_ACCESS_ERROR)
+                                    .with_message(format!("No such field `{field}`"))
+                                    .with_labels(vec![s
+                                        .span
+                                        .as_label()
+                                        .with_message(format!("has no field named `{field}`"))])
+                                    .with_notes(vec![format!(
+                                        "possible fields are {}",
+                                        strukt.fields.keys().map(|x| format!("`{x}`")).join(", ")
+                                    )]),
+                            );
+                            Ty::hole(place.span)
+                        }
+                    };
+                    let stm = s.stm; // Needed now because we move s after
+                    Some(Place {
+                        kind: FieldP(boxed(s), field),
+                        mode: place.mode,
+                        ty,
+                        stm,
+                        span: place.span,
+                    })
+                } else {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(FIELD_NOT_STRUCT_ERROR)
+                            .with_message("Field access only works for structures")
+                            .with_labels(vec![s.span.as_label().with_message("has no fields")]),
+                    );
+                    None
+                }
+            }
+            ast::PlaceKind::ElemP(box tuple, elem) => {
+                let tuple = self.visit_expr(tuple, ret_ty, in_loop);
+                if let TupleT(elems) = &tuple.ty {
+                    // Check that the field we want to access exists
+                    let ty = match elems.get(elem) {
+                        Some(ty) => *ty,
+                        None => {
+                            self.ctx.emit(
+                                Diagnostic::error()
+                                    .with_code(TUPLE_ACCESS_ERROR)
+                                    .with_message("Tuple index is out of bounds")
+                                    .with_labels(vec![tuple.span.as_label().with_message(
+                                        format!("has only {} elements", elems.len()),
+                                    )]),
+                            );
+                            Ty::hole(place.span)
+                        }
+                    };
+                    let stm = tuple.stm; // Needed now because we move `tuple` after
+                    Some(Place {
+                        kind: ElemP(boxed(tuple), elem),
+                        mode: place.mode,
+                        ty,
+                        stm,
+                        span: place.span,
+                    })
+                } else {
+                    self.ctx.emit(
+                        Diagnostic::error()
+                            .with_message("This kind of indexing only works for tuples")
+                            .with_labels(vec![tuple
+                                .span
+                                .as_label()
+                                .with_message("has no elements")]),
+                    );
+                    None
+                }
+            }
+            ast::PlaceKind::IndexP(box e, box ix) => {
+                let e = self.visit_expr(e, ret_ty, in_loop);
+                let ix = self.visit_expr(ix, ret_ty, in_loop);
+                let array_ty = self.ctx.alloc(Ty::hole(e.span));
+                match (
+                    e.ty.unify(&ArrayT(array_ty), &mut self.subst),
+                    ix.ty.unify(&IntT, &mut self.subst),
+                ) {
+                    (true, true) => {
+                        let ty = array_ty.subst(self.ctx.arena, &self.subst);
+                        let e_stm = e.stm; // Needed now because we move e after
+                        Some(Place {
+                            kind: IndexP(boxed(e), boxed(ix)),
+                            mode: place.mode,
+                            ty,
+                            stm: e_stm,
+                            span: place.span,
+                        })
+                    }
+                    (false, true) => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message(format!(
+                                    "Expected array type, found type {}",
+                                    e.ty.subst(self.ctx.arena, &self.subst)
+                                ))
+                                .with_labels(vec![e.span.as_label()])
+                                .with_notes(vec!["Only array can be indexed".to_string()]),
+                        );
+                        None
+                    }
+                    (_, false) => {
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(TYPE_MISMATCH_ERROR)
+                                .with_message(format!(
+                                    "Expected type int, found type {}",
+                                    ix.ty.subst(self.ctx.arena, &self.subst)
+                                ))
+                                .with_labels(vec![ix.span.as_label()])
+                                .with_notes(vec![
+                                    "Only integer indexing is supported for arrays".to_string()
+                                ]),
+                        );
+                        None
+                    }
+                }
+            }
+        }?;
+
+        // If set, override the mode
+        if let Some(mode) = mode {
+            place.mode = mode;
+        }
+        Some(place)
+    }
+
     /// Type-checks a call on a callable object.
     ///
     /// * `namespaced`: element being called
     /// * `args`: arguments to the call
     /// * `span`: span of the entire call location
-    pub fn visit_call(
+    fn visit_call(
         &mut self,
         namespaced: Namespaced<'ctx>,
         args: Vec<Arg<'ctx>>,
@@ -432,15 +596,31 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 i,
                 (
                     arg,
-                    ast::FunParam {
-                        var: ast::VarDef { ty: param_ty, .. },
-                        ..
-                    },
+                    param
                 ),
             ) in args.iter().zip(fun.params.iter()).enumerate()
             {
                 let arg_ty = arg.ty();
-                if !arg_ty.unify(param_ty, &mut self.subst)  {
+                let param_ty = param.ty();
+                if param.byref != arg.byref() {
+                    let displayed = |byref| if byref { "some referencing (@) mode" } else {"no referencing (@) mode"};
+                        self.ctx.emit(
+                        Diagnostic::error()
+                            .with_code(WRONG_REF_MODE_ERROR)
+                            .with_message(format!(
+                                "expected {}, found {}",
+                                displayed(param.byref),
+                                displayed(arg.byref()),
+                            ))
+                            .with_labels(vec![arg.span.as_label(), param.span.as_secondary_label().with_message("function parameter defined here")])
+                            .with_notes(vec![format!("help: this function parameter {} be modified in place or bound to another value", if param.byref {
+                                "must"
+                            } else {
+                                "cannot"
+                            })])
+                       );
+                }
+                if !arg_ty.unify(&param_ty, &mut self.subst)  {
                     self.ctx.emit(
                         Diagnostic::error()
                             .with_code(TYPE_MISMATCH_ERROR)
@@ -492,173 +672,16 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             }
             ast::ExprKind::StringE(s) => Expr::new(StringE(s), StrT, self.current_stratum(), span),
             ast::ExprKind::NamespacedE(namespaced) => self.visit_call(namespaced, vec![], span),
-            ast::ExprKind::PlaceE(place) => match place.kind {
-                ast::PlaceKind::VarP(v) => match self.get_var(v) {
-                    Some((vardef, stm)) => Expr::new(
-                        PlaceE(Place::var(v, vardef.ty, stm, place.mode, place.span)),
-                        vardef.ty,
-                        stm,
-                        span,
-                    ),
-                    None => {
-                        self.ctx.emit(
-                            Diagnostic::error()
-                                .with_code(UNKNOWN_VAR_ERROR)
-                                .with_message(format!("Unknown variable `{v}`"))
-                                .with_labels(vec![v.as_span().into()]),
-                        );
-                        Expr::hole(span)
+            ast::ExprKind::PlaceE(place) => {
+                let place = self.visit_rhs_place(place, None, ret_ty, in_loop);
+                match place {
+                    Some(place) => {
+                        let (stm, ty) = (place.stm, place.ty);
+                        Expr::new(PlaceE(place), ty, stm, span)
                     }
-                },
-                ast::PlaceKind::FieldP(box s, field) => {
-                    let s = self.visit_expr(s, ret_ty, in_loop);
-                    if let StructT(strukt) = &s.ty {
-                        let strukt = self.struct_env[strukt];
-                        // Check that the field we want to access exists
-                        let ty = match strukt.get_field(field) {
-                            Some(ty) => ty,
-                            None => {
-                                self.ctx.emit(
-                                    Diagnostic::error()
-                                        .with_code(FIELD_ACCESS_ERROR)
-                                        .with_message(format!("No such field `{field}`"))
-                                        .with_labels(vec![s
-                                            .span
-                                            .as_label()
-                                            .with_message(format!("has no field named `{field}`"))])
-                                        .with_notes(vec![format!(
-                                            "possible fields are {}",
-                                            strukt
-                                                .fields
-                                                .keys()
-                                                .map(|x| format!("`{x}`"))
-                                                .join(", ")
-                                        )]),
-                                );
-                                Ty::hole(span)
-                            }
-                        };
-                        let stm = s.stm; // Needed now because we move s after
-                        Expr::new(
-                            PlaceE(Place {
-                                kind: FieldP(boxed(s), field),
-                                mode: place.mode,
-                                ty,
-                                stm,
-                                span: place.span,
-                            }),
-                            ty,
-                            stm,
-                            span,
-                        )
-                    } else {
-                        self.ctx.emit(
-                            Diagnostic::error()
-                                .with_code(FIELD_NOT_STRUCT_ERROR)
-                                .with_message("Field access only works for structures")
-                                .with_labels(vec![s.span.as_label().with_message("has no fields")]),
-                        );
-                        Expr::hole(span)
-                    }
+                    None => Expr::hole(span),
                 }
-                ast::PlaceKind::ElemP(box tuple, elem) => {
-                    let tuple = self.visit_expr(tuple, ret_ty, in_loop);
-                    if let TupleT(elems) = &tuple.ty {
-                        // Check that the field we want to access exists
-                        let ty = match elems.get(elem) {
-                            Some(ty) => *ty,
-                            None => {
-                                self.ctx.emit(
-                                    Diagnostic::error()
-                                        .with_code(TUPLE_ACCESS_ERROR)
-                                        .with_message("Tuple index is out of bounds")
-                                        .with_labels(vec![tuple.span.as_label().with_message(
-                                            format!("has only {} elements", elems.len()),
-                                        )]),
-                                );
-                                Ty::hole(span)
-                            }
-                        };
-                        let stm = tuple.stm; // Needed now because we move `tuple` after
-                        Expr::new(
-                            PlaceE(Place {
-                                kind: ElemP(boxed(tuple), elem),
-                                mode: place.mode,
-                                ty,
-                                stm,
-                                span: place.span,
-                            }),
-                            ty,
-                            stm,
-                            span,
-                        )
-                    } else {
-                        self.ctx.emit(
-                            Diagnostic::error()
-                                .with_message("This kind of indexing only works for tuples")
-                                .with_labels(vec![tuple
-                                    .span
-                                    .as_label()
-                                    .with_message("has no elements")]),
-                        );
-                        Expr::hole(span)
-                    }
-                }
-                ast::PlaceKind::IndexP(box e, box ix) => {
-                    let e = self.visit_expr(e, ret_ty, in_loop);
-                    let ix = self.visit_expr(ix, ret_ty, in_loop);
-                    let array_ty = self.ctx.alloc(Ty::hole(e.span));
-                    match (
-                        e.ty.unify(&ArrayT(array_ty), &mut self.subst),
-                        ix.ty.unify(&IntT, &mut self.subst),
-                    ) {
-                        (true, true) => {
-                            let ty = array_ty.subst(self.ctx.arena, &self.subst);
-                            let e_stm = e.stm; // Needed now because we move e after
-                            Expr::new(
-                                PlaceE(Place {
-                                    kind: IndexP(boxed(e), boxed(ix)),
-                                    mode: place.mode,
-                                    ty,
-                                    stm: e_stm,
-                                    span: place.span,
-                                }),
-                                ty,
-                                e_stm,
-                                span,
-                            )
-                        }
-                        (false, true) => {
-                            self.ctx.emit(
-                                Diagnostic::error()
-                                    .with_code(TYPE_MISMATCH_ERROR)
-                                    .with_message(format!(
-                                        "Expected array type, found type {}",
-                                        e.ty.subst(self.ctx.arena, &self.subst)
-                                    ))
-                                    .with_labels(vec![e.span.as_label()])
-                                    .with_notes(vec!["Only array can be indexed".to_string()]),
-                            );
-                            Expr::hole(span)
-                        }
-                        (_, false) => {
-                            self.ctx.emit(
-                                Diagnostic::error()
-                                    .with_code(TYPE_MISMATCH_ERROR)
-                                    .with_message(format!(
-                                        "Expected type int, found type {}",
-                                        ix.ty.subst(self.ctx.arena, &self.subst)
-                                    ))
-                                    .with_labels(vec![ix.span.as_label()])
-                                    .with_notes(vec![
-                                        "Only integer indexing is supported for arrays".to_string(),
-                                    ]),
-                            );
-                            Expr::hole(span)
-                        }
-                    }
-                }
-            },
+            }
             // Make a special case for `print` until we get generic functions so that we
             // can express `print` more elegantly with the other builtin functions.
             ast::ExprKind::CallE {
@@ -694,7 +717,18 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 for (i, arg) in old_args.into_iter().enumerate() {
                     let arg = match arg.kind {
                         ast::ArgKind::Standard(e) => Arg::std(self.visit_expr(e, ret_ty, in_loop)),
-                        ast::ArgKind::InPlace(_) | ast::ArgKind::Binding(_, _) => {
+                        ast::ArgKind::InPlace(place) => {
+                            match self.visit_rhs_place(
+                                place,
+                                Some(Mode::MutBorrowed),
+                                ret_ty,
+                                in_loop,
+                            ) {
+                                Some(place) => Arg::in_place(place),
+                                None => return Expr::hole(span),
+                            }
+                        }
+                        ast::ArgKind::Binding(_, _) => {
                             self.ctx.emit(
                                 Diagnostic::error()
                                     .with_code(WRONG_REF_MODE_ERROR)
