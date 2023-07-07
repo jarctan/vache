@@ -199,8 +199,9 @@ mod steps {
         print!("Miring...");
         std::io::stdout().flush()?;
         let start = Instant::now();
+        let arena = p.arena;
         let normalized = Normalizer::normalize(p);
-        let mut mirer = MIRer::new();
+        let mut mirer = MIRer::new(arena);
         let res = mirer.gen_mir(normalized);
         println!("\rMIR-ed [{:?}]", start.elapsed());
         Ok(res)

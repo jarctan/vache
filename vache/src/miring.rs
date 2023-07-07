@@ -8,6 +8,7 @@ use Branch::*;
 use crate::anf;
 use crate::mir::*;
 use crate::utils::set::Set;
+use crate::Arena;
 
 /// ANF to MIR transformer.
 pub(crate) struct MIRer<'mir, 'ctx> {
@@ -17,15 +18,18 @@ pub(crate) struct MIRer<'mir, 'ctx> {
     stm: Stratum,
     /// Collect the variables in each stratum.
     strata: HashMap<Stratum, Set<Varname<'ctx>>>,
+    /// Global arena.
+    arena: &'ctx Arena<'ctx>,
 }
 
 impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
     /// Creates a new MIR processor.
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(arena: &'ctx Arena<'ctx>) -> Self {
         Self {
             cfg: Cfg::default(),
             stm: Stratum::static_stm(),
             strata: default(),
+            arena,
         }
     }
 
@@ -216,10 +220,9 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
                 self.pop_scope();
                 res
             }
-            anf::StmtKind::ReturnS(ret) => self.insert(
-                self.instr(InstrKind::Return(ret), s.span),
-                [(DefaultB, exit_l)],
-            ),
+            anf::StmtKind::ReturnS => {
+                self.insert(self.instr(InstrKind::Noop, s.span), [(DefaultB, exit_l)])
+            }
             anf::StmtKind::BreakS => {
                 let break_l = break_l.expect("break statement must be in a while loop");
                 self.insert(self.instr(InstrKind::Noop, s.span), [(DefaultB, break_l)])
@@ -230,9 +233,42 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
 
     /// Visits a function.
     fn visit_fun(&mut self, f: anf::Fun<'mir, 'ctx>) -> Fun<'mir, 'ctx> {
-        let ret_l = self.fresh_label();
-
         self.push_scope();
+        // The return value is moved at the end of the function
+        let ret_l = if let Some(ret_v) = f.ret_v {
+            self.insert(
+                self.instr(
+                    InstrKind::PhantomUse(Reference::new_moved(ret_v)),
+                    default(),
+                ),
+                [],
+            )
+        } else {
+            self.fresh_label()
+        };
+
+        // The in-place arguments are marked as being mutably used after the function,
+        // so that they be not moved during the function
+        let ret_l = f
+            .params
+            .iter()
+            .filter(|param| param.byref)
+            .fold(ret_l, |ret_l, param| {
+                self.insert(
+                    self.instr(
+                        InstrKind::PhantomUse(Reference::new(
+                            Pointer::new(
+                                self.arena,
+                                self.arena.alloc(Place::VarP(param.name())),
+                                param.span,
+                            ),
+                            self.arena.alloc_mut(Mode::MutBorrowed),
+                        )),
+                        default(),
+                    ),
+                    [(DefaultB, ret_l)],
+                )
+            });
         let entry_l = self.visit_stmts(f.body, ret_l, ret_l, None);
         self.pop_scope();
 

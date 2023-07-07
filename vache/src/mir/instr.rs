@@ -59,11 +59,6 @@ pub enum InstrKind<'mir, 'ctx> {
     },
     /// Asks for the truthiness of the first argument.
     Branch(Reference<'mir, 'ctx>),
-    /// Return the value.
-    ///
-    /// Dummy instruction to pinpoint the liveness of the return value at the
-    /// end of the function.
-    Return(Pointer<'ctx>),
     /// Dummy instruction to explicitly state some value might be used at some
     /// point.
     PhantomUse(Reference<'mir, 'ctx>),
@@ -73,9 +68,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
     /// Returns pointers mutated by this instruction.
     pub fn mutated_ptrs<'a>(&'a self) -> Box<dyn Iterator<Item = Pointer<'ctx>> + 'a> {
         match self {
-            InstrKind::Noop | InstrKind::Branch(..) | InstrKind::Return(_) => {
-                boxed(std::iter::empty())
-            }
+            InstrKind::Noop | InstrKind::Branch(..) => boxed(std::iter::empty()),
             InstrKind::Call {
                 name: _,
                 destination: lhs,
@@ -113,7 +106,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut Reference<'mir, 'ctx>> + 'a> {
         match self {
-            InstrKind::Noop | InstrKind::Return(_) => boxed(std::iter::empty()),
+            InstrKind::Noop => boxed(std::iter::empty()),
             InstrKind::Branch(r) | InstrKind::PhantomUse(r) => boxed(std::iter::once(r)),
             InstrKind::Assign(_, rval) => rval.references_mut(),
             InstrKind::Call {
@@ -129,7 +122,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
     /// References are the variable uses + the addressing modes on them.
     pub fn references<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Reference<'mir, 'ctx>> + 'a> {
         match self {
-            InstrKind::Noop | InstrKind::Return(_) => boxed(std::iter::empty()),
+            InstrKind::Noop => boxed(std::iter::empty()),
             InstrKind::Branch(r) | InstrKind::PhantomUse(r) => boxed(std::iter::once(r)),
             InstrKind::Assign(_, rval) => rval.references(),
             InstrKind::Call {
@@ -179,9 +172,6 @@ impl<'mir, 'ctx> fmt::Debug for InstrKind<'mir, 'ctx> {
             }
             InstrKind::Branch(cond) => {
                 write!(f, "{cond:?}?")
-            }
-            InstrKind::Return(v) => {
-                write!(f, "ret {v:?}")
             }
             InstrKind::PhantomUse(r) => {
                 write!(f, "use {r:?}")

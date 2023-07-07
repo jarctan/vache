@@ -597,7 +597,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                     AssignS(LhsRef::declare(ret_ptr), RValue::Place(ret)),
                     s.span,
                 ));
-                stmts.push(Stmt::new(ReturnS(ret_ptr), s.span));
+                stmts.push(Stmt::new(ReturnS, s.span));
             }
         }
     }
@@ -627,7 +627,6 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
             AssignS(LhsRef::declare(ret_ptr), RValue::Place(ret)),
             body_ret_span,
         ));
-        body.push(Stmt::new(ReturnS(ret_ptr), body_ret_span));
 
         self.pop_scope();
 

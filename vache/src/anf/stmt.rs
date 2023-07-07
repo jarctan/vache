@@ -54,7 +54,7 @@ pub enum StmtKind<'mir, 'ctx> {
         body: Block<'mir, 'ctx>,
     },
     /// Return statement.
-    ReturnS(Pointer<'ctx>),
+    ReturnS,
     /// Break statement.
     BreakS,
     /// Continue statement.
