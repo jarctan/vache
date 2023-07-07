@@ -381,7 +381,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
 
                 Reference::new_moved(destination)
             }
-            tast::ExprKind::MatchE(box matched, branches) => {
+            tast::ExprKind::MatchE(box matched, _branches) => {
                 match matched.ty {
                     Ty::UnitT => todo!(),
                     Ty::BoolT => todo!(),

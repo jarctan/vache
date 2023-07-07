@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use super::{LhsRef, Loc, Place, Pointer, Reference};
+use super::{LhsRef, Place, Pointer, Reference};
 use crate::utils::boxed;
 
 /// A function argument:
@@ -18,27 +18,6 @@ pub enum Arg<'mir, 'ctx> {
     Binding(Reference<'mir, 'ctx>, LhsRef<'mir, 'ctx>),
 }
 impl<'mir, 'ctx> Arg<'mir, 'ctx> {
-    /// Optional location defined (overwritten) by this argument.
-    ///
-    /// Remember that arguments can be of the form `a@b`, in which case we are
-    /// binding (defining) the final result to b.
-    pub(crate) fn def<'a>(&'a self) -> Option<Loc<'ctx>> {
-        match self {
-            Arg::Standard(_) => None,
-            Arg::InPlace(_) => None,
-            Arg::Binding(_, to) => Some(*to.loc()),
-        }
-    }
-
-    /// Locations used by this argument.
-    pub(crate) fn uses<'a>(&'a self) -> Box<dyn Iterator<Item = Loc<'ctx>> + 'a> {
-        match self {
-            Arg::Standard(r) => boxed(std::iter::once(*r.loc())),
-            Arg::InPlace(r) => boxed(std::iter::once(*r.loc())),
-            Arg::Binding(from, to) => boxed([*from.loc(), *to.loc()].into_iter()),
-        }
-    }
-
     /// Returns the references of this [`Arg`].
     ///
     /// References are the variables used (not defined) in the [`Arg`] (with the
