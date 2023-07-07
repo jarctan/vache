@@ -9,4 +9,4 @@ fn main() {
 ################################
 42
 ################################
-3:18:Borrowed // do NOT clone y in x = y
+3:18:3:19:Borrowed // do NOT clone y in x = y

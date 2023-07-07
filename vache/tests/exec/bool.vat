@@ -14,4 +14,4 @@ fn main() {
 garfield
 john
 ################################
-8:17:Borrowed // last use of a but a in a > b is still active.
+8:17:8:18:Borrowed // last use of a but a in a > b is still active.

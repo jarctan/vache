@@ -107,7 +107,7 @@ use pest::Parser;
 pub use place::{idx_place, Place, PlaceKind};
 pub use program::Program;
 use reporting::pretty_print_rule;
-pub use span::Span;
+pub use span::{LineCol, LineColSpan, Span};
 pub use stmt::{Stmt, StmtKind};
 pub use structure::Struct;
 pub use ty::{arrayT, boolT, intT, strT, unitT, varT, Ty, TySubst, TyUse, TyVar};

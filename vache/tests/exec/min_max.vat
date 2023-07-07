@@ -24,7 +24,7 @@ fn main() {
 830198309123804
 830198309123808
 ################################
-20:15:Borrowed // max(a)
-20:18:Borrowed // max(b)
-21:15:Moved // min(a)
-21:18:Moved // min(b)
+20:15:20:16:Borrowed // max(a)
+20:18:20:19:Borrowed // max(b)
+21:15:21:16:Moved // min(a)
+21:18:21:19:Moved // min(b)

@@ -29,4 +29,6 @@ pub use stratum::Stratum;
 pub use var::vardef;
 pub use var::{VarDef, VarUse};
 
-pub use crate::ast::{Enum, Mode, Namespaced, Span, Struct, Ty, TySubst, TyUse, TyVar, Varname};
+pub use crate::ast::{
+    Enum, LineCol, LineColSpan, Mode, Namespaced, Span, Struct, Ty, TySubst, TyUse, TyVar, Varname,
+};

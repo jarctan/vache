@@ -28,7 +28,7 @@ use crate::Context;
 pub fn farm_modes<'ctx>(
     context: &mut Context<'ctx>,
     p: &Program<'ctx>,
-) -> HashMap<(usize, usize), Mode> {
+) -> HashMap<LineColSpan, Mode> {
     let farmer = ModeFarmer::new(context);
     farmer.visit(p)
 }
@@ -39,9 +39,8 @@ pub fn farm_modes<'ctx>(
 struct ModeFarmer<'a, 'ctx> {
     /// The ongoing collection.
     ///
-    /// Hashmap of (line, col) -> mode, where (line, col) is the beginning
-    /// of the span of the place.
-    farm: HashMap<(usize, usize), Mode>,
+    /// Hashmap of codespan -> mode.
+    farm: HashMap<LineColSpan, Mode>,
     /// The context. Used to translate spans to actual line:col.
     context: &'a Context<'ctx>,
 }
@@ -57,7 +56,7 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
 
     /// Main entry to visit a program, and return the addressing modes of all
     /// the places in that program.
-    pub fn visit(mut self, p: &Program<'ctx>) -> HashMap<(usize, usize), Mode> {
+    pub fn visit(mut self, p: &Program<'ctx>) -> HashMap<LineColSpan, Mode> {
         self.visit_program(p);
         self.farm
     }
@@ -194,11 +193,14 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
     /// Collects modes in a place.
     fn visit_place(&mut self, place: &Place<'ctx>) {
         // Add the place to the farm
-        // If there is already an entry for the same position, keep it and discard ours,
-        // so that we keep the one that matches the biggest (topmost) element.
-        self.farm
-            .entry(place.span.line_col(self.context.files))
-            .or_insert(place.mode);
+        // Panic if there is already some mode registered at the same codespan
+        assert!(
+            self.farm
+                .insert(place.span.line_col(self.context.files), place.mode)
+                .is_none(),
+            "internal error: two modes for the same codespan. Don't know what to do"
+        );
+
         match &place.kind {
             VarP(_) => (),
             IndexP(box a, box i) => {

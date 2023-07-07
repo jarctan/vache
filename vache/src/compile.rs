@@ -13,8 +13,8 @@ use StmtKind::*;
 use Ty::*;
 
 use crate::tast::{
-    Arg, ArgKind, Block, Enum, Expr, ExprKind, Fun, LhsMode, LhsPlace, Mode, Pat, PatKind, Place,
-    PlaceKind, Program, Stmt, StmtKind, Struct, Ty, TyVar, Varname,
+    Arg, ArgKind, Block, Enum, Expr, ExprKind, Fun, LhsMode, LhsPlace, LineCol, Mode, Pat, PatKind,
+    Place, PlaceKind, Program, Stmt, StmtKind, Struct, Ty, TyVar, Varname,
 };
 use crate::Context;
 
@@ -117,7 +117,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             }
             IndexP(box array, box index) => {
-                let (line, col) = index.span.line_col(self.ctx.files);
+                let LineCol { line, col } = index.span.start_line_col(self.ctx.files);
                 let filename = self.ctx.files.name();
                 let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
                 let array = self.visit_expr(array, false, f_ret_struct);
@@ -191,7 +191,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             }
             IndexP(box array, box index) => {
-                let (line, col) = index.span.line_col(self.ctx.files);
+                let LineCol { line, col } = index.span.start_line_col(self.ctx.files);
                 let filename = self.ctx.files.name();
                 let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
                 let array = self.visit_expr(array, false, f_ret_struct);

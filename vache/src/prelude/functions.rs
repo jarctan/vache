@@ -149,15 +149,15 @@ pub fn functions() -> TokenStream {
         pub(crate) fn __or<'a, 'b>(
             x: Var<'a, 'b, bool>,
             y: Var<'a, 'b, bool>,
-        ) -> __Result<Cow<'a, bool>> {
-            Ok(Cow::Owned(**x || **y))
+        ) -> __Result<__Ret<Cow<'b, bool>, ____gtRet>> {
+            __Ret::ok(Cow::Owned(**x || **y), ____gtRet {})
         }
 
         pub(crate) fn __and<'a, 'b>(
             x: Var<'a, 'b, bool>,
             y: Var<'a, 'b, bool>,
-        ) -> __Result<Cow<'a, bool>> {
-            Ok(Cow::Owned(**x && **y))
+        ) -> __Result<__Ret<Cow<'b, bool>, ____gtRet>> {
+            __Ret::ok(Cow::Owned(**x && **y), ____gtRet {})
         }
 
         pub(crate) fn __not<'a, 'b, C: Clone, B: ::std::ops::Not<Output = C> + Clone>(

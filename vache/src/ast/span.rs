@@ -47,12 +47,38 @@ impl Span {
     }
 
     /// Returns the line, col of this span start.
+    pub fn start_line_col<'ctx, 'a, 'b: 'a>(
+        &self,
+        files: &'b impl Files<'a, Name = &'ctx str, Source = &'ctx str, FileId = ()>,
+    ) -> LineCol {
+        let location = files.location((), self.0.start().to_usize()).unwrap();
+        LineCol {
+            line: location.line_number,
+            col: location.column_number,
+        }
+    }
+
+    /// Returns the line, col of this span end.
+    pub fn end_line_col<'ctx, 'a, 'b: 'a>(
+        &self,
+        files: &'b impl Files<'a, Name = &'ctx str, Source = &'ctx str, FileId = ()>,
+    ) -> LineCol {
+        let location = files.location((), self.0.end().to_usize()).unwrap();
+        LineCol {
+            line: location.line_number,
+            col: location.column_number,
+        }
+    }
+
+    /// Returns the line, col of this span start.
     pub fn line_col<'ctx, 'a, 'b: 'a>(
         &self,
         files: &'b impl Files<'a, Name = &'ctx str, Source = &'ctx str, FileId = ()>,
-    ) -> (usize, usize) {
-        let location = files.location((), self.0.start().to_usize()).unwrap();
-        (location.line_number, location.column_number)
+    ) -> LineColSpan {
+        LineColSpan {
+            start: self.start_line_col(files),
+            end: self.end_line_col(files),
+        }
     }
 
     /// Start position of the span.
@@ -89,5 +115,36 @@ impl Default for Span {
 impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}..{}", self.0.start(), self.0.end())
+    }
+}
+
+/// A position in the file, represented as a line and a column.
+///
+/// User-friendly representation of a position.
+#[derive(PartialEq, Eq, Clone, Copy, Hash)]
+pub struct LineCol {
+    /// Line of the position.
+    pub line: usize,
+    pub col: usize,
+}
+
+impl fmt::Debug for LineCol {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.line, self.col)
+    }
+}
+
+/// User-friendly representation of a span in code, using lines and columns.
+#[derive(PartialEq, Eq, Clone, Copy, Hash)]
+pub struct LineColSpan {
+    /// Start position.
+    pub start: LineCol,
+    /// End position.
+    pub end: LineCol,
+}
+
+impl fmt::Debug for LineColSpan {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}..{:?}", self.start, self.end)
     }
 }

@@ -21,6 +21,6 @@ fn main() {
 2 4
 3
 ################################
-12:18:Cloned // p.x must be cloned for x
-13:18:Moved // p.y can be moved for y
-14:11:Moved // p.x = p.x + 1
+12:18:12:21:Cloned // p.x must be cloned for x
+13:18:13:21:Moved // p.y can be moved for y
+14:11:14:14:Moved // p.x = p.x + 1

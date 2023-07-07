@@ -28,6 +28,6 @@ fn main() {
 1
 89
 ################################
-11:18:Moved // reassign n2
-12:18:Cloned // clone because we reassign to n2 afterward (in the next iteration of the loop)
-12:23:Moved // reassign n1
+11:18:11:20:Moved // reassign n2
+12:18:12:20:Cloned // clone because we reassign to n2 afterward (in the next iteration of the loop)
+12:23:12:25:Moved // reassign n1
