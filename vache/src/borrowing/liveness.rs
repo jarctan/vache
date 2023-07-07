@@ -8,9 +8,8 @@ use super::tree::LocTree;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
 use crate::codes::BORROW_ERROR;
-use crate::mir::{Arg, Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
+use crate::mir::{Cfg, CfgI, CfgLabel, Loc, Mode, Stratum, Varname};
 use crate::reporter::{Diagnostic, Diagnostics, Reporter};
-use crate::utils::boxed;
 use crate::utils::set::Set;
 
 /// Variable liveness analysis.
@@ -28,9 +27,8 @@ pub fn var_liveness<'ctx>(
     // Bootstrap with empty environments.
     let mut var_flow: Cfg<Flow<LocTree<()>>> = cfg.map_ref(|_, _| Flow::default(), |_| ());
 
-    let mut updated = true;
-
     // Compute the fixpoint, iteratively.
+    let mut updated = true;
     while updated {
         updated = false;
 
@@ -38,31 +36,26 @@ pub fn var_liveness<'ctx>(
             let successors = cfg.neighbors(label);
 
             let outs: LocTree<()> = successors.map(|x| var_flow[&x].ins.clone()).sum();
-            let ins: LocTree<()> = match &instr.kind {
-                InstrKind::Noop => outs.clone(),
-                InstrKind::Assign(lhs, rhs) => {
-                    outs.clone() - lhs.place().def()
-                        + lhs.place().uses_as_lhs()
-                        + rhs.references().flat_map(|r| r.place().uses_as_rhs())
-                }
-                InstrKind::Call {
-                    name: _,
-                    args,
-                    destination: lhs,
-                } => {
-                    outs.clone()
-                        - lhs.as_ref().and_then(|lhs| lhs.place().def())
-                        - args.iter().flat_map(Arg::def)
-                        + lhs
-                            .as_ref()
-                            .map(|lhs| lhs.place().uses_as_lhs())
-                            .unwrap_or_else(|| boxed(std::iter::empty()))
-                        + args.iter().flat_map(|x| x.uses())
-                }
-                InstrKind::Branch(v) => outs.clone() + Loc::from(v),
-                InstrKind::Return(v) => outs.clone() + Loc::from(v),
-            };
+            let mut ins: LocTree<()> = outs.clone();
 
+            // Remove definitions
+            for assigned in instr.mutated_places() {
+                ins = ins - assigned.def();
+            }
+
+            // Add rhs uses (do that after we removed all defined places, since mutated
+            // places should predominate and not be shadowed by defined variables)
+            for assigned in instr.mutated_places() {
+                ins = ins + assigned.uses_as_lhs();
+            }
+
+            // Add rhs uses
+            for r in instr.references() {
+                ins = ins + r.place().uses_as_rhs();
+            }
+
+            // Compare with the flow of the previous iteration and flag if we made any
+            // change
             let flow = Flow { ins, outs };
             if var_flow[&label] != flow {
                 var_flow[&label] = flow;
@@ -95,11 +88,10 @@ fn loan_liveness<'ctx>(
     let out_of_scope: Cfg<LocTree<()>> =
         var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
 
-    // Same, for loans.
     let mut loan_flow: Cfg<Flow<Ledger>> = cfg.map_ref(|_, _| Flow::default(), |_| ());
 
+    // Compute the fixpoint, iteratively.
     let mut updated = true;
-
     while updated {
         updated = false;
 

@@ -645,7 +645,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                 }
             }
             // Do nothing: it was a marker instruction for the liveness analysis.
-            InstrKind::Return(_) => DefaultB,
+            InstrKind::Return(_) | InstrKind::PhantomUse(_) => DefaultB,
         };
         if let Some(next) = cfg.take_branch(label, &branch) {
             self.visit_cfg(cfg, next)

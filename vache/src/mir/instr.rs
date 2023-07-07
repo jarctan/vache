@@ -64,6 +64,9 @@ pub enum InstrKind<'mir, 'ctx> {
     /// Dummy instruction to pinpoint the liveness of the return value at the
     /// end of the function.
     Return(Pointer<'ctx>),
+    /// Dummy instruction to explicitly state some value might be used at some
+    /// point.
+    PhantomUse(Reference<'mir, 'ctx>),
 }
 
 impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
@@ -88,6 +91,13 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
             InstrKind::Assign(lhs, rval) => {
                 boxed([lhs.as_ptr()].into_iter().chain(rval.mut_vars_ptrs()))
             }
+            InstrKind::PhantomUse(r) => {
+                if r.mode().is_mutable() {
+                    boxed(std::iter::once(r.as_ptr()))
+                } else {
+                    boxed(std::iter::empty())
+                }
+            }
         }
     }
 
@@ -104,7 +114,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
     ) -> Box<dyn Iterator<Item = &'a mut Reference<'mir, 'ctx>> + 'a> {
         match self {
             InstrKind::Noop | InstrKind::Return(_) => boxed(std::iter::empty()),
-            InstrKind::Branch(r) => boxed(std::iter::once(r)),
+            InstrKind::Branch(r) | InstrKind::PhantomUse(r) => boxed(std::iter::once(r)),
             InstrKind::Assign(_, rval) => rval.references_mut(),
             InstrKind::Call {
                 name: _,
@@ -120,7 +130,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
     pub fn references<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Reference<'mir, 'ctx>> + 'a> {
         match self {
             InstrKind::Noop | InstrKind::Return(_) => boxed(std::iter::empty()),
-            InstrKind::Branch(r) => boxed(std::iter::once(r)),
+            InstrKind::Branch(r) | InstrKind::PhantomUse(r) => boxed(std::iter::once(r)),
             InstrKind::Assign(_, rval) => rval.references(),
             InstrKind::Call {
                 name: _,
@@ -172,6 +182,9 @@ impl<'mir, 'ctx> fmt::Debug for InstrKind<'mir, 'ctx> {
             }
             InstrKind::Return(v) => {
                 write!(f, "ret {v:?}")
+            }
+            InstrKind::PhantomUse(r) => {
+                write!(f, "use {r:?}")
             }
         }
     }
