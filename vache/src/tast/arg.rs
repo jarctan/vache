@@ -1,6 +1,6 @@
 //! Function arguments are special kinds of expressions.
 
-use super::{Expr, Place, Span, Stratum, Ty, TySubst, TyVar};
+use super::{Expr, LhsPlace, Place, Span, Stratum, Ty, TySubst, TyVar};
 use crate::utils::set::Set;
 use crate::Arena;
 
@@ -46,8 +46,19 @@ impl<'ctx> Arg<'ctx> {
         }
     }
 
+    /// Is this argument a binding argument? If so, return the from and to
+    /// locations of it.
+    ///
+    /// Return format of the tuple: (`from`, `to`)
+    pub(crate) fn as_binding(&self) -> Option<(&Expr<'ctx>, &LhsPlace<'ctx>)> {
+        match &self.kind {
+            ArgKind::Binding(e, p) => Some((e, p)),
+            _ => None,
+        }
+    }
+
     /// Shortcut to create a standard function argument.
-    pub(crate) fn std(expr: Expr<'ctx>) -> Arg<'ctx> {
+    pub(crate) fn std(expr: Expr<'ctx>) -> Self {
         Self {
             stm: expr.stm,
             span: expr.span,
@@ -56,11 +67,27 @@ impl<'ctx> Arg<'ctx> {
     }
 
     /// Shortcut to create an in place (pass-by-reference) function argument.
-    pub(crate) fn in_place(place: Place<'ctx>) -> Arg<'ctx> {
+    ///
+    /// We also take the `span` as argument as it will normally be bigger than
+    /// the span of the place (the former is `@p`, the latter is `p`).
+    pub(crate) fn in_place(place: Place<'ctx>, span: Span) -> Self {
         Self {
             stm: place.stm,
-            span: place.span,
+            span,
             kind: ArgKind::InPlace(place),
+        }
+    }
+
+    /// Shortcut to create a binding function argument from moving `from` and
+    /// biding to `to`.
+    ///
+    /// We also take the `span` as argument as it will normally be bigger than
+    /// the span of the place (the former is `@p`, the latter is `p`).
+    pub(crate) fn binding(from: Expr<'ctx>, to: LhsPlace<'ctx>, span: Span) -> Self {
+        Self {
+            stm: from.stm, // TODO: check this is the good stratum to use (why not `from.stm`?)
+            span,
+            kind: ArgKind::Binding(from, to),
         }
     }
 
@@ -101,7 +128,7 @@ pub enum ArgKind<'ctx> {
     /// Argument binding to a new place.
     ///
     /// Notation: `expr@place` in the code.
-    Binding(Expr<'ctx>, Place<'ctx>),
+    Binding(Expr<'ctx>, LhsPlace<'ctx>),
 }
 
 impl<'ctx> ArgKind<'ctx> {

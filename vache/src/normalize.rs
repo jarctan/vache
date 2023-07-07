@@ -156,15 +156,15 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
         }
     }
 
-    /// Visits an expression. It will append the ANF statements for that
-    /// expression to `stmts`.
+    /// Visits a (rhs) place. It will append the ANF statements for that
+    /// place to `stmts`.
     ///
     /// The arguments to this function are:
     /// * The current list of ANF statements.
     /// * The expression itself (as a node in the typed AST).
     /// * `mode`: overriding mode, if any.
     /// * The pointer to the value that will be returned by the function.
-    fn visit_place<'a>(
+    fn visit_rhs_place<'a>(
         &'a mut self,
         stmts: &'a mut Vec<Stmt<'mir, 'ctx>>,
         place: &'mir mut tast::Place<'ctx>,
@@ -214,6 +214,65 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 Reference::new(final_ptr, &mut place.mode)
             }
         }
+    }
+
+    /// Visits a _lhs_ place. It will append the ANF statements for that
+    /// place to `stmts`.
+    ///
+    /// The arguments to this function are:
+    /// * The current list of ANF statements.
+    /// * The expression itself (as a node in the typed AST).
+    /// * `mode`: overriding mode, if any.
+    /// * The pointer to the value that will be returned by the function.
+    fn visit_lhs_place<'a>(
+        &'a mut self,
+        stmts: &'a mut Vec<Stmt<'mir, 'ctx>>,
+        place: &'mir mut tast::LhsPlace<'ctx>,
+        ret_ptr: Pointer<'ctx>,
+    ) -> LhsRef<'mir, 'ctx> {
+        let lhs = match &mut place.kind {
+            tast::PlaceKind::VarP(ref var) => {
+                match place.mode {
+                    LhsMode::Assigning => self.get_translation_place(*var).expect(""),
+                    LhsMode::Declaring => {
+                        // Check if the variable already exists, if so create a new binding.
+                        let place = if self.get_translation_place(*var).is_some() {
+                            let vardef = self.fresh_vardef(place.ty, place.span);
+                            Place::VarP(vardef.name())
+                        } else {
+                            Place::VarP(var.name())
+                        };
+
+                        // Add the translation AFTER we computed the rhs, so that the rhs
+                        // may still refer to the old value
+                        self.add_translation(*var, self.arena.alloc(place));
+                        place
+                    }
+                }
+            }
+            tast::PlaceKind::IndexP(box array, box ix) => {
+                let array = self.visit_expr(stmts, array, Some(Mode::SMutBorrowed), ret_ptr);
+
+                let ix = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), ret_ptr);
+
+                Place::IndexP(array.as_ptr(), ix.as_ptr())
+            }
+            tast::PlaceKind::FieldP(box strukt, field) => {
+                let strukt = self.visit_expr(stmts, strukt, Some(Mode::SMutBorrowed), ret_ptr);
+
+                Place::FieldP(strukt.as_ptr(), field)
+            }
+            tast::PlaceKind::ElemP(box tuple, elem) => {
+                let tuple = self.visit_expr(stmts, tuple, Some(Mode::SMutBorrowed), ret_ptr);
+
+                // Write the element index as a string.
+                let field = self.arena.alloc(format!("{elem}"));
+
+                Place::FieldP(tuple.as_ptr(), field)
+            }
+        };
+        let lhs = Pointer::new(self.arena, self.arena.alloc(lhs), place.span);
+        LhsRef::new(lhs, &mut place.mode)
     }
 
     /// Visits an expression. It will append the ANF statements for that
@@ -270,7 +329,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                     place.mode = mode;
                 }
 
-                self.visit_place(stmts, place, ret_ptr)
+                self.visit_rhs_place(stmts, place, ret_ptr)
             }
             tast::ExprKind::CallE { name, args } => {
                 let arg_vars = args
@@ -441,11 +500,11 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
     ) -> Arg<'mir, 'ctx> {
         match &mut arg.kind {
             tast::ArgKind::Standard(e) => Arg::Standard(self.visit_expr(stmts, e, mode, ret_ptr)),
-            tast::ArgKind::InPlace(p) => Arg::InPlace(self.visit_place(stmts, p, ret_ptr)),
+            tast::ArgKind::InPlace(p) => Arg::InPlace(self.visit_rhs_place(stmts, p, ret_ptr)),
             tast::ArgKind::Binding(e, p) => {
                 let e = self.visit_expr(stmts, e, mode, ret_ptr);
-                let p = self.visit_place(stmts, p, ret_ptr);
-                Arg::Binding(e, LhsRef::declare(p.as_ptr()))
+                let p = self.visit_lhs_place(stmts, p, ret_ptr);
+                Arg::Binding(e, p)
             }
         }
     }
@@ -486,52 +545,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
         match &mut s.kind {
             tast::StmtKind::AssignS(place, expr) => {
                 let rhs = self.visit_expr(stmts, expr, None, ret_ptr);
-                let lhs = match &mut place.kind {
-                    tast::PlaceKind::VarP(ref var) => {
-                        match place.mode {
-                            LhsMode::Assigning => self.get_translation_place(*var).expect(""),
-                            LhsMode::Declaring => {
-                                // Check if the variable already exists, if so create a new binding.
-                                let place = if self.get_translation_place(*var).is_some() {
-                                    let vardef = self.fresh_vardef(place.ty, place.span);
-                                    Place::VarP(vardef.name())
-                                } else {
-                                    Place::VarP(var.name())
-                                };
-
-                                // Add the translation AFTER we computed the rhs, so that the rhs
-                                // may still refer to the old value
-                                self.add_translation(*var, self.arena.alloc(place));
-                                place
-                            }
-                        }
-                    }
-                    tast::PlaceKind::IndexP(box array, box ix) => {
-                        let array =
-                            self.visit_expr(stmts, array, Some(Mode::SMutBorrowed), ret_ptr);
-
-                        let ix = self.visit_expr(stmts, ix, Some(Mode::SBorrowed), ret_ptr);
-
-                        Place::IndexP(array.as_ptr(), ix.as_ptr())
-                    }
-                    tast::PlaceKind::FieldP(box strukt, field) => {
-                        let strukt =
-                            self.visit_expr(stmts, strukt, Some(Mode::SMutBorrowed), ret_ptr);
-
-                        Place::FieldP(strukt.as_ptr(), field)
-                    }
-                    tast::PlaceKind::ElemP(box tuple, elem) => {
-                        let tuple =
-                            self.visit_expr(stmts, tuple, Some(Mode::SMutBorrowed), ret_ptr);
-
-                        // Write the element index as a string.
-                        let field = self.arena.alloc(format!("{elem}"));
-
-                        Place::FieldP(tuple.as_ptr(), field)
-                    }
-                };
-                let lhs = Pointer::new(self.arena, self.arena.alloc(lhs), place.span);
-                let lhs_ref = LhsRef::new(lhs, &mut place.mode);
+                let lhs_ref = self.visit_lhs_place(stmts, place, ret_ptr);
                 stmts.push(Stmt::new(AssignS(lhs_ref, RValue::Place(rhs)), s.span));
             }
             tast::StmtKind::WhileS { cond, body } => {

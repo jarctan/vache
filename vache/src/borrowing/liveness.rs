@@ -8,7 +8,7 @@ use super::tree::LocTree;
 use crate::borrowing::borrow::Borrow;
 use crate::borrowing::ledger::Ledger;
 use crate::codes::BORROW_ERROR;
-use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
+use crate::mir::{Arg, Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
 use crate::reporter::{Diagnostic, Diagnostics, Reporter};
 use crate::utils::boxed;
 use crate::utils::set::Set;
@@ -52,7 +52,7 @@ pub fn var_liveness<'ctx>(
                 } => {
                     outs.clone()
                         - lhs.as_ref().and_then(|lhs| lhs.place().def())
-                        - args.iter().flat_map(|x| x.def())
+                        - args.iter().flat_map(Arg::def)
                         + lhs
                             .as_ref()
                             .map(|lhs| lhs.place().uses_as_lhs())
@@ -70,7 +70,8 @@ pub fn var_liveness<'ctx>(
             }
         }
     }
-    //var_flow.print_image("var");
+
+    //var_flow.print_image("var").unwrap();
 
     var_flow
 }
@@ -104,34 +105,24 @@ fn loan_liveness<'ctx>(
 
         for (label, instr) in cfg.postorder(entry_l).rev() {
             let predecessors = cfg.preneighbors(label);
+            let refs = instr.references().collect::<Vec<_>>();
+
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
-            let mut outs: Ledger = match &instr.kind {
-                InstrKind::Assign(lhs, _)
-                | InstrKind::Call {
-                    name: _,
-                    args: _,
-                    destination: Some(lhs),
-                } => {
-                    let mut ledger = ins.clone();
-                    let borrows = instr
-                        .references()
-                        .map(|reference| ledger.borrow(*lhs.loc(), reference, label))
-                        .collect::<Vec<_>>();
-                    let borrows = ledger.flatten(borrows.into_iter());
-                    if var_flow[&label].outs.contains(lhs.loc()) {
-                        ledger.set_borrows(lhs.place(), Borrows::Distinct(borrows));
-                    } else {
-                        ledger.flush_place(lhs.place(), true);
-                    }
-                    ledger
+            let mut outs: Ledger = ins.clone();
+
+            for assigned in instr.mutated_ptrs() {
+                let borrows = refs
+                    .iter()
+                    .filter(|r| r.id != assigned.id)
+                    .map(|reference| outs.borrow(*assigned.loc(), reference, label))
+                    .collect::<Vec<_>>();
+                let borrows = outs.flatten(borrows.into_iter());
+                if var_flow[&label].outs.contains(assigned.loc()) {
+                    outs.set_borrows(assigned.place(), Borrows::Distinct(borrows));
+                } else {
+                    outs.flush_place(assigned.place(), true);
                 }
-                InstrKind::Branch(_)
-                | InstrKind::Return(_)
-                | InstrKind::Call {
-                    destination: None, ..
-                }
-                | InstrKind::Noop => ins.clone(),
-            };
+            }
 
             // Optionally remove locations that go out of scope at the end of this
             // instruction
@@ -161,7 +152,8 @@ fn loan_liveness<'ctx>(
             }
         }
     }
-    //loan_flow.print_image("loan");
+
+    //loan_flow.print_image("loan").unwrap();
 
     loan_flow
 }
@@ -193,7 +185,6 @@ pub fn liveness<'mir, 'ctx>(
         // Check last variable use and replace with a move
         for (label, instr) in cfg.bfs_mut(entry_l, false) {
             let var_outs = &var_flow[&label].outs;
-            let borrows_in = &loan_flow[&label].ins;
 
             // Get all the references of that instruction.
             let references: Vec<_> = instr.references_mut().collect();
@@ -217,20 +208,8 @@ pub fn liveness<'mir, 'ctx>(
                     Mode::Borrowed | Mode::MutBorrowed | Mode::SMutBorrowed | Mode::SBorrowed => {
                         let loc = reference.loc();
                         if !var_outs.contains(loc) && !cannot_move[i].contains(loc) {
-                            let mut loans = borrows_in.loans(*reference.loc());
-                            let mut borrows = borrows_in.borrows(*reference.place());
-                            if loans.all(|loan| !loan.mutable)
-                                && borrows.all(|borrow| !borrow.mutable)
-                            {
-                                updated = true;
-                                reference.set_mode(Mode::Moved);
-                            } /*else {
-                                  //#[cfg(not(test))]
-                                  println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
-                                  panic!(
-                                      "Cannot move {loc:?} out  because {loans:?} are still active in {instr:?}"
-                                  );
-                              }*/
+                            updated = true;
+                            reference.set_mode(Mode::Moved);
                         }
                     }
                     Mode::Cloned => (), // We clone, there's a reason fot that. So you can't move
@@ -251,7 +230,6 @@ pub fn liveness<'mir, 'ctx>(
     for (label, instr) in cfg.bfs(entry_l, false) {
         for lhs in instr.mutated_places() {
             for borrow in loan_flow[&label].ins.loans(lhs.root()) {
-                debug_assert!(!borrow.mutable);
                 invalidated.insert(borrow);
             }
         }
@@ -269,41 +247,20 @@ pub fn liveness<'mir, 'ctx>(
                 Diagnostic::error()
                     .with_code(BORROW_ERROR)
                     .with_message(format!(
-                        "cannot use `{}`{} here",
+                        "cannot use `{}` mutably here",
                         borrow.borrowed_loc(),
-                        if borrow.mutable { " mutably" } else { "" },
                     ))
                     .with_labels(vec![
                         borrow.span.as_label().with_message(
-                            if borrow.mutable && contradiction.mutable {
-                                "second mutable use but L0 is still active"
-                            } else {
-                                "immutable use but mutable use L0 is still active"
-                            },
+                            "second mutable use but L0 is still active"
                         ),
                         contradiction.span.as_secondary_label().with_message(
-                            if borrow.mutable && contradiction.mutable {
-                                "first mutable use L0"
-                            } else {
-                                "mutable use L0"
-                            },
+                            "first mutable use L0"
                         ),
                     ])
                     .with_notes(vec![
-                        if borrow.mutable && contradiction.mutable {
-                            "remember: there cannot be two simultaneously active mutable uses at any line"
-                                .to_string()
-                        } else {
-                            "remember: there cannot be any immutable use while a mutable use is active"
-                                .to_string()
-                        },
-                        if borrow.mutable && contradiction.mutable {
-                            "help: consider removing one of the two mutable uses, or shorten the lifetime of the first one"
-                                .to_string()
-                        } else {
-                            "help: consider not mutably borrowing, or remove the immutable uses while the mutable use is active"
-                                .to_string()
-                        },
+                        "remember: there cannot be two simultaneously active mutable uses at any line".to_string(),
+                        "help: consider removing one of the two mutable uses".to_string(),
                         format!(
                             "Debug information: {:?} {:?} {:?}",
                             borrow.label, borrow.borrower, borrow.ptr
@@ -314,66 +271,13 @@ pub fn liveness<'mir, 'ctx>(
     }
 
     // Transform all invalidated borrows into clones
-    for borrow @ Borrow {
-        label,
-        ptr,
-        mutable,
-        ..
-    } in invalidated
-    {
+    for Borrow { label, ptr, .. } in invalidated {
         /*#[cfg(not(test))]
         println!("Invalidation: {:?}", borrow);*/
-        debug_assert!(!mutable, "Borrow {borrow:?} is mutable");
         cfg[&label].force_clone(&ptr);
     }
 
-    // Check for uses of of a mutably borrowed variable
-    for (label, instr) in cfg.bfs(entry_l, false) {
-        let borrows_in = &loan_flow[&label].ins;
-
-        for r in instr.references() {
-            let loc = *r.loc();
-            let mut mut_borrows = borrows_in.loans(loc).filter(|borrow| borrow.mutable);
-            if let Some(borrow) = mut_borrows.next() {
-                let borrower = borrow.borrower;
-                // Find the next occurrence of the borrower in the CFG (must exist because
-                // borrow is live)
-                let next_use = 'outer: loop {
-                    for (_, instr) in cfg.bfs(label, false) {
-                        for r in instr.references() {
-                            if *r.loc() == borrower {
-                                break 'outer r.span;
-                            }
-                        }
-                    }
-                    unreachable!()
-                };
-                reporter.emit(
-                    Diagnostic::error()
-                        .with_code(BORROW_ERROR)
-                        .with_message(format!(
-                            "you cannot use `{}` while it is taken mutably by `{borrower}`",
-                            loc,
-                        ))
-                        .with_labels(vec![
-                            r.span.as_label(),
-                            borrow
-                                .span
-                                .as_secondary_label()
-                                .with_message("borrow occurs here"),
-                            next_use
-                                .as_secondary_label()
-                                .with_message(format!("next use of `{borrower}` here")),
-                        ])
-                        .with_notes(vec![format!(
-                            "help: wait until `{borrower}` is inactive to use `{loc}`"
-                        )]),
-                );
-            }
-        }
-    }
-
-    //cfg.print_image("cfg");
+    //cfg.print_image("cfg").unwrap();
 
     Ok(cfg)
 }

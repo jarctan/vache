@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use super::{LhsRef, Loc, Place, Reference};
+use super::{LhsRef, Loc, Place, Pointer, Reference};
 use crate::utils::boxed;
 
 /// A function argument:
@@ -41,7 +41,8 @@ impl<'mir, 'ctx> Arg<'mir, 'ctx> {
 
     /// Returns the references of this [`Arg`].
     ///
-    /// References are the variable uses + the addressing modes on them.
+    /// References are the variables used (not defined) in the [`Arg`] (with the
+    /// addressing modes on them).
     pub fn references<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Reference<'mir, 'ctx>> + 'a> {
         match self {
             Arg::Standard(r) => boxed(std::iter::once(r)),
@@ -52,7 +53,8 @@ impl<'mir, 'ctx> Arg<'mir, 'ctx> {
 
     /// Returns mutable borrows into the references of this [`Arg`].
     ///
-    /// References are the variable uses + the addressing modes on them.
+    /// References are the variables used (not defined) in the [`Arg`] (with the
+    /// addressing modes on them).
     pub fn references_mut<'a>(
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut Reference<'mir, 'ctx>> + 'a> {
@@ -63,13 +65,18 @@ impl<'mir, 'ctx> Arg<'mir, 'ctx> {
         }
     }
 
-    /// Optionally returns the place mutated by this argument.
-    pub fn mutated_place(&self) -> Option<Place<'ctx>> {
+    /// Optionally returns the pointer mutated by this argument.
+    pub fn mutated_ptr(&self) -> Option<Pointer<'ctx>> {
         match self {
             Arg::Standard(_) => None,
-            Arg::InPlace(r) => Some(*r.place()),
-            Arg::Binding(_, rhs) => Some(*rhs.place()),
+            Arg::InPlace(r) => Some(r.as_ptr()),
+            Arg::Binding(_, rhs) => Some(rhs.as_ptr()),
         }
+    }
+
+    /// Optionally returns the place mutated by this argument.
+    pub fn mutated_place(&self) -> Option<Place<'ctx>> {
+        self.mutated_ptr().map(|x| *x.place())
     }
 }
 

@@ -158,6 +158,7 @@ fn main() -> anyhow::Result<()> {
             };
             match res {
                 Ok(res) => {
+                    println!("--------------------------------");
                     println!("{}", res);
                     Ok(())
                 }

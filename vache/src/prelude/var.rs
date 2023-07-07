@@ -100,6 +100,16 @@ pub fn var() -> TokenStream {
         }
 
         impl<'a, 'b, B: Clone> Var<'a, 'b, B> {
+            pub fn try_into_owned(self) -> Result<B, Self> {
+                match self {
+                    Var::Mut(_) => Err(self),
+                    Var::Owned(owned) => match Cow::try_into_owned(owned) {
+                        Ok(owned) => Ok(owned),
+                        Err(owned) => Err(Var::Owned(owned)),
+                    },
+                }
+            }
+
             pub fn into_owned(self) -> B {
                 match self {
                     Var::Mut(borrowed) => Cow::into_owned(Cow::clone(borrowed)),
@@ -111,6 +121,13 @@ pub fn var() -> TokenStream {
                 match self {
                     Var::Mut(borrowed) => Cow::clone(borrowed),
                     Var::Owned(owned) => owned,
+                }
+            }
+
+            pub fn try_to_cow(self) -> Result<Cow<'b, B>, Self> {
+                match self {
+                    Var::Mut(_) => Err(self),
+                    Var::Owned(owned) => Ok(owned),
                 }
             }
 

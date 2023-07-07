@@ -60,18 +60,18 @@ pub fn vec() -> TokenStream {
             fn eq<'c, 'd>(
                 x: Var<'c, 'd, __Vec<Var<'a, 'b, T>>>,
                 y: Var<'c, 'd, __Vec<Var<'a, 'b, T>>>,
-            ) -> __Result<Cow<'b, bool>> {
+            ) -> __Result<__Ret<Cow<'b, bool>, __noRet>> {
                 let b1: &__Vec<Var<'a, 'b, T>> = (*x).borrow();
                 let b2: &__Vec<Var<'a, 'b, T>> = (*y).borrow();
                 if b1.0.len() == b2.0.len() {
                     for (x, y) in b1.0.iter().zip(b2.0.iter()) {
-                        if *__PartialEq::ne(__ref(x), __ref(y))? {
-                            return Ok(Cow::Owned(false));
+                        if *__PartialEq::ne(__ref(x), __ref(y))?.0 {
+                            return __Ret::ok(Cow::owned(false), __noRet {});
                         }
                     }
-                    Ok(Cow::Owned(true))
+                    __Ret::ok(Cow::Owned(true), __noRet {})
                 } else {
-                    Ok(Cow::owned(false))
+                    __Ret::ok(Cow::owned(false), __noRet {})
                 }
             }
         }

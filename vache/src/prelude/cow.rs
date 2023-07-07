@@ -210,6 +210,15 @@ pub fn cow() -> TokenStream {
                     Cow::Uninit => unreachable!(),
                 }
             }
+
+            pub fn try_into_owned(self) -> Result<B, Self> {
+                match self {
+                    Cow::Borrowed(_) => Err(self),
+                    Cow::MutBorrowed(_) => Err(self),
+                    Cow::Owned(owned) => Ok(owned),
+                    Cow::Uninit => unreachable!(),
+                }
+            }
         }
     )
 }

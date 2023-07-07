@@ -63,27 +63,18 @@ impl<'ctx> Loans<'ctx> {
     /// Returns an error if the insertion cannot be done in any way. In that
     /// case, it returns the mutable borrow that contradicts the new borrow.
     pub fn insert(&mut self, borrow: Borrow<'ctx>) -> Result<BorrowSet<'ctx>, Borrow<'ctx>> {
-        match (borrow.mutable, &mut *self) {
-            (true, Loans::None) => {
-                *self = Loans::Mut(borrow);
-                Ok(Set::new())
-            }
-            (false, Loans::None) => {
+        match &mut *self {
+            Loans::None => {
                 let mut set = Set::new();
                 set.insert(borrow);
                 *self = Loans::Immut(set);
                 Ok(Set::new())
             }
-            (false, Loans::Immut(borrows)) => {
+            Loans::Immut(borrows) => {
                 borrows.insert(borrow);
                 Ok(Set::new())
             }
-            (_, Loans::Mut(mut_borrow)) => Err(*mut_borrow),
-            (true, Loans::Immut(borrows)) => {
-                let borrows = std::mem::take(borrows);
-                *self = Loans::Mut(borrow);
-                Ok(borrows.iter().copied().collect())
-            }
+            Loans::Mut(mut_borrow) => Err(*mut_borrow),
         }
     }
 

@@ -67,10 +67,9 @@ pub enum InstrKind<'mir, 'ctx> {
 }
 
 impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
-    /// Returns variables mutated by this instruction.
-    pub fn mutated_places<'a>(&'a self) -> Box<dyn Iterator<Item = Place<'ctx>> + 'a> {
-        // Mutated places are either lhs references...
-        let obvious_lhs: Box<dyn Iterator<Item = _>> = match self {
+    /// Returns pointers mutated by this instruction.
+    pub fn mutated_ptrs<'a>(&'a self) -> Box<dyn Iterator<Item = Pointer<'ctx>> + 'a> {
+        match self {
             InstrKind::Noop | InstrKind::Branch(..) | InstrKind::Return(_) => {
                 boxed(std::iter::empty())
             }
@@ -80,24 +79,21 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
                 args,
             } => {
                 let lhs: Box<dyn Iterator<Item = _>> = if let Some(lhs) = lhs {
-                    boxed(std::iter::once(*lhs.place()))
+                    boxed(std::iter::once(lhs.as_ptr()))
                 } else {
                     boxed(std::iter::empty())
                 };
-                boxed(lhs.chain(args.iter().flat_map(Arg::mutated_place)))
+                boxed(lhs.chain(args.iter().flat_map(Arg::mutated_ptr)))
             }
             InstrKind::Assign(lhs, rval) => {
-                boxed([*lhs.place()].into_iter().chain(rval.mut_vars()))
+                boxed([lhs.as_ptr()].into_iter().chain(rval.mut_vars_ptrs()))
             }
-        };
+        }
+    }
 
-        // ...or mutably borrowed rhs references
-        let rhs_refs = self
-            .references()
-            .filter(|r| r.mode().is_mutable())
-            .map(|r| *r.place());
-
-        boxed(obvious_lhs.chain(rhs_refs))
+    /// Returns variables mutated by this instruction.
+    pub fn mutated_places<'a>(&'a self) -> Box<dyn Iterator<Item = Place<'ctx>> + 'a> {
+        boxed(self.mutated_ptrs().map(|r| *r.place()))
     }
 
     /// Returns mutable borrows into the references of this [`InstrKind`].
@@ -130,7 +126,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
                 name: _,
                 args,
                 destination: _,
-            } => boxed(args.iter().flat_map(|arg| arg.references())),
+            } => boxed(args.iter().flat_map(Arg::references)),
         }
     }
 
@@ -151,6 +147,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
             "Could not find {to_find:?} to clone in {self:?} ({:?} possible entries)",
             els.len()
         );
+
         els[0].set_mode(Mode::Cloned);
     }
 }

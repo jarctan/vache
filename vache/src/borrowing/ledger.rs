@@ -45,37 +45,19 @@ impl<'ctx> Ledger<'ctx> {
     ) -> Vec<Borrow<'ctx>> {
         let span = reference.as_ptr().span;
         match reference.mode() {
-            mode @ (Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed | Mode::SMutBorrowed) => {
+            Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed | Mode::SMutBorrowed => {
                 // You clone their loans + the loan into the borrowed pointer
                 vec![Borrow {
                     ptr: reference.as_ptr(),
                     borrower,
                     label,
                     span,
-                    mutable: matches!(mode, Mode::MutBorrowed | Mode::SMutBorrowed),
                 }]
             }
             Mode::Moved => {
                 // All current loans will get invalidated
                 for loan in self.loans(*reference.loc()).collect::<Vec<_>>() {
-                    if loan.mutable {
-                        // Add the the unrecoverables. The contradiction is in the very borrow that
-                        // we are about to make
-                        self.unrecoverables.insert(
-                            loan,
-                            Borrow {
-                                ptr: reference.as_ptr(),
-                                borrower,
-                                label,
-                                span,
-                                mutable: true, /* Not really mutable (it's moved) but anyway,
-                                                * this should be for reporting only */
-                            },
-                        );
-                    } else {
-                        debug_assert!(!loan.mutable);
-                        self.invalidations.insert(loan);
-                    }
+                    self.invalidations.insert(loan);
                 }
 
                 // You take their place, so you take all their borrows!
@@ -87,7 +69,6 @@ impl<'ctx> Ledger<'ctx> {
                         borrower, // Note that we update the borrower
                         span: borrow.span,
                         ptr: borrow.ptr,
-                        mutable: borrow.mutable,
                     })
                     .collect();
 
@@ -154,12 +135,6 @@ impl<'ctx> Ledger<'ctx> {
                         .map(Loans::from)
                         .map(BorrowSet::from)
                         .unwrap_or_default();
-                    debug_assert!(
-                        removed_loans.iter().all(|borrow| !borrow.mutable),
-                        "Not all loans are immutable: {:?} when flushing loc {:?}",
-                        removed_loans,
-                        loc,
-                    );
                     /*if !removed_loans.is_empty() {
                         #[cfg(not(test))]
                         println!("Invalidated ici with {:?}", removed_loans);
@@ -270,21 +245,16 @@ impl<'ctx> Ledger<'ctx> {
                 match loans.insert(borrow) {
                     Ok(borrows) => {
                         for borrow in borrows {
-                            debug_assert!(!borrow.mutable);
                             /*#[cfg(not(test))]
                             println!("Invalidated flatten {:?}", borrow);*/
                             self.invalidations.insert(borrow);
                         }
                         retained.insert(borrow);
                     }
-                    Err(contradiction) => {
-                        if borrow.mutable {
-                            self.unrecoverables.insert(borrow, contradiction);
-                        } else {
-                            /*#[cfg(not(test))]
-                            println!("Invalidated flatten 2 {:?}", borrow);*/
-                            self.invalidations.insert(borrow);
-                        }
+                    Err(_contra) => {
+                        /*#[cfg(not(test))]
+                        println!("Invalidated flatten 2 {:?}", borrow);*/
+                        self.invalidations.insert(borrow);
                     }
                 }
             }
@@ -320,16 +290,11 @@ impl<'ctx> Ledger<'ctx> {
         {
             Ok(borrows) => {
                 for borrow in borrows {
-                    debug_assert!(!borrow.mutable);
                     self.invalidations.insert(borrow);
                 }
             }
-            Err(contradiction) => {
-                if borrow.mutable {
-                    self.unrecoverables.insert(borrow, contradiction);
-                } else {
-                    self.invalidations.insert(borrow);
-                }
+            Err(_contra) => {
+                self.invalidations.insert(borrow);
             }
         }
 
@@ -366,22 +331,17 @@ impl<'ctx> Ledger<'ctx> {
                         println!("Mutable borrow {borrow:?} invalidates {borrows:?}");*/
                     }
                     for borrow in borrows {
-                        debug_assert!(!borrow.mutable);
                         /*#[cfg(not(test))]
                         println!("Invalidated flatten 3 {:?}", borrow);*/
                         self.invalidations.insert(borrow);
                     }
                 }
-                Err(contradiction) => {
-                    if borrow.mutable {
-                        self.unrecoverables.insert(borrow, contradiction);
-                    } else {
-                        /*#[cfg(not(test))]
-                        println!("Invalidated there");
-                        #[cfg(not(test))]
-                        println!("Invalidated flatten 4 {:?}", borrow);*/
-                        self.invalidations.insert(borrow);
-                    }
+                Err(_contra) => {
+                    /*#[cfg(not(test))]
+                    println!("Invalidated there");
+                    #[cfg(not(test))]
+                    println!("Invalidated flatten 4 {:?}", borrow);*/
+                    self.invalidations.insert(borrow);
                 }
             }
         }

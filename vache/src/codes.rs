@@ -43,5 +43,7 @@ pub const TYPE_INFER_ERROR: &str = "E0019";
 pub const BAD_SIGNATURE: &str = "E0020";
 /// Wrong reference mode error.
 pub const WRONG_REF_MODE_ERROR: &str = "E0021";
+/// `expr;` where expr computes to an unused non-unit value
+pub const UNUSED_RESULT: &str = "E0022";
 /// Temporary: empty match error.
 pub const EMPTY_MATCH_ERROR: &str = "E0101";

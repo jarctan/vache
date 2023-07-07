@@ -102,8 +102,12 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     }
 
     /// Compiles a left-hand side place.
-    fn visit_lhs_place(&mut self, place: LhsPlace<'ctx>) -> TokenStream {
-        match place.kind {
+    fn visit_lhs_place(
+        &mut self,
+        place: &LhsPlace<'ctx>,
+        f_ret_struct: &syn::Ident,
+    ) -> TokenStream {
+        match &place.kind {
             VarP(var) => {
                 let var = self.visit_var(var);
                 let ty = Self::translate_type(&place.ty, false, true);
@@ -116,8 +120,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let (line, col) = index.span.line_col(self.ctx.files);
                 let filename = self.ctx.files.name();
                 let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
-                let array = self.visit_expr(array, false);
-                let index = self.visit_expr(index, false);
+                let array = self.visit_expr(array, false, f_ret_struct);
+                let index = self.visit_expr(index, false, f_ret_struct);
                 let index = quote!((#index).to_usize().unwrap());
                 match place.mode {
                     LhsMode::Assigning => quote!(**(#array).get_mut(#index).context(#codespan)?),
@@ -125,7 +129,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             }
             FieldP(box strukt, field) => {
-                let strukt = self.visit_expr(strukt, false);
+                let strukt = self.visit_expr(strukt, false, f_ret_struct);
                 let field = format_ident!("{}", field);
                 match place.mode {
                     LhsMode::Assigning => quote!(*(#strukt).#field),
@@ -133,8 +137,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             }
             ElemP(box tuple, elem) => {
-                let tuple = self.visit_expr(tuple, false);
-                let elem = syn::Index::from(elem);
+                let tuple = self.visit_expr(tuple, false, f_ret_struct);
+                let elem = syn::Index::from(*elem);
                 match place.mode {
                     LhsMode::Assigning => quote!(*(#tuple).#elem),
                     LhsMode::Declaring => unreachable!(),
@@ -144,8 +148,13 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     }
 
     /// Compiles a place.
-    fn visit_place(&mut self, place: Place<'ctx>, wrap_var: bool) -> TokenStream {
-        match place.kind {
+    fn visit_place(
+        &mut self,
+        place: &Place<'ctx>,
+        wrap_var: bool,
+        f_ret_struct: &syn::Ident,
+    ) -> TokenStream {
+        match &place.kind {
             VarP(var) => {
                 let var = self.visit_var(var);
                 match place.mode {
@@ -185,8 +194,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let (line, col) = index.span.line_col(self.ctx.files);
                 let filename = self.ctx.files.name();
                 let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
-                let array = self.visit_expr(array, false);
-                let index = self.visit_expr(index, false);
+                let array = self.visit_expr(array, false, f_ret_struct);
+                let index = self.visit_expr(index, false, f_ret_struct);
                 let index = quote!((#index).to_usize().unwrap());
                 match place.mode {
                     Mode::Borrowed => {
@@ -224,7 +233,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             }
             FieldP(box strukt, field) => {
-                let strukt = self.visit_expr(strukt, false);
+                let strukt = self.visit_expr(strukt, false, f_ret_struct);
                 let field = format_ident!("{}", field);
                 match place.mode {
                     Mode::Borrowed => {
@@ -260,8 +269,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             }
             ElemP(box tuple, elem) => {
-                let tuple = self.visit_expr(tuple, false);
-                let elem = syn::Index::from(elem);
+                let tuple = self.visit_expr(tuple, false, f_ret_struct);
+                let elem = syn::Index::from(*elem);
                 match place.mode {
                     Mode::Borrowed => {
                         if wrap_var {
@@ -411,9 +420,14 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     }
 
     /// Compiles a expression.
-    fn visit_expr(&mut self, expr: Expr<'ctx>, wrap_var: bool) -> TokenStream {
+    fn visit_expr(
+        &mut self,
+        expr: &Expr<'ctx>,
+        wrap_var: bool,
+        f_ret_struct: &syn::Ident,
+    ) -> TokenStream {
         let wrapper = if wrap_var { quote!(Var) } else { quote!(Cow) };
-        match expr.kind {
+        match &expr.kind {
             UnitE => quote!(()),
             BoolE(b) => quote!(#wrapper::owned(#b)),
             IntegerE(i) => {
@@ -425,12 +439,12 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             StringE(s) => {
                 quote!(#wrapper::owned(__String::from(#s)))
             }
-            PlaceE(p) => self.visit_place(p, wrap_var),
+            PlaceE(p) => self.visit_place(p, wrap_var, f_ret_struct),
             StructE { name, fields } => {
                 let name = format_ident!("{name}");
-                let fields = fields.into_iter().map(|(name, expr)| {
+                let fields = fields.iter().map(|(name, expr)| {
                     let name = format_ident!("{name}");
-                    let expr = self.visit_expr(expr, true);
+                    let expr = self.visit_expr(expr, true, f_ret_struct);
                     quote!(#name: #expr)
                 });
                 quote!(#wrapper::owned(#name {
@@ -438,11 +452,15 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }))
             }
             ArrayE(array) => {
-                let items = array.into_iter().map(|item| self.visit_expr(item, true));
+                let items = array
+                    .iter()
+                    .map(|item| self.visit_expr(item, true, f_ret_struct));
                 quote!(#wrapper::owned(__Vec(vec![#(#items),*])))
             }
             TupleE(items) => {
-                let items = items.into_iter().map(|item| self.visit_expr(item, true));
+                let items = items
+                    .iter()
+                    .map(|item| self.visit_expr(item, true, f_ret_struct));
                 quote!(#wrapper::owned((#(#items),*)))
             }
             CallE { name, args } => {
@@ -458,17 +476,32 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         builder.append(" {}");
                     }
 
-                    let args = args.into_iter().map(|arg| self.visit_arg(arg, true));
+                    let args = args
+                        .iter()
+                        .map(|arg| self.visit_arg(arg, true, f_ret_struct));
                     let fmt_str = builder.string().unwrap();
                     quote!(println!(#fmt_str, #(#args),*))
                 } else {
-                    let args = args.into_iter().map(|arg| self.visit_arg(arg, true));
+                    // Get the final automatic bindings
+                    let bindings = args
+                        .iter()
+                        .flat_map(|arg| arg.as_binding())
+                        .map(|(_, to)| {
+                            let place = self.visit_lhs_place(to, f_ret_struct);
+                            quote!(#place = __res.1.a.unwrap();)
+                        })
+                        .collect::<Vec<_>>();
+
+                    // Tokenize the arguments and the real name of the function
+                    let args = args
+                        .iter()
+                        .map(|arg| self.visit_arg(arg, true, f_ret_struct));
                     let name = match name.name {
-                        "+" => quote!(__add),
-                        "-" => quote!(__sub),
-                        "*" => quote!(__mul),
-                        "/" => quote!(__div),
-                        "%" => quote!(__rem),
+                        "+" => quote!(__Add::add),
+                        "-" => quote!(__Sub::sub),
+                        "*" => quote!(__Mul::mul),
+                        "/" => quote!(__Div::div),
+                        "%" => quote!(__Rem::rem),
                         "<" => quote!(__lt),
                         ">" => quote!(__gt),
                         "<=" => quote!(__le),
@@ -486,11 +519,18 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         }
                     };
 
-                    if wrap_var {
-                        quote!(Var::Owned(#name(#(#args),*)?))
+                    // If needed, wrap in a `final_res`
+                    let final_res = if wrap_var {
+                        quote!(Var::Owned(__res.0))
                     } else {
-                        quote!(#name(#(#args),*)?)
-                    }
+                        quote!(__res.0)
+                    };
+
+                    quote!({
+                        let __res = #name(#(#args),*)?;
+                        #(#bindings)*
+                        #final_res
+                    })
                 }
             }
             VariantE {
@@ -505,24 +545,26 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 if args.is_empty() {
                     quote!(#wrapper::owned(#enun::#variant))
                 } else {
-                    let args = args.into_iter().map(|arg| self.visit_expr(arg, true));
+                    let args = args
+                        .iter()
+                        .map(|arg| self.visit_expr(arg, true, f_ret_struct));
                     quote!(#wrapper::owned(#enun::#variant(#(#args),*)))
                 }
             }
             IfE(box cond, box iftrue, box iffalse) => {
-                let cond = self.visit_expr(cond, false);
-                let iftrue = self.visit_block(iftrue, wrap_var);
-                let iffalse = self.visit_block(iffalse, wrap_var);
+                let cond = self.visit_expr(cond, false, f_ret_struct);
+                let iftrue = self.visit_block(iftrue, wrap_var, f_ret_struct);
+                let iffalse = self.visit_block(iffalse, wrap_var, f_ret_struct);
 
                 quote! {
                     if *(#cond) #iftrue else #iffalse
                 }
             }
             MatchE(box matched, branches) => {
-                let matched = self.visit_expr(matched, false);
-                let branches = branches.into_iter().map(|(pattern, branch)| {
+                let matched = self.visit_expr(matched, false, f_ret_struct);
+                let branches = branches.iter().map(|(pattern, branch)| {
                     let pattern = self.visit_pattern(pattern);
-                    let branch = self.visit_expr(branch, wrap_var);
+                    let branch = self.visit_expr(branch, wrap_var, f_ret_struct);
                     quote!(| #pattern => #branch)
                 });
 
@@ -533,31 +575,36 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     }
                 }
             }
-            BlockE(box block) => self.visit_block(block, wrap_var),
+            BlockE(box block) => self.visit_block(block, wrap_var, f_ret_struct),
             HoleE => {
                 panic!("Cannot compile code with holes; your code probably even did not typecheck")
             }
             RangeE(box start, box end) => {
-                let start = self.visit_expr(start, true);
-                let end = self.visit_expr(end, true);
+                let start = self.visit_expr(start, true, f_ret_struct);
+                let end = self.visit_expr(end, true, f_ret_struct);
                 quote!(#wrapper::owned(__Range::new(#start,#end)))
             }
         }
     }
 
     /// Compiles a function argument.
-    fn visit_arg(&mut self, arg: Arg<'ctx>, wrap_var: bool) -> TokenStream {
-        match arg.kind {
-            ArgKind::Standard(arg) => self.visit_expr(arg, wrap_var),
-            ArgKind::InPlace(place) => self.visit_place(place, wrap_var),
-            ArgKind::Binding(_, _) => todo!(),
+    fn visit_arg(
+        &mut self,
+        arg: &Arg<'ctx>,
+        wrap_var: bool,
+        f_ret_struct: &syn::Ident,
+    ) -> TokenStream {
+        match &arg.kind {
+            ArgKind::Standard(arg) => self.visit_expr(arg, wrap_var, f_ret_struct),
+            ArgKind::InPlace(place) => self.visit_place(place, wrap_var, f_ret_struct),
+            ArgKind::Binding(arg, _) => self.visit_expr(arg, wrap_var, f_ret_struct),
         }
     }
 
     /// Compiles a pattern.
     #[allow(clippy::only_used_in_recursion)]
-    fn visit_pattern(&mut self, pat: Pat<'ctx>) -> TokenStream {
-        match pat.kind {
+    fn visit_pattern(&mut self, pat: &Pat<'ctx>) -> TokenStream {
+        match &pat.kind {
             BoolM(b) => quote!(#b),
             IntegerM(i) => {
                 let i = i
@@ -577,19 +624,20 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             } => {
                 let enun = format_ident!("{enun}");
                 let variant = format_ident!("{variant}");
-                let args = args.into_iter().map(|arg| self.visit_pattern(arg));
+                let args = args.iter().map(|arg| self.visit_pattern(arg));
                 quote!(#enun::#variant(#(#args)*))
             }
         }
     }
 
     /// Compiles a single statement.
-    fn visit_stmt(&mut self, stmt: Stmt<'ctx>) -> TokenStream {
-        match stmt.kind {
+    fn visit_stmt(&mut self, stmt: &Stmt<'ctx>, f_ret_struct: &syn::Ident) -> TokenStream {
+        match &stmt.kind {
             AssignS(lhs, rhs) => {
                 let lhs_mode = lhs.mode;
-                let rhs = self.visit_expr(rhs, matches!(lhs_mode, LhsMode::Declaring));
-                let lhs = self.visit_lhs_place(lhs);
+                let rhs =
+                    self.visit_expr(rhs, matches!(lhs_mode, LhsMode::Declaring), f_ret_struct);
+                let lhs = self.visit_lhs_place(lhs, f_ret_struct);
 
                 // For fields, add a `Field` wrapper
                 quote! {
@@ -597,14 +645,14 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             }
             ExprS(expr) => {
-                let expr = self.visit_expr(expr, false);
+                let expr = self.visit_expr(expr, false, f_ret_struct);
                 quote! {
                     #expr;
                 }
             }
             WhileS { cond, body } => {
-                let cond = self.visit_expr(cond, false);
-                let body = self.visit_block(body, false);
+                let cond = self.visit_expr(cond, false, f_ret_struct);
+                let body = self.visit_block(body, false, f_ret_struct);
                 quote! {
                     while *#cond #body
                 }
@@ -612,8 +660,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
 
             ForS { item, iter, body } => {
                 let item = format_ident!("{}", item.name().as_str());
-                let iter = self.visit_expr(iter, false);
-                let body = self.visit_block(body, false);
+                let iter = self.visit_expr(iter, false, f_ret_struct);
+                let body = self.visit_block(body, false, f_ret_struct);
                 quote! {
                     for #item in #iter #body
                 }
@@ -622,23 +670,28 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             BreakS => quote!(break;),
             ContinueS => quote!(continue;),
             ReturnS(ret) => {
-                let ret = self.visit_expr(ret, false);
-                quote!(return Ok(#ret);)
+                let ret = self.visit_expr(ret, false, f_ret_struct);
+                quote!(return __Ret::ok(#ret, #f_ret_struct { });)
             }
         }
     }
 
     /// Compiles a block.
-    fn visit_block(&mut self, block: Block<'ctx>, wrap_var: bool) -> TokenStream {
+    fn visit_block(
+        &mut self,
+        block: &Block<'ctx>,
+        wrap_var: bool,
+        f_ret_struct: &syn::Ident,
+    ) -> TokenStream {
         let stmts: Vec<_> = block
             .stmts
-            .into_iter()
-            .map(|stmt| self.visit_stmt(stmt))
+            .iter()
+            .map(|stmt| self.visit_stmt(stmt, f_ret_struct))
             .collect();
         let ret = if let ExprKind::UnitE = block.ret.kind {
             default()
         } else {
-            self.visit_expr(block.ret, wrap_var)
+            self.visit_expr(&block.ret, wrap_var, f_ret_struct)
         };
         quote! {
             {
@@ -660,9 +713,10 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             TyVar::Gen(..) => unreachable!(),
         });
 
+        // Tokenize all the parameters
         let params: Vec<TokenStream> = f
             .params
-            .into_iter()
+            .iter()
             .map(|param| {
                 let name = format_ident!("{}", param.name().as_str());
                 let ty = Self::translate_type(&param.ty(), true, true);
@@ -672,30 +726,64 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             })
             .collect();
 
+        // Tokenize the user-facing return type of the function
         let ret_ty = match f.ret_ty.kind {
-            UnitT => quote!(::anyhow::Result<()>),
-            ty => {
-                let ty = Self::translate_type(&ty, true, false); // DO NOT add a `Var` on the return type!!
-                quote!(::anyhow::Result<#ty>)
+            UnitT => quote!(()),
+            ty => Self::translate_type(&ty, true, false), // DO NOT add a `Var` on the return type!!
+        };
+
+        // Get the list of in-place parameters
+        let ret_params: Vec<_> = f.params.iter().filter(|param| param.byref).collect();
+        // Their type
+        let ret_params_ty: Vec<_> = ret_params
+            .iter()
+            .map(|param| Self::translate_type(&param.ty(), true, false))
+            .collect();
+        // Their name
+        let ret_vars: Vec<_> = ret_params
+            .iter()
+            .map(|param| format_ident!("{}", param.name().as_str()))
+            .collect();
+
+        // Create a tailored structure to hold the result of the in-place parameters
+        let ret_struct_name = format_ident!("__{name}Ret");
+        let ret_struct_full_name = if ret_vars.is_empty() {
+            quote!(#ret_struct_name)
+        } else {
+            quote!(#ret_struct_name<'b>)
+        };
+        let ret_struct_fields = ret_vars
+            .iter()
+            .zip(ret_params_ty.iter())
+            .map(|(name, ty)| quote!(#name: Option<#ty>));
+        let ret_struct = quote! {
+            pub struct #ret_struct_full_name {
+                #(#ret_struct_fields),*
             }
         };
 
-        let body = self.visit_block(f.body, false);
+        // Thanks to that struct, we now know what the full return type of the function
+        // is
+        let full_ret_ty = quote!(__Result<__Ret<#ret_ty, #ret_struct_full_name>>);
 
+        // And we can also construct the return expression of the body
+        let body = self.visit_block(&f.body, false, &ret_struct_name);
         let body = quote! {{
-            let res: #ret_ty = try {
+            let __res: __Result<#ret_ty> = try {
                 #body
             };
-            res
+            __Ret::ok(__res?, #ret_struct_name { #(#ret_vars: #ret_vars.try_to_cow().ok()),* })
         }};
 
         if params.is_empty() {
             quote! {
-                pub fn #name(#(#params),*) -> #ret_ty #body
+                #ret_struct
+                pub fn #name<#(#ty_params),*>(#(#params),*) -> #full_ret_ty #body
             }
         } else {
             quote! {
-                pub fn #name<#(#ty_params,)* 'a, 'b>(#(#params),*) -> #ret_ty #body
+                #ret_struct
+                pub fn #name<#(#ty_params,)* 'a, 'b>(#(#params),*) -> #full_ret_ty #body
             }
         }
     }

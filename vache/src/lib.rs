@@ -243,11 +243,14 @@ mod steps {
         let name = name.borrow();
         cargo(compile(ctx, p)?, name, dest_dir)?;
 
-        println!("--------------------------------");
         // Cargo run on the file
+        print!("Running the program...");
+        std::io::stdout().flush()?;
+        let start = ::std::time::Instant::now();
         let run_cmd = Command::new(format!("./{name}"))
             .current_dir(dest_dir)
             .output()?;
+        println!("\rRan the program in [{:?}]", start.elapsed());
 
         if run_cmd.status.success() {
             Ok(String::from_utf8(run_cmd.stdout).unwrap())

@@ -88,10 +88,15 @@ impl<'mir, 'ctx> RValue<'mir, 'ctx> {
     }
 
     /// Returns mutable variables inside this [`RValue`].
-    pub fn mut_vars<'a>(&'a self) -> impl Iterator<Item = Place<'ctx>> + 'a {
+    pub fn mut_vars_ptrs<'a>(&'a self) -> impl Iterator<Item = Pointer<'ctx>> + 'a {
         self.references()
             .filter(|r| r.mode().is_mutable())
-            .map(|r| *r.place())
+            .map(Reference::as_ptr)
+    }
+
+    /// Returns the places of mutable variables inside this [`RValue`].
+    pub fn mut_vars_places<'a>(&'a self) -> impl Iterator<Item = Place<'ctx>> + 'a {
+        self.mut_vars_ptrs().map(|r| *r.place())
     }
 }
 

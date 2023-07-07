@@ -33,43 +33,143 @@ pub fn integer() -> TokenStream {
             }
         }
 
-        impl ::std::ops::Sub for __Integer {
+        impl __Sub<__Integer> for __Integer {
             type Output = Self;
 
-            fn sub(self, other: Self) -> Self {
-                Self(self.0 - other.0)
+            fn sub<'a, 'b>(
+                x: Var<'a, 'b, Self>,
+                y: Var<'a, 'b, Self>,
+            ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
+                match (Var::try_into_owned(x),Var::try_into_owned(y))  {
+                    (Ok(x), Ok(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(x.0 - y.0)),
+                        __noRet {},
+                    ),
+                    (Ok(x), Err(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(x.0 - &y.0)),
+                        __noRet {},
+                    ),
+                    (Err(x), Ok(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(&x.0 - y.0)),
+                        __noRet {},
+                    ),
+                    (Err(x), Err(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(&x.0 - &y.0)),
+                        __noRet {},
+                    ),
+                }
             }
         }
 
-        impl ::std::ops::Add for __Integer {
+        impl __Add<__Integer> for __Integer {
             type Output = Self;
 
-            fn add(self, other: Self) -> Self {
-                Self(self.0 + other.0)
+            fn add<'a, 'b>(
+                x: Var<'a, 'b, Self>,
+                y: Var<'a, 'b, Self>,
+            ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
+                match (Var::try_into_owned(x),Var::try_into_owned(y))  {
+                    (Ok(x), Ok(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(x.0 + y.0)),
+                        __noRet {},
+                    ),
+                    (Ok(x), Err(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(x.0 + &y.0)),
+                        __noRet {},
+                    ),
+                    (Err(x), Ok(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(&x.0 + y.0)),
+                        __noRet {},
+                    ),
+                    (Err(x), Err(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(&x.0 + &y.0)),
+                        __noRet {},
+                    ),
+                }
             }
         }
 
-        impl ::std::ops::Mul for __Integer {
+        impl __Mul<__Integer> for __Integer {
             type Output = Self;
 
-            fn mul(self, other: Self) -> Self {
-                Self(self.0 * other.0)
+            fn mul<'a, 'b>(
+                x: Var<'a, 'b, Self>,
+                y: Var<'a, 'b, Self>,
+            ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
+                match (Var::try_into_owned(x),Var::try_into_owned(y))  {
+                    (Ok(x), Ok(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(x.0 * y.0)),
+                        __noRet {},
+                    ),
+                    (Ok(x), Err(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(x.0 * &y.0)),
+                        __noRet {},
+                    ),
+                    (Err(x), Ok(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(&x.0 * y.0)),
+                        __noRet {},
+                    ),
+                    (Err(x), Err(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(&x.0 * &y.0)),
+                        __noRet {},
+                    ),
+                }
             }
         }
 
-        impl ::std::ops::Div for __Integer {
+        impl __Div<__Integer> for __Integer {
             type Output = Self;
 
-            fn div(self, other: Self) -> Self {
-                Self(self.0 / other.0)
+            fn div<'a, 'b>(
+                x: Var<'a, 'b, Self>,
+                y: Var<'a, 'b, Self>,
+            ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
+                match (Var::try_into_owned(x),Var::try_into_owned(y))  {
+                    (Ok(x), Ok(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(x.0 / y.0)),
+                        __noRet {},
+                    ),
+                    (Ok(x), Err(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(x.0 / &y.0)),
+                        __noRet {},
+                    ),
+                    (Err(x), Ok(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(&x.0 / y.0)),
+                        __noRet {},
+                    ),
+                    (Err(x), Err(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(&x.0 / &y.0)),
+                        __noRet {},
+                    ),
+                }
             }
         }
 
-        impl ::std::ops::Rem for __Integer {
+        impl __Rem<__Integer> for __Integer {
             type Output = Self;
 
-            fn rem(self, other: Self) -> Self {
-                Self(self.0 % other.0)
+            fn rem<'a, 'b>(
+                x: Var<'a, 'b, Self>,
+                y: Var<'a, 'b, Self>,
+            ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
+                match (Var::try_into_owned(x),Var::try_into_owned(y))  {
+                    (Ok(x), Ok(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(x.0 % y.0)),
+                        __noRet {},
+                    ),
+                    (Ok(x), Err(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(x.0 % &y.0)),
+                        __noRet {},
+                    ),
+                    (Err(x), Ok(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(&x.0 % y.0)),
+                        __noRet {},
+                    ),
+                    (Err(x), Err(y)) => __Ret::ok(
+                        Cow::Owned(__Integer(&x.0 % &y.0)),
+                        __noRet {},
+                    ),
+                }
             }
         }
 

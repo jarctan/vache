@@ -538,7 +538,6 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ) in args.into_iter().zip(params.iter()).enumerate()
             {
                 let arg_ty = arg.ty();
-                let span = arg.span;
                 match arg.into_standard() {
                     Ok(arg) => {
                         if !arg_ty.unify(param_ty, &mut self.subst) {
@@ -550,7 +549,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                             param_ty.subst(self.ctx.arena, &self.subst),
                                             arg_ty.subst(self.ctx.arena, &self.subst)
                                         ))
-                                        .with_labels(vec![span.as_label()])
+                                        .with_labels(vec![arg.span.as_label()])
                                         .with_notes(vec![format!(
                                             "{} is the expected type for argument #{} of `{}`",
                                             param_ty.subst(self.ctx.arena, &self.subst),
@@ -629,7 +628,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 param_ty.subst(self.ctx.arena, &self.subst),
                                 arg_ty.subst(self.ctx.arena, &self.subst)
                             ))
-                            .with_labels(vec![span.as_label()])
+                            .with_labels(vec![arg.span.as_label()])
                             .with_notes(vec![format!(
                                 "{} is the expected type for argument #{} of `{}`",
                                 param_ty.subst(self.ctx.arena, &self.subst),
@@ -714,7 +713,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 args: old_args,
             } => {
                 let mut args = vec![];
-                for (i, arg) in old_args.into_iter().enumerate() {
+                for arg in old_args.into_iter() {
                     let arg = match arg.kind {
                         ast::ArgKind::Standard(e) => Arg::std(self.visit_expr(e, ret_ty, in_loop)),
                         ast::ArgKind::InPlace(place) => {
@@ -724,21 +723,34 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 ret_ty,
                                 in_loop,
                             ) {
-                                Some(place) => Arg::in_place(place),
+                                Some(place) => Arg::in_place(place, arg.span),
                                 None => return Expr::hole(span),
                             }
                         }
-                        ast::ArgKind::Binding(_, _) => {
-                            self.ctx.emit(
-                                Diagnostic::error()
-                                    .with_code(WRONG_REF_MODE_ERROR)
-                                    .with_message(format!("`@` referencing mode is not allowed for argument #{i} to {name}"))
-                                    .with_labels(vec![arg.span.as_label()])
-                                    .with_notes(vec![
-                                        "help: remove the `@` operator".to_string()
-                                    ]),
-                            );
-                            return Expr::hole(span);
+                        ast::ArgKind::Binding(from, to) => {
+                            let from = self.visit_expr(from, ret_ty, in_loop);
+                            let to = match self.visit_lhs_place(to, ret_ty, in_loop) {
+                                Some(place) => place,
+                                None => return Expr::hole(span),
+                            };
+                            if from.ty != to.ty {
+                                self.ctx.emit(
+                                    Diagnostic::error()
+                                        .with_code(TYPE_MISMATCH_ERROR)
+                                        .with_message("both operands of the `@` binding operator should have the same type")
+                                        .with_labels(vec![from.span.as_label().with_message(format!(
+                                            "has type {}",
+                                            from.ty.subst(self.ctx.arena, &self.subst)
+                                        ))])
+                                        .with_labels(vec![to.span.as_label().with_message(format!(
+                                            "has type {}",
+                                            to.ty.subst(self.ctx.arena, &self.subst)
+                                        ))]),
+                                );
+                                return Expr::hole(span);
+                            }
+
+                            Arg::binding(from, to, span)
                         }
                     };
                     args.push(arg);
@@ -1192,7 +1204,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     // Pop the intermediate scope
                     self.pop_scope().expect("should be able to pop scope here");
 
-                    if body.ret.ty != UnitT {
+                    if !body.ret.ty.unify(&UnitT, &mut self.subst) {
                         self.ctx.emit(
                             Diagnostic::error()
                                 .with_code(TYPE_MISMATCH_ERROR)
@@ -1203,7 +1215,23 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     ForS { item, iter, body }.with_span(s.span)
                 }
                 ast::StmtKind::ExprS(e) => {
-                    ExprS(self.visit_expr(e, ret_ty, in_loop)).with_span(s.span)
+                    let e = self.visit_expr(e, ret_ty, in_loop);
+                    // Try to unify the expression with the unit type, which prevents some
+                    // unnecessary `could not infer type` at this stage if the
+                    // expression fails to compile
+                    // Moreover, we may be interested in emitting a warning if the result is
+                    // not an expression, since it should be used
+                    if !e.ty.unify(&UnitT, &mut self.subst) {
+                        self.ctx.emit(
+                            Diagnostic::warning()
+                                .with_code(UNUSED_RESULT)
+                                .with_message(
+                                    "this expression computes to a value that is not used",
+                                )
+                                .with_labels(vec![e.span.as_label().with_message("here")]),
+                        );
+                    }
+                    ExprS(e).with_span(s.span)
                 }
                 ast::StmtKind::BreakS => {
                     if !in_loop {

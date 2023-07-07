@@ -110,9 +110,8 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
         match &arg.kind {
             ArgKind::Standard(e) => self.visit_expr(e),
             ArgKind::InPlace(p) => self.visit_place(p),
-            ArgKind::Binding(e, p) => {
+            ArgKind::Binding(e, _) => {
                 self.visit_expr(e);
-                self.visit_place(p);
             }
         }
     }

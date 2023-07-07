@@ -1,10 +1,10 @@
 fn fibo(i: int) -> int {
     if i == 0 {
-        1
+        0
     } else if i == 1 {
         1
     } else {
-        var n1: int = 1;
+        var n1: int = 0;
         var n2: int = 1;
         i = i - 1;
         while i > 0 {
@@ -23,10 +23,10 @@ fn main() {
     print(fibo(11));
 }
 ################################
+0
 1
 1
-2
-144
+89
 ################################
 11:18:Moved // reassign n2
 12:18:Cloned // clone because we reassign to n2 afterward (in the next iteration of the loop)

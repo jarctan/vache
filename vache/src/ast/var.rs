@@ -39,6 +39,12 @@ impl<'ctx> From<VarUse<'ctx>> for Varname<'ctx> {
     }
 }
 
+impl<'a, 'ctx> From<&'a Varname<'ctx>> for Varname<'ctx> {
+    fn from(var: &'a Varname<'ctx>) -> Self {
+        *var
+    }
+}
+
 /// A variable in the code.
 #[derive(Clone, Copy, Default)]
 pub struct VarUse<'ctx> {
@@ -169,12 +175,6 @@ impl<'ctx> From<&'ctx str> for Varname<'ctx> {
 
 impl<'a, 'ctx> From<&'a VarUse<'ctx>> for VarUse<'ctx> {
     fn from(var: &'a VarUse<'ctx>) -> Self {
-        *var
-    }
-}
-
-impl<'a, 'ctx> From<&'a Varname<'ctx>> for Varname<'ctx> {
-    fn from(var: &'a Varname<'ctx>) -> Self {
         *var
     }
 }

@@ -1,6 +1,6 @@
 fn fibo(i: int) -> int {
     if i == 0 {
-        1
+        0
     } else if i == 1 {
         1
     } else {
@@ -15,10 +15,10 @@ fn main() {
     print(fibo(11));
 }
 ################################
+0
 1
 1
-2
-144
+89
 ################################
 7:14:Cloned // we need i for the second call to fibo
 7:28:Moved

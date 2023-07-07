@@ -48,7 +48,7 @@ impl<'ctx> Pointer<'ctx> {
 
 impl fmt::Debug for Pointer<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "点{}@{:?}", self.id, self.place)
+        write!(f, "点{}|{:?}", self.id, self.place)
     }
 }
 

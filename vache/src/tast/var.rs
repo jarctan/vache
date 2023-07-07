@@ -112,6 +112,12 @@ impl<'ctx> From<crate::ast::VarUse<'ctx>> for VarUse<'ctx> {
     }
 }
 
+impl<'a, 'ctx> From<&'a VarUse<'ctx>> for Varname<'ctx> {
+    fn from(val: &'a VarUse<'ctx>) -> Self {
+        val.name
+    }
+}
+
 /// A variable definition, with stratum and type information.
 #[derive(Clone, Copy, PartialEq)]
 pub struct VarDef<'ctx> {

@@ -71,6 +71,13 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Arg<'ctx> {
                 let p = ctx.parse(consume!(pairs));
                 ArgKind::InPlace(p)
             }
+            Rule::binding_arg => {
+                let mut pairs = pair.into_inner();
+                let e = ctx.parse(consume!(pairs));
+                consume!(pairs, Rule::as_mut);
+                let p = ctx.parse(consume!(pairs));
+                ArgKind::Binding(e, p)
+            }
             rule => panic!("parser internal error: expected an argument, found {rule:?}"),
         };
         Arg { kind, span }

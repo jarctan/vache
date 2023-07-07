@@ -48,8 +48,23 @@ impl<'mir, 'ctx: 'mir> Reference<'mir, 'ctx> {
     /// # Panics
     /// No-op if the reference is not tied to any associated mode in the AST.
     pub fn set_mode(&mut self, new_mode: Mode) {
+        // If we are cloning, check that is a mode that can be cloned.
+        debug_assert!(new_mode != Mode::Cloned || self.can_be_cloned(), "borrow checker internal error: this reference cannot be changed to `Cloned` since its previous mode is incompatible with `Cloned`");
+
         if let Some(mode) = &mut self.mode {
             **mode = new_mode;
+        }
+    }
+
+    /// Can the mode of this reference be changed to [`Mode::Cloned`].
+    pub fn can_be_cloned(&self) -> bool {
+        if let Some(mode) = &self.mode {
+            match **mode {
+                Mode::Borrowed | Mode::Cloned | Mode::Moved => true,
+                Mode::SBorrowed | Mode::SMutBorrowed | Mode::MutBorrowed => false,
+            }
+        } else {
+            false
         }
     }
 
