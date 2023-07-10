@@ -31,8 +31,8 @@ pub fn functions() -> TokenStream {
                 x: Var<'a, 'b, B>,
                 y: Var<'a, 'b, B>,
             ) -> __Result<__Ret<Cow<'b, bool>, __noRet>> {
-                let b1: &B = x.borrow();
-                let b2: &B = y.borrow();
+                let b1: &B = &*x;
+                let b2: &B = &*y;
                 __Ret::ok(Cow::Owned(b1 == b2), __noRet {})
             }
 
@@ -40,8 +40,8 @@ pub fn functions() -> TokenStream {
                 x: Var<'a, 'b, B>,
                 y: Var<'a, 'b, B>,
             ) -> __Result<__Ret<Cow<'b, bool>, __noRet>> {
-                let b1: &B = x.borrow();
-                let b2: &B = y.borrow();
+                let b1: &B = &*x;
+                let b2: &B = &*y;
                 __Ret::ok(Cow::Owned(b1 != b2), __noRet {})
             }
         }
@@ -111,8 +111,8 @@ pub fn functions() -> TokenStream {
             x: Var<'a, 'b, B>,
             y: Var<'a, 'b, B>,
         ) -> __Result<__Ret<Cow<'b, bool>, ____leRet>> {
-            let b1: &B = x.borrow();
-            let b2: &B = y.borrow();
+            let b1: &B = &*x;
+            let b2: &B = &*y;
             __Ret::ok(Cow::Owned(b1 >= b2), ____leRet {})
         }
 
@@ -121,8 +121,8 @@ pub fn functions() -> TokenStream {
             x: Var<'a, 'b, B>,
             y: Var<'a, 'b, B>,
         ) -> __Result<__Ret<Cow<'b, bool>, ____ltRet>> {
-            let b1: &B = x.borrow();
-            let b2: &B = y.borrow();
+            let b1: &B = &*x;
+            let b2: &B = &*y;
             __Ret::ok(Cow::Owned(b1 < b2), ____ltRet {})
         }
 
@@ -131,8 +131,8 @@ pub fn functions() -> TokenStream {
             x: Var<'a, 'b, B>,
             y: Var<'a, 'b, B>,
         ) -> __Result<__Ret<Cow<'b, bool>, ____geRet>> {
-            let b1: &B = x.borrow();
-            let b2: &B = y.borrow();
+            let b1: &B = &*x;
+            let b2: &B = &*y;
             __Ret::ok(Cow::Owned(b1 >= b2), ____geRet {})
         }
 
@@ -141,8 +141,8 @@ pub fn functions() -> TokenStream {
             x: Var<'a, 'b, B>,
             y: Var<'a, 'b, B>,
         ) -> __Result<__Ret<Cow<'b, bool>, ____gtRet>> {
-            let b1: &B = x.borrow();
-            let b2: &B = y.borrow();
+            let b1: &B = &*x;
+            let b2: &B = &*y;
             __Ret::ok(Cow::Owned(b1 > b2), ____gtRet {})
         }
 

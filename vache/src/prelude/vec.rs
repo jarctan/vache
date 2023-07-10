@@ -47,10 +47,10 @@ pub fn vec() -> TokenStream {
                 write!(f, "[")?;
                 let mut iter = self.0.iter();
                 if let Some(i) = iter.next() {
-                    write!(f, "{}", i);
+                    write!(f, "{}", i)?;
                 }
                 for i in iter {
-                    write!(f, ", {}", i);
+                    write!(f, ", {}", i)?;
                 }
                 write!(f, "]")
             }
