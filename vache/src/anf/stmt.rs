@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use super::{Arg, Block, Branch, LhsRef, Namespaced, Pointer, Reference, Span};
+use super::{Arg, Block, Branch, LhsRef, Namespaced, Reference, Span};
 use crate::mir::RValue;
 
 /// A statement.

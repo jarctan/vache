@@ -38,6 +38,8 @@
         "linearization",
         "mirer",
         "monoidal",
+        "multiset",
+        "Multisets",
         "nbang",
         "peasy",
         "Peekable",

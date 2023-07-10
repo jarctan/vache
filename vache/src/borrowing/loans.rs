@@ -9,7 +9,7 @@
 use std::iter::Sum;
 use std::ops::Add;
 
-use super::{Borrow, BorrowSet};
+use super::{Borrow, BorrowCnt, BorrowSet};
 use crate::utils::boxed;
 use crate::utils::set::Set;
 
@@ -92,12 +92,12 @@ impl<'ctx> Loans<'ctx> {
     /// # Panics
     /// Panics if adding those loans breaks the law of loans.
     #[must_use = "Add these loans to your immutable invalidations"]
-    pub fn extend<I>(&mut self, iter: I) -> BorrowSet<'ctx>
+    pub fn extend<I>(&mut self, iter: I) -> BorrowCnt<'ctx>
     where
         I: IntoIterator<Item = Borrow<'ctx>>,
     {
         // Collect the set of invalidation
-        let mut set = Set::new();
+        let mut set = BorrowCnt::default();
         for borrow in iter {
             // If we have immutable invalidations, we add them
             let borrows = self

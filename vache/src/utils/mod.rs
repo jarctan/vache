@@ -5,7 +5,10 @@ use std::collections::HashMap;
 use std::hash::Hash;
 
 pub mod arena;
+pub mod multiset;
 pub mod set;
+
+pub use multiset::*;
 
 /// Checks if the keys match a list (more precisely, an iterator) of keys.
 ///

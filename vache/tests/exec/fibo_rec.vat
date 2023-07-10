@@ -20,5 +20,5 @@ fn main() {
 1
 89
 ################################
-7:14:7:15:Cloned // we need i for the second call to fibo
-7:28:7:29:Moved
+7:14:7:15:Borrowed // we need i for the second call to fibo
+7:28:7:29:Borrowed // we could think the second `i` could be moved, but in fact not because we do not know if the first `i` in `i - 1` is still live or not (in fact it is not, but it would be in the case of `i - 0`)

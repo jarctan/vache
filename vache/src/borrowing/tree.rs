@@ -12,7 +12,7 @@ use std::ops::Sub;
 
 use Loc::*;
 
-use super::{Borrow, BorrowSet, Borrows, Loans};
+use super::{Borrow, BorrowCnt, BorrowSet, Borrows, Loans};
 use crate::mir::Loc;
 use crate::utils::boxed;
 
@@ -338,8 +338,8 @@ impl<'ctx> LocTree<'ctx, Loans<'ctx>> {
 
     /// Concatenates `self` and `other`.
     #[must_use = "Add these loans to your immutable invalidations"]
-    pub fn append(&mut self, other: Self) -> BorrowSet<'ctx> {
-        let mut set = BorrowSet::new();
+    pub fn append(&mut self, other: Self) -> BorrowCnt<'ctx> {
+        let mut set = BorrowCnt::default();
         for (var, other_tree) in other.0 {
             match self.0.entry(var) {
                 hash_map::Entry::Occupied(mut entry) => {
@@ -368,11 +368,11 @@ impl<'ctx> LocTreeNode<'ctx, Loans<'ctx>> {
 
     /// Concatenates `self` and `other`.
     #[must_use = "Add these loans to your immutable invalidations"]
-    fn append(&mut self, other: Self) -> BorrowSet<'ctx> {
+    fn append(&mut self, other: Self) -> BorrowCnt<'ctx> {
         match (&mut self.kind, other.kind) {
             (AtomL(s), AtomL(o)) => s.extend(o.iter().copied()),
             (CompoundL(s), CompoundL(o)) => {
-                let mut set = BorrowSet::new();
+                let mut set = BorrowCnt::default();
                 for (k, v) in o {
                     set.extend(
                         s.entry(k)
@@ -407,10 +407,10 @@ impl<'ctx> From<LocTreeNode<'ctx, Borrows<'ctx>>> for Borrows<'ctx> {
     }
 }
 
-impl<'ctx> From<LocTreeNode<'ctx, Loans<'ctx>>> for Loans<'ctx> {
+impl<'ctx> From<LocTreeNode<'ctx, Loans<'ctx>>> for BorrowCnt<'ctx> {
     fn from(value: LocTreeNode<'ctx, Loans<'ctx>>) -> Self {
         match value.kind {
-            AtomL(set) => set,
+            AtomL(set) => BorrowCnt::from(BorrowSet::from(set)),
             CompoundL(map) => map.into_values().map(|v| v.into()).sum(),
         }
     }

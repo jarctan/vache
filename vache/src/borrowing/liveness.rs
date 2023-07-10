@@ -2,15 +2,15 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use super::borrow::{BorrowSet, Borrows};
+use super::borrow::{Borrows, Loan};
 use super::flow::Flow;
+use super::ledger::Ledger;
 use super::tree::LocTree;
-use crate::borrowing::borrow::Borrow;
-use crate::borrowing::ledger::Ledger;
 use crate::codes::BORROW_ERROR;
 use crate::mir::{Cfg, CfgI, CfgLabel, Loc, Mode, Stratum, Varname};
 use crate::reporter::{Diagnostic, Diagnostics, Reporter};
 use crate::utils::set::Set;
+use crate::utils::MultiSet;
 
 /// Variable liveness analysis.
 ///
@@ -165,113 +165,155 @@ pub fn liveness<'mir, 'ctx>(
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
     reporter: &mut Reporter<'ctx>,
 ) -> Result<CfgI<'mir, 'ctx>, Diagnostics<'ctx>> {
-    // Compute the var analysis first
-    let var_flow = var_liveness(&cfg, entry_l);
+    let cfg_flow_label_order = cfg
+        .postorder(entry_l)
+        .rev()
+        .map(|(label, _)| label)
+        .collect::<Vec<_>>();
 
-    // Loop until there is no change in moves.
-    let loan_flow = loop {
-        // Now, compute loan analysis
-        let loan_flow = loan_liveness(&cfg, entry_l, &var_flow, strata);
+    loop {
+        // Compute the var analysis first
+        let var_flow = var_liveness(&cfg, entry_l);
 
-        let mut updated = false;
-        // Check last variable use and replace with a move
-        for (label, instr) in cfg.bfs_mut(entry_l, false) {
-            let var_outs = &var_flow[&label].outs;
+        // Loop until there is no change in moves.
+        let loan_flow = loop {
+            // Now, compute loan analysis
+            let loan_flow = loan_liveness(&cfg, entry_l, &var_flow, strata);
 
-            // Get all the references of that instruction.
-            let references: Vec<_> = instr.references_mut().collect();
+            let mut updated = false;
+            // Check last variable use and replace with a move
+            for (label, instr) in cfg.bfs_mut(entry_l, false) {
+                let var_outs = &var_flow[&label].outs;
+                let borrows_in = &loan_flow[&label].ins;
 
-            // Get, for each reference, the set of locations that are used by any reference
-            // after that one within the same instruction
-            // For example, for `print(a, a)`, we will see that we cannot move the first
-            // `a`, since it is used by a reference after that first `a`
-            // To do that, we compute the set of locations that cannot be moved for each
-            // reference in our `references`.
-            let mut cannot_move: VecDeque<_> = VecDeque::from([Set::new()]);
-            for r in references.iter().rev() {
-                let el = cannot_move.back().unwrap().clone() + r.loc();
-                cannot_move.push_front(el);
-            }
-            cannot_move.pop_front();
-            debug_assert!(cannot_move.len() == references.len());
+                // Get all the references of that instruction.
+                let references: Vec<_> = instr.references_mut().collect();
 
-            for (i, reference) in references.into_iter().enumerate() {
-                match reference.mode() {
-                    Mode::Borrowed | Mode::MutBorrowed | Mode::SMutBorrowed | Mode::SBorrowed => {
-                        let loc = reference.loc();
-                        if !var_outs.contains(loc) && !cannot_move[i].contains(loc) {
-                            updated = true;
-                            reference.set_mode(Mode::Moved);
+                // Get, for each reference, the set of locations that are used by any reference
+                // after that one within the same instruction
+                // For example, for `print(a, a)`, we will see that we cannot move the first
+                // `a`, since it is used by a reference after that first `a`
+                // To do that, we compute the set of locations that cannot be moved for each
+                // reference in our `references`.
+                let mut cannot_move: VecDeque<_> = VecDeque::from([Set::new()]);
+                for r in references.iter().rev() {
+                    let el = cannot_move.back().unwrap().clone() + r.loc();
+                    cannot_move.push_front(el);
+                }
+                cannot_move.pop_front();
+                debug_assert!(cannot_move.len() == references.len());
+
+                for (i, reference) in references.into_iter().enumerate() {
+                    match reference.mode() {
+                        Mode::Borrowed
+                        | Mode::MutBorrowed
+                        | Mode::SMutBorrowed
+                        | Mode::SBorrowed => {
+                            let loc = reference.loc();
+                            if !var_outs.contains(loc) && !cannot_move[i].contains(loc) {
+                                // Move only if we have no more borrows into ourselves (except the
+                                // one we're about to free)
+                                // Otherwise don't, since this move would trigger
+                                // invalidations/clones
+                                // for all these borrows
+                                let loans = borrows_in
+                                    .loans(*reference.loc())
+                                    .filter(|b| b.ptr.id != reference.id)
+                                    .collect::<Vec<_>>();
+                                if loans.len() == 0 {
+                                    updated = true;
+                                    reference.set_mode(Mode::Moved);
+                                } else {
+                                    println!(
+                                        "Could not move {loc:?}§{label:?} because of {:?}",
+                                        loans
+                                    );
+                                }
+                            }
                         }
+                        Mode::Cloned => (), /* We clone, there's a reason fot that. So you can't */
+                        // move
+                        Mode::Moved => (), // already moved
                     }
-                    Mode::Cloned => (), // We clone, there's a reason fot that. So you can't move
-                    Mode::Moved => (),  // already moved
+                }
+            }
+
+            if !updated {
+                break loan_flow;
+            }
+        };
+
+        // Now, collect all invalidations.
+        let mut invalidated = MultiSet::new();
+
+        // List all borrows that are invalidated by mutation of the variable afterwards.
+        for (label, instr) in cfg.bfs(entry_l, false) {
+            for lhs in instr.mutated_places() {
+                for borrow in loan_flow[&label].ins.loans(lhs.root()) {
+                    invalidated.insert(borrow.into());
                 }
             }
         }
 
-        if !updated {
-            break loan_flow;
-        }
-    };
+        // Extend with the invalidations of the ledger. Take them at exit_l to have them
+        // all
+        invalidated.extend(loan_flow[&exit_l].outs.invalidations());
 
-    // Now, collect all invalidations.
-    let mut invalidated = BorrowSet::new();
+        println!("Invalidations: {:?}", invalidated);
+        match cfg_flow_label_order
+            .iter()
+            .filter_map(|&label| {
+                invalidated
+                    .most_represented()
+                    .copied()
+                    .find(|b| b.label == label)
+            })
+            .next()
+        {
+            Some(borrow @ Loan { label, ptr, .. }) => {
+                println!("Invalidated: {borrow:?}");
+                /*#[cfg(not(test))]
+                println!("Invalidation: {:?}", borrow);*/
+                cfg[&label].force_clone(&ptr);
+            }
+            None => {
+                // If we have no invalidated anymore, we reach a stable state and we can return.
 
-    // List all borrows that are invalidated by mutation of the variable afterwards.
-    for (label, instr) in cfg.bfs(entry_l, false) {
-        for lhs in instr.mutated_places() {
-            for borrow in loan_flow[&label].ins.loans(lhs.root()) {
-                invalidated.insert(borrow);
+                // If there are some unrecoverables loan issues in the final ledger, emit the
+                // corresponding warnings.
+                if let Some(unrecoverables) = loan_flow[&exit_l].outs.unrecoverables() {
+                    for (&borrow, &contradiction) in unrecoverables {
+                        reporter.emit(
+                            Diagnostic::error()
+                                .with_code(BORROW_ERROR)
+                                .with_message(format!(
+                                    "cannot use `{}` mutably here",
+                                    borrow.borrowed_loc(),
+                                ))
+                                .with_labels(vec![
+                                    borrow.span.as_label().with_message(
+                                        "second mutable use but L0 is still active"
+                                    ),
+                                    contradiction.span.as_secondary_label().with_message(
+                                        "first mutable use L0"
+                                    ),
+                                ])
+                                .with_notes(vec![
+                                    "remember: there cannot be two simultaneously active mutable uses at any line".to_string(),
+                                    "help: consider removing one of the two mutable uses".to_string(),
+                                    format!(
+                                        "Debug information: {:?} {:?} {:?}",
+                                        borrow.label, borrow.borrower, borrow.ptr
+                                    ),
+                                ]),
+                        );
+                    }
+                }
+                //cfg.print_image("cfg").unwrap();
+                break Ok(cfg);
             }
         }
     }
-
-    // Extend with the invalidations of the ledger. Take them at exit_l to have them
-    // all
-    invalidated.extend(loan_flow[&exit_l].outs.invalidations());
-
-    // If there are some unrecoverables loan issues in the final ledger, emit the
-    // corresponding warnings.
-    if let Some(unrecoverables) = loan_flow[&exit_l].outs.unrecoverables() {
-        for (&borrow, &contradiction) in unrecoverables {
-            reporter.emit(
-                Diagnostic::error()
-                    .with_code(BORROW_ERROR)
-                    .with_message(format!(
-                        "cannot use `{}` mutably here",
-                        borrow.borrowed_loc(),
-                    ))
-                    .with_labels(vec![
-                        borrow.span.as_label().with_message(
-                            "second mutable use but L0 is still active"
-                        ),
-                        contradiction.span.as_secondary_label().with_message(
-                            "first mutable use L0"
-                        ),
-                    ])
-                    .with_notes(vec![
-                        "remember: there cannot be two simultaneously active mutable uses at any line".to_string(),
-                        "help: consider removing one of the two mutable uses".to_string(),
-                        format!(
-                            "Debug information: {:?} {:?} {:?}",
-                            borrow.label, borrow.borrower, borrow.ptr
-                        ),
-                    ]),
-            );
-        }
-    }
-
-    // Transform all invalidated borrows into clones
-    for Borrow { label, ptr, .. } in invalidated {
-        /*#[cfg(not(test))]
-        println!("Invalidation: {:?}", borrow);*/
-        cfg[&label].force_clone(&ptr);
-    }
-
-    //cfg.print_image("cfg").unwrap();
-
-    Ok(cfg)
 }
 
 #[cfg(test)]

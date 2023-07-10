@@ -4,13 +4,41 @@ use std::fmt;
 
 use crate::mir::{CfgLabel, Loc, Place, Pointer, Span};
 use crate::utils::set::Set;
+use crate::utils::MultiSet;
+
+/// A loan: a variable that has been borrowed.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Loan<'ctx> {
+    /// Label at which the loan was made.
+    pub label: CfgLabel,
+    /// Span at which the loan was made.
+    pub span: Span,
+    /// Borrowed location. NOT the borrower.
+    pub ptr: Pointer<'ctx>,
+}
+
+impl<'ctx> From<Borrow<'ctx>> for Loan<'ctx> {
+    fn from(borrow: Borrow<'ctx>) -> Self {
+        Self {
+            label: borrow.label,
+            span: borrow.span,
+            ptr: borrow.ptr,
+        }
+    }
+}
+
+impl fmt::Debug for Loan<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}{:?}", self.ptr, self.label)
+    }
+}
 
 /// A borrow: a variable that has been borrowed.
 ///
-/// Knowing label + var make each borrow unique.
+/// A borrow also contains the name of the borrower.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Borrow<'ctx> {
-    /// Label in which the borrow was made.
+    /// Label at which the borrow was made.
     pub label: CfgLabel,
     /// Span at which the borrow was made.
     pub span: Span,
@@ -75,3 +103,9 @@ impl Default for Borrows<'_> {
 
 /// Set of borrowed variables.
 pub type BorrowSet<'ctx> = Set<Borrow<'ctx>>;
+
+/// Multiset of borrowed variables.
+pub type BorrowCnt<'ctx> = MultiSet<Borrow<'ctx>>;
+
+/// Multiset of borrowed loans.
+pub type LoanCnt<'ctx> = MultiSet<Loan<'ctx>>;
