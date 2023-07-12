@@ -478,9 +478,10 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         builder.append(" {}");
                     }
 
-                    let args = args
-                        .iter()
-                        .map(|arg| self.visit_arg(arg, Wrapper::Var, f_ret_struct));
+                    let args = args.iter().map(|arg| {
+                        // Note: All arguments for print are `pass-by-value` (Cow)
+                        self.visit_arg(arg, Wrapper::Cow, f_ret_struct)
+                    });
                     let fmt_str = builder.string().unwrap();
                     quote!(println!(#fmt_str, #(#args),*))
                 } else {
@@ -495,9 +496,15 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         .collect::<Vec<_>>();
 
                     // Tokenize the arguments and the real name of the function
-                    let args = args
-                        .iter()
-                        .map(|arg| self.visit_arg(arg, Wrapper::Var, f_ret_struct));
+                    let args = args.iter().map(|arg| {
+                        // `Var` for pass-by-reference, `Cow` for pass-by-value
+                        let wrapper = if arg.byref() {
+                            Wrapper::Var
+                        } else {
+                            Wrapper::Cow
+                        };
+                        self.visit_arg(arg, wrapper, f_ret_struct)
+                    });
                     let name = match name.name {
                         "+" => quote!(__Add::add),
                         "-" => quote!(__Sub::sub),
@@ -724,7 +731,12 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             .iter()
             .map(|param| {
                 let name = format_ident!("{}", param.name().as_str());
-                let ty = Self::translate_type(&param.ty(), &[&a, &b], Wrapper::Var);
+                // `Var` for pass-by-reference, `Cow` for pass-by-value
+                let ty = if param.byref {
+                    Self::translate_type(&param.ty(), &[&a, &b], Wrapper::Var)
+                } else {
+                    Self::translate_type(&param.ty(), &[&b], Wrapper::Cow)
+                };
                 quote! {
                     mut #name: #ty
                 }

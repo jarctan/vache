@@ -7,6 +7,7 @@ pub fn lints() -> TokenStream {
     quote!(
         #![feature(try_blocks)]
         #![feature(step_trait)]
+        #![feature(const_mut_refs)]
 
         #![allow(clippy::needless_late_init)]
         #![allow(unused_mut)]

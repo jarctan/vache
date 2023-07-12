@@ -13,33 +13,27 @@ pub fn functions() -> TokenStream {
         where
             Self: Clone,
         {
-            fn eq<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn eq<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, bool>, __noRet>>;
-            fn ne<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn ne<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, bool>, __noRet>> {
                 let is_eq = __PartialEq::eq(x, y)?.0;
-                __Ret::ok(__not(Var::Owned(is_eq))?.0, __noRet {})
+                __Ret::ok(__not(is_eq)?.0, __noRet {})
             }
         }
 
         impl<B: ::std::cmp::PartialEq + Clone> __PartialEq<B> for B {
-            fn eq<'a, 'b>(
-                x: Var<'a, 'b, B>,
-                y: Var<'a, 'b, B>,
-            ) -> __Result<__Ret<Cow<'b, bool>, __noRet>> {
+            fn eq<'b>(x: Cow<'b, B>, y: Cow<'b, B>) -> __Result<__Ret<Cow<'b, bool>, __noRet>> {
                 let b1: &B = &*x;
                 let b2: &B = &*y;
                 __Ret::ok(Cow::Owned(b1 == b2), __noRet {})
             }
 
-            fn ne<'a, 'b>(
-                x: Var<'a, 'b, B>,
-                y: Var<'a, 'b, B>,
-            ) -> __Result<__Ret<Cow<'b, bool>, __noRet>> {
+            fn ne<'b>(x: Cow<'b, B>, y: Cow<'b, B>) -> __Result<__Ret<Cow<'b, bool>, __noRet>> {
                 let b1: &B = &*x;
                 let b2: &B = &*y;
                 __Ret::ok(Cow::Owned(b1 != b2), __noRet {})
@@ -52,9 +46,9 @@ pub fn functions() -> TokenStream {
         {
             type Output: ::std::clone::Clone;
 
-            fn add<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn add<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, Self::Output>, __noRet>>;
         }
 
@@ -64,9 +58,9 @@ pub fn functions() -> TokenStream {
         {
             type Output: ::std::clone::Clone;
 
-            fn sub<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn sub<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, Self::Output>, __noRet>>;
         }
 
@@ -76,9 +70,9 @@ pub fn functions() -> TokenStream {
         {
             type Output: ::std::clone::Clone;
 
-            fn div<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn div<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, Self::Output>, __noRet>>;
         }
 
@@ -88,9 +82,9 @@ pub fn functions() -> TokenStream {
         {
             type Output: ::std::clone::Clone;
 
-            fn mul<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn mul<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, Self::Output>, __noRet>>;
         }
 
@@ -100,16 +94,16 @@ pub fn functions() -> TokenStream {
         {
             type Output: ::std::clone::Clone;
 
-            fn rem<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn rem<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, Self::Output>, __noRet>>;
         }
 
         struct ____leRet {}
-        pub(crate) fn __le<'a, 'b, B: PartialOrd + Clone>(
-            x: Var<'a, 'b, B>,
-            y: Var<'a, 'b, B>,
+        pub(crate) fn __le<'b, B: PartialOrd + Clone>(
+            x: Cow<'b, B>,
+            y: Cow<'b, B>,
         ) -> __Result<__Ret<Cow<'b, bool>, ____leRet>> {
             let b1: &B = &*x;
             let b2: &B = &*y;
@@ -117,9 +111,9 @@ pub fn functions() -> TokenStream {
         }
 
         struct ____ltRet {}
-        pub(crate) fn __lt<'a, 'b, B: PartialOrd + Clone>(
-            x: Var<'a, 'b, B>,
-            y: Var<'a, 'b, B>,
+        pub(crate) fn __lt<'b, B: PartialOrd + Clone>(
+            x: Cow<'b, B>,
+            y: Cow<'b, B>,
         ) -> __Result<__Ret<Cow<'b, bool>, ____ltRet>> {
             let b1: &B = &*x;
             let b2: &B = &*y;
@@ -128,8 +122,8 @@ pub fn functions() -> TokenStream {
 
         struct ____geRet {}
         pub(crate) fn __ge<'a, 'b, B: PartialOrd + Clone>(
-            x: Var<'a, 'b, B>,
-            y: Var<'a, 'b, B>,
+            x: Cow<'b, B>,
+            y: Cow<'b, B>,
         ) -> __Result<__Ret<Cow<'b, bool>, ____geRet>> {
             let b1: &B = &*x;
             let b2: &B = &*y;
@@ -138,8 +132,8 @@ pub fn functions() -> TokenStream {
 
         struct ____gtRet {}
         pub(crate) fn __gt<'a, 'b, B: PartialOrd + Clone>(
-            x: Var<'a, 'b, B>,
-            y: Var<'a, 'b, B>,
+            x: Cow<'b, B>,
+            y: Cow<'b, B>,
         ) -> __Result<__Ret<Cow<'b, bool>, ____gtRet>> {
             let b1: &B = &*x;
             let b2: &B = &*y;
@@ -147,31 +141,31 @@ pub fn functions() -> TokenStream {
         }
 
         pub(crate) fn __or<'a, 'b>(
-            x: Var<'a, 'b, bool>,
-            y: Var<'a, 'b, bool>,
+            x: Cow<'b, bool>,
+            y: Cow<'b, bool>,
         ) -> __Result<__Ret<Cow<'b, bool>, ____gtRet>> {
-            __Ret::ok(Cow::Owned(**x || **y), ____gtRet {})
+            __Ret::ok(Cow::Owned(*x || *y), ____gtRet {})
         }
 
         pub(crate) fn __and<'a, 'b>(
-            x: Var<'a, 'b, bool>,
-            y: Var<'a, 'b, bool>,
+            x: Cow<'b, bool>,
+            y: Cow<'b, bool>,
         ) -> __Result<__Ret<Cow<'b, bool>, ____gtRet>> {
-            __Ret::ok(Cow::Owned(**x && **y), ____gtRet {})
+            __Ret::ok(Cow::Owned(*x && *y), ____gtRet {})
         }
 
         pub(crate) fn __not<'a, 'b, C: Clone, B: ::std::ops::Not<Output = C> + Clone>(
-            x: Var<'a, 'b, B>,
+            x: Cow<'b, B>,
         ) -> __Result<__Ret<Cow<'b, C>, __noRet>> {
-            let owned: B = Var::into_owned(x);
+            let owned: B = Cow::into_owned(x);
             let neg: C = !owned;
             __Ret::ok(Cow::Owned(neg), __noRet {})
         }
 
         pub(crate) fn __assert<'a, 'b>(
-            pred: Var<'a, 'b, bool>,
+            pred: Cow<'b, bool>,
         ) -> __Result<__Ret<Cow<'b, ()>, __noRet>> {
-            ::anyhow::ensure!(**pred, "Assertion failed");
+            ::anyhow::ensure!(*pred, "Assertion failed");
             __Ret::ok(Cow::Owned(()), __noRet {})
         }
     )

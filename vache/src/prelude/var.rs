@@ -45,6 +45,7 @@ pub fn var() -> TokenStream {
         impl<'a, 'b, B: Clone> ::std::ops::Deref for Var<'a, 'b, B> {
             type Target = Cow<'b, B>;
 
+            #[inline(always)]
             fn deref(&self) -> &Cow<'b, B> {
                 match self {
                     Var::Mut(borrowed) => borrowed,
@@ -53,6 +54,7 @@ pub fn var() -> TokenStream {
             }
         }
         impl<'a, 'b, B: Clone> ::std::ops::DerefMut for Var<'a, 'b, B> {
+            #[inline(always)]
             fn deref_mut(&mut self) -> &mut Cow<'b, B> {
                 match self {
                     Var::Mut(borrowed) => borrowed,
@@ -63,6 +65,7 @@ pub fn var() -> TokenStream {
         impl<'a, 'b, 'c, 'd, Rhs: Clone, T: ::std::cmp::PartialEq<Rhs> + Clone>
             ::std::cmp::PartialEq<Var<'a, 'b, Rhs>> for Var<'c, 'd, T>
         {
+            #[inline(always)]
             fn eq(&self, other: &Var<'a, 'b, Rhs>) -> bool {
                 <T as ::std::cmp::PartialEq<Rhs>>::eq(&**self, &**other)
             }
@@ -70,6 +73,7 @@ pub fn var() -> TokenStream {
         impl<'a, 'b, 'c, 'd, Rhs: Clone, T: ::std::cmp::PartialOrd<Rhs> + Clone>
             ::std::cmp::PartialOrd<Var<'a, 'b, Rhs>> for Var<'c, 'd, T>
         {
+            #[inline(always)]
             fn partial_cmp(&self, other: &Var<'a, 'b, Rhs>) -> Option<::std::cmp::Ordering> {
                 <T as ::std::cmp::PartialOrd<Rhs>>::partial_cmp(&**self, &**other)
             }
@@ -95,6 +99,7 @@ pub fn var() -> TokenStream {
         }
 
         impl<'a, 'b, B: Clone> Var<'a, 'b, B> {
+            #[inline(always)]
             pub fn try_into_owned(self) -> Result<B, Self> {
                 match self {
                     Var::Mut(_) => Err(self),
@@ -105,6 +110,7 @@ pub fn var() -> TokenStream {
                 }
             }
 
+            #[inline(always)]
             pub fn into_owned(self) -> B {
                 match self {
                     Var::Mut(borrowed) => Cow::into_owned(Cow::clone(borrowed)),
@@ -112,6 +118,7 @@ pub fn var() -> TokenStream {
                 }
             }
 
+            #[inline(always)]
             pub fn to_cow(self) -> Cow<'b, B> {
                 match self {
                     Var::Mut(borrowed) => Cow::clone(borrowed),
@@ -119,6 +126,7 @@ pub fn var() -> TokenStream {
                 }
             }
 
+            #[inline(always)]
             pub fn as_cow(&mut self) -> &mut Cow<'b, B> {
                 match self {
                     Var::Mut(borrowed) => borrowed,
@@ -126,6 +134,7 @@ pub fn var() -> TokenStream {
                 }
             }
 
+            #[inline(always)]
             pub fn try_to_cow(self) -> Result<Cow<'b, B>, Self> {
                 match self {
                     Var::Mut(_) => Err(self),
@@ -133,10 +142,12 @@ pub fn var() -> TokenStream {
                 }
             }
 
-            pub fn owned(b: B) -> Self {
+            #[inline(always)]
+            pub const fn owned(b: B) -> Self {
                 Var::Owned(Cow::Owned(b))
             }
 
+            #[inline(always)]
             pub fn take(&mut self) -> Self {
                 let taken = match self {
                     Var::Mut(borrowed) => Cow::take(borrowed),
@@ -145,10 +156,11 @@ pub fn var() -> TokenStream {
                 Var::Owned(taken)
             }
 
-            pub(crate) fn borrow_mut<'c>(&'c mut self) -> Var<'c, 'b, B>
+            #[inline(always)]
+            pub(crate) const fn borrow_mut<'c>(&'c mut self) -> Var<'c, 'b, B>
             where
-                'a: 'c,
-                'b: 'c,
+                'a: 'c, // The original mutation lifetime must outlive the new mutation lifetime.
+                'b: 'c, // The underlying value must outlive the mutation lifetime `'c`.
             {
                 match self {
                     Var::Mut(b) => Var::Mut(b),
@@ -156,7 +168,8 @@ pub fn var() -> TokenStream {
                 }
             }
 
-            pub(crate) fn borrow<'c>(&'c self) -> Var<'c, 'c, B>
+            #[inline(always)]
+            pub(crate) const fn borrow<'c>(&'c self) -> Var<'c, 'c, B>
             where
                 'a: 'c,
             {
@@ -176,7 +189,7 @@ pub fn var() -> TokenStream {
         {
             type Output = Var<'a, 'b, <B as ::std::ops::Not>::Output>;
 
-            // Required method
+            #[inline(always)]
             fn not(self) -> <Self as ::std::ops::Not>::Output {
                 let owned: B = Var::into_owned(self);
                 Var::owned(!owned)

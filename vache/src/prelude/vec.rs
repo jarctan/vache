@@ -45,7 +45,10 @@ pub fn vec() -> TokenStream {
                 mut array: Var<'c, 'd, Self>,
                 el: Cow<'b, T>,
             ) -> __Result<Cow<'e, ()>> {
-                (**array).0.push(el);
+                let inner = Cow::take(&mut array);
+                let mut owned = inner.into_owned();
+                owned.0.push(el);
+                *array = Cow::Owned(owned);
                 Ok(Cow::owned(()))
             }
         }
@@ -65,17 +68,15 @@ pub fn vec() -> TokenStream {
         }
 
         impl<'b, T: __PartialEq + ::std::clone::Clone> __PartialEq for __Vec<'b, T> {
-            fn eq<'c, 'd>(
-                x: Var<'c, 'd, __Vec<'b, T>>,
-                y: Var<'c, 'd, __Vec<'b, T>>,
-            ) -> __Result<__Ret<Cow<'b, bool>, __noRet>> {
-                let b1: &__Vec<'b, T> = &**x;
-                let b2: &__Vec<'b, T> = &**y;
+            fn eq<'d>(
+                x: Cow<'d, __Vec<'b, T>>,
+                y: Cow<'d, __Vec<'b, T>>,
+            ) -> __Result<__Ret<Cow<'d, bool>, __noRet>> {
+                let b1: &__Vec<'b, T> = &*x;
+                let b2: &__Vec<'b, T> = &*y;
                 if b1.0.len() == b2.0.len() {
                     for (x, y) in b1.0.iter().zip(b2.0.iter()) {
-                        if *__PartialEq::ne(Var::Owned(Cow::borrow(x)), Var::Owned(Cow::borrow(y)))?
-                            .0
-                        {
+                        if *__PartialEq::ne(Cow::borrow(x), Cow::borrow(y))?.0 {
                             return __Ret::ok(Cow::owned(false), __noRet {});
                         }
                     }

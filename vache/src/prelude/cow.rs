@@ -12,7 +12,6 @@ pub fn cow() -> TokenStream {
             B: 'a + Clone,
         {
             Borrowed(&'a B),
-            MutBorrowed(&'a mut B),
             Owned(B),
             #[default]
             Uninit,
@@ -25,7 +24,6 @@ pub fn cow() -> TokenStream {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 match *self {
                     Cow::Borrowed(ref b) => write!(f, "&{:?}", b),
-                    Cow::MutBorrowed(ref b) => write!(f, "&mut {:?}", b),
                     Cow::Owned(ref o) => write!(f, "{:?}", o),
                     Cow::Uninit => unreachable!(),
                 }
@@ -39,7 +37,6 @@ pub fn cow() -> TokenStream {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 match *self {
                     Cow::Borrowed(ref b) => ::std::fmt::Display::fmt(b, f),
-                    Cow::MutBorrowed(ref b) => ::std::fmt::Display::fmt(b, f),
                     Cow::Owned(ref o) => ::std::fmt::Display::fmt(o, f),
                     Cow::Uninit => unreachable!(),
                 }
@@ -47,13 +44,10 @@ pub fn cow() -> TokenStream {
         }
 
         impl<'a, B: 'a + Clone> Clone for Cow<'a, B> {
+            #[inline(always)]
             fn clone(&self) -> Self {
                 match self {
                     Cow::Borrowed(b) => Cow::Borrowed(b),
-                    Cow::MutBorrowed(b) => {
-                        let b: &B = &*b;
-                        Cow::Owned(b.to_owned())
-                    }
                     Cow::Owned(ref b) => {
                         let b: &B = &*b;
                         Cow::Owned(b.to_owned())
@@ -62,6 +56,7 @@ pub fn cow() -> TokenStream {
                 }
             }
 
+            #[inline(always)]
             fn clone_from(&mut self, source: &Self) {
                 match (self, source) {
                     (&mut Cow::Owned(ref mut dest), Cow::Owned(ref o)) => (&*o).clone_into(dest),
@@ -74,29 +69,11 @@ pub fn cow() -> TokenStream {
         impl<B: Clone> ::std::ops::Deref for Cow<'_, B> {
             type Target = B;
 
+            #[inline(always)]
             fn deref(&self) -> &B {
                 match self {
                     Cow::Borrowed(borrowed) => borrowed,
-                    Cow::MutBorrowed(borrowed) => borrowed,
                     Cow::Owned(ref owned) => &owned,
-                    Cow::Uninit => unreachable!(),
-                }
-            }
-        }
-
-        impl<B: Clone> ::std::ops::DerefMut for Cow<'_, B> {
-            fn deref_mut(&mut self) -> &mut B {
-                match self {
-                    Cow::Borrowed(borrowed) => {
-                        *self = Cow::Owned(borrowed.clone());
-                        match self {
-                            Cow::Owned(ref mut owned) => owned,
-                            Cow::Borrowed(..) | Cow::MutBorrowed(..) => unreachable!(),
-                            Cow::Uninit => unreachable!(),
-                        }
-                    }
-                    Cow::MutBorrowed(borrowed) => borrowed,
-                    Cow::Owned(ref mut owned) => owned,
                     Cow::Uninit => unreachable!(),
                 }
             }
@@ -105,6 +82,7 @@ pub fn cow() -> TokenStream {
         impl<'a, 'b, Rhs: Clone, T: ::std::cmp::PartialEq<Rhs> + Clone>
             ::std::cmp::PartialEq<Cow<'a, Rhs>> for Cow<'b, T>
         {
+            #[inline(always)]
             fn eq(&self, other: &Cow<'a, Rhs>) -> bool {
                 <T as ::std::cmp::PartialEq<Rhs>>::eq(&**self, &**other)
             }
@@ -113,6 +91,7 @@ pub fn cow() -> TokenStream {
         impl<'a, 'b, Rhs: Clone, T: ::std::cmp::PartialOrd<Rhs> + Clone>
             ::std::cmp::PartialOrd<Cow<'a, Rhs>> for Cow<'b, T>
         {
+            #[inline(always)]
             fn partial_cmp(&self, other: &Cow<'a, Rhs>) -> Option<::std::cmp::Ordering> {
                 <T as ::std::cmp::PartialOrd<Rhs>>::partial_cmp(&**self, &**other)
             }
@@ -139,10 +118,10 @@ pub fn cow() -> TokenStream {
         }
 
         impl<'a, 'b: 'a, B: Clone> Cow<'a, __Vec<'b, B>> {
+            #[inline(always)]
             pub fn remove(&mut self, index: usize) -> __Result<Cow<'b, B>> {
                 match ::std::mem::take(self) {
                     Cow::Borrowed(b) => Ok(b.get(index)?.clone()),
-                    Cow::MutBorrowed(array) => array.remove(index),
                     Cow::Owned(mut array) => array.consume(index),
                     Cow::Uninit => unreachable!(),
                 }
@@ -150,62 +129,44 @@ pub fn cow() -> TokenStream {
         }
 
         impl<'a, B: Clone> Cow<'a, B> {
-            pub fn take(&mut self) -> Self {
+            #[inline(always)]
+            pub(crate) fn take(&mut self) -> Self {
                 ::std::mem::take(self)
             }
 
-            pub fn owned(b: B) -> Self {
+            #[inline(always)]
+            pub(crate) const fn owned(b: B) -> Self {
                 Cow::Owned(b)
             }
 
-            pub fn as_cow(&mut self) -> &mut Self {
+            #[inline(always)]
+            pub(crate) const fn as_cow(&mut self) -> &mut Self {
                 self
             }
 
-            pub fn into_owned(self) -> B {
+            #[inline(always)]
+            pub(crate) fn into_owned(self) -> B {
                 match self {
-                    Cow::Borrowed(borrowed) => borrowed.clone(),
-                    Cow::MutBorrowed(borrowed) => (*borrowed).clone(),
+                    Cow::Borrowed(borrowed) => B::clone(borrowed),
                     Cow::Owned(owned) => owned,
                     Cow::Uninit => unreachable!(),
                 }
             }
 
-            pub fn try_into_owned(self) -> Result<B, Self> {
+            #[inline(always)]
+            pub(crate) fn try_into_owned(self) -> Result<B, Self> {
                 match self {
                     Cow::Borrowed(_) => Err(self),
-                    Cow::MutBorrowed(_) => Err(self),
                     Cow::Owned(owned) => Ok(owned),
                     Cow::Uninit => unreachable!(),
                 }
             }
 
-            pub(crate) fn borrow<'c>(&'c self) -> Cow<'c, B>
-            where
-                'a: 'c,
-            {
+            #[inline(always)]
+            pub(crate) const fn borrow<'c>(&'c self) -> Cow<'c, B> {
                 match self {
                     Cow::Borrowed(b) => Cow::Borrowed(b),
-                    Cow::MutBorrowed(b) => Cow::Borrowed(b),
-                    Cow::Owned(ref o) => {
-                        let b: &'c B = &*o;
-                        Cow::Borrowed(b)
-                    }
-                    Cow::Uninit => unreachable!(),
-                }
-            }
-
-            pub(crate) fn borrow_mut<'c>(&'c mut self) -> Cow<'c, B>
-            where
-                'a: 'c,
-            {
-                match self {
-                    Cow::Borrowed(b) => Cow::Borrowed(b),
-                    Cow::MutBorrowed(b) => Cow::MutBorrowed(b),
-                    Cow::Owned(ref mut o) => {
-                        let b: &'c mut B = &mut *o;
-                        Cow::MutBorrowed(b)
-                    }
+                    Cow::Owned(ref o) => Cow::Borrowed(o),
                     Cow::Uninit => unreachable!(),
                 }
             }

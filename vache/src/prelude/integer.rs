@@ -36,11 +36,11 @@ pub fn integer() -> TokenStream {
         impl __Sub<__Integer> for __Integer {
             type Output = Self;
 
-            fn sub<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn sub<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
-                match (Var::try_into_owned(x),Var::try_into_owned(y))  {
+                match (Cow::try_into_owned(x),Cow::try_into_owned(y))  {
                     (Ok(x), Ok(y)) => __Ret::ok(
                         Cow::Owned(__Integer(x.0 - y.0)),
                         __noRet {},
@@ -64,11 +64,11 @@ pub fn integer() -> TokenStream {
         impl __Add<__Integer> for __Integer {
             type Output = Self;
 
-            fn add<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn add<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
-                match (Var::try_into_owned(x),Var::try_into_owned(y))  {
+                match (Cow::try_into_owned(x),Cow::try_into_owned(y))  {
                     (Ok(x), Ok(y)) => __Ret::ok(
                         Cow::Owned(__Integer(x.0 + y.0)),
                         __noRet {},
@@ -92,11 +92,11 @@ pub fn integer() -> TokenStream {
         impl __Mul<__Integer> for __Integer {
             type Output = Self;
 
-            fn mul<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn mul<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
-                match (Var::try_into_owned(x),Var::try_into_owned(y))  {
+                match (Cow::try_into_owned(x),Cow::try_into_owned(y))  {
                     (Ok(x), Ok(y)) => __Ret::ok(
                         Cow::Owned(__Integer(x.0 * y.0)),
                         __noRet {},
@@ -120,11 +120,11 @@ pub fn integer() -> TokenStream {
         impl __Div<__Integer> for __Integer {
             type Output = Self;
 
-            fn div<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn div<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
-                match (Var::try_into_owned(x),Var::try_into_owned(y))  {
+                match (Cow::try_into_owned(x),Cow::try_into_owned(y))  {
                     (Ok(x), Ok(y)) => __Ret::ok(
                         Cow::Owned(__Integer(x.0 / y.0)),
                         __noRet {},
@@ -148,11 +148,11 @@ pub fn integer() -> TokenStream {
         impl __Rem<__Integer> for __Integer {
             type Output = Self;
 
-            fn rem<'a, 'b>(
-                x: Var<'a, 'b, Self>,
-                y: Var<'a, 'b, Self>,
+            fn rem<'b>(
+                x: Cow<'b, Self>,
+                y: Cow<'b, Self>,
             ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
-                match (Var::try_into_owned(x),Var::try_into_owned(y))  {
+                match (Cow::try_into_owned(x),Cow::try_into_owned(y))  {
                     (Ok(x), Ok(y)) => __Ret::ok(
                         Cow::Owned(__Integer(x.0 % y.0)),
                         __noRet {},
