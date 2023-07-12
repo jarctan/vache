@@ -313,7 +313,7 @@ impl<'ctx> Ledger<'ctx> {
     /// Sets the new `borrows` of `place`.
     ///
     /// Note: will filter borrows that are made into `place` itself.
-    pub fn set_borrow_set(&mut self, place: impl Into<Place<'ctx>>, mut borrows: BorrowSet<'ctx>) {
+    pub fn set_borrow_set(&mut self, place: impl Into<Place<'ctx>>, borrows: BorrowSet<'ctx>) {
         let place = place.into();
         let loc = place.root();
 

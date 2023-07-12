@@ -81,21 +81,16 @@ pub fn var() -> TokenStream {
 
             fn forward_checked(mut start: Self, count: usize) -> Option<Self> {
                 Some(Var::Owned(<Cow<_> as ::std::iter::Step>::forward_checked(
-                    Cow::__take(&mut start),
+                    Cow::take(&mut start),
                     count,
                 )?))
             }
 
             fn backward_checked(mut start: Self, count: usize) -> Option<Self> {
                 Some(Var::Owned(<Cow<_> as ::std::iter::Step>::backward_checked(
-                    Cow::__take(&mut start),
+                    Cow::take(&mut start),
                     count,
                 )?))
-            }
-        }
-        impl<'a, 'b, 'c, 'd, B: Clone> Var<'a, 'b, __Vec<Var<'c, 'd, B>>> {
-            pub fn remove(&mut self, index: usize) -> __Result<Var<'c, 'd, B>> {
-                Cow::__take(self).remove(index)
             }
         }
 
@@ -124,6 +119,13 @@ pub fn var() -> TokenStream {
                 }
             }
 
+            pub fn as_cow(&mut self) -> &mut Cow<'b, B> {
+                match self {
+                    Var::Mut(borrowed) => borrowed,
+                    Var::Owned(ref mut owned) => owned,
+                }
+            }
+
             pub fn try_to_cow(self) -> Result<Cow<'b, B>, Self> {
                 match self {
                     Var::Mut(_) => Err(self),
@@ -135,32 +137,36 @@ pub fn var() -> TokenStream {
                 Var::Owned(Cow::Owned(b))
             }
 
-            pub fn __take(&mut self) -> Self {
+            pub fn take(&mut self) -> Self {
                 let taken = match self {
-                    Var::Mut(borrowed) => Cow::__take(borrowed),
-                    Var::Owned(owned) => Cow::__take(owned),
+                    Var::Mut(borrowed) => Cow::take(borrowed),
+                    Var::Owned(owned) => Cow::take(owned),
                 };
                 Var::Owned(taken)
             }
-        }
-        /// Prelude function.
-        #[allow(clippy::ptr_arg)]
-        pub(crate) fn __ref_mut<'d, 'a: 'd, 'b: 'd, 'c: 'd, B: Clone>(
-            var: &'c mut Var<'a, 'b, B>,
-        ) -> Var<'d, 'b, B> {
-            match var {
-                Var::Mut(b) => Var::Mut(b),
-                Var::Owned(ref mut o) => Var::Mut(o),
+
+            pub(crate) fn borrow_mut<'c>(&'c mut self) -> Var<'c, 'b, B>
+            where
+                'a: 'c,
+                'b: 'c,
+            {
+                match self {
+                    Var::Mut(b) => Var::Mut(b),
+                    Var::Owned(ref mut o) => Var::Mut(o),
+                }
             }
-        }
-        /// Prelude function.
-        #[allow(clippy::ptr_arg)]
-        pub(crate) fn __ref<'d, 'e, 'a: 'd + 'e, 'b: 'd + 'e, 'c: 'd + 'e, B: Clone>(
-            var: &'c Var<'a, 'b, B>,
-        ) -> Var<'d, 'e, B> {
-            match var {
-                Var::Mut(b) => Var::Owned(__borrow(b)),
-                Var::Owned(ref o) => Var::Owned(__borrow(o)),
+
+            pub(crate) fn borrow<'c>(&'c self) -> Var<'c, 'c, B>
+            where
+                'a: 'c,
+            {
+                match self {
+                    Var::Mut(b) => {
+                        let borrow: Cow<'c, B> = Cow::borrow(b);
+                        Var::Owned(borrow)
+                    }
+                    Var::Owned(ref o) => Var::Owned(Cow::borrow(o)),
+                }
             }
         }
 

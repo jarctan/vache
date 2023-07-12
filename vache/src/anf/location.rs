@@ -5,7 +5,7 @@
 //!
 //! Every location is a place. But not every place is a location.
 
-use std::fmt;
+use std::{cmp::Ordering, fmt};
 
 use Place::*;
 
@@ -18,6 +18,35 @@ pub enum Loc<'ctx> {
     VarL(Varname<'ctx>),
     /// A field in a struct.
     FieldL(&'ctx Loc<'ctx>, &'ctx str),
+}
+
+impl<'ctx> Loc<'ctx> {
+    /// Number of elements in the path of the location.
+    ///
+    /// A variable/a field counts towards a single element.
+    fn len(&self) -> usize {
+        match self {
+            VarL(_) => 1,
+            FieldL(loc, _) => loc.len() + 1,
+        }
+    }
+}
+
+impl<'ctx> PartialOrd for Loc<'ctx> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (VarL(x), VarL(y)) => (x == y).then_some(Ordering::Equal),
+            (VarL(_), FieldL(s, _)) => (self <= s).then_some(Ordering::Less),
+            (FieldL(s, _), VarL(_)) => (*s >= other).then_some(Ordering::Greater),
+            (FieldL(s1, f1), FieldL(s2, f2)) => match self.len().cmp(&other.len()) {
+                // If not the same length, shorter the longer length and recursively compare
+                Ordering::Less => self.partial_cmp(s2),
+                Ordering::Greater => s1.partial_cmp(&other),
+                // If they are the same length, then they must be equal
+                Ordering::Equal => (s1 == s2 && f1 == f2).then_some(Ordering::Equal),
+            },
+        }
+    }
 }
 
 use Loc::*;

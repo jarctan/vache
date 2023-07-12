@@ -10,10 +10,10 @@ use proc_macro2::TokenStream;
 pub fn vec() -> TokenStream {
     quote!(
         #[derive(Clone)]
-        pub struct __Vec<T>(::std::vec::Vec<T>);
+        pub struct __Vec<'b, T: ::std::clone::Clone>(::std::vec::Vec<Cow<'b, T>>);
 
-        impl<T> __Vec<T> {
-            pub fn remove(&mut self, index: usize) -> __Result<T> {
+        impl<'b, T: ::std::clone::Clone> __Vec<'b, T> {
+            pub fn remove(&mut self, index: usize) -> __Result<Cow<'b, T>> {
                 if index < self.0.len() {
                     Ok(self.0.remove(index))
                 } else {
@@ -21,7 +21,7 @@ pub fn vec() -> TokenStream {
                 }
             }
 
-            pub fn consume(mut self, index: usize) -> __Result<T> {
+            pub fn consume(mut self, index: usize) -> __Result<Cow<'b, T>> {
                 if index < self.0.len() {
                     Ok(self.0.swap_remove(index))
                 } else {
@@ -29,20 +29,28 @@ pub fn vec() -> TokenStream {
                 }
             }
 
-            pub fn get(&self, index: usize) -> __Result<&T> {
+            pub fn get(&self, index: usize) -> __Result<&Cow<'b, T>> {
                 self.0
                     .get(index)
                     .with_context(|| format!("index {index} is out of bounds"))
             }
 
-            pub fn get_mut(&mut self, index: usize) -> __Result<&mut T> {
+            pub fn get_mut(&mut self, index: usize) -> __Result<&mut Cow<'b, T>> {
                 self.0
                     .get_mut(index)
                     .with_context(|| format!("index {index} is out of bounds"))
             }
+
+            pub(crate) fn push<'d: 'b, 'c, 'e>(
+                mut array: Var<'c, 'd, Self>,
+                el: Cow<'b, T>,
+            ) -> __Result<Cow<'e, ()>> {
+                (**array).0.push(el);
+                Ok(Cow::owned(()))
+            }
         }
 
-        impl<T: ::std::fmt::Display> ::std::fmt::Display for __Vec<T> {
+        impl<'b, T: ::std::clone::Clone + ::std::fmt::Display> ::std::fmt::Display for __Vec<'b, T> {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 write!(f, "[")?;
                 let mut iter = self.0.iter();
@@ -56,16 +64,18 @@ pub fn vec() -> TokenStream {
             }
         }
 
-        impl<'a, 'b, T: __PartialEq + Clone> __PartialEq for __Vec<Var<'a, 'b, T>> {
+        impl<'b, T: __PartialEq + ::std::clone::Clone> __PartialEq for __Vec<'b, T> {
             fn eq<'c, 'd>(
-                x: Var<'c, 'd, __Vec<Var<'a, 'b, T>>>,
-                y: Var<'c, 'd, __Vec<Var<'a, 'b, T>>>,
+                x: Var<'c, 'd, __Vec<'b, T>>,
+                y: Var<'c, 'd, __Vec<'b, T>>,
             ) -> __Result<__Ret<Cow<'b, bool>, __noRet>> {
-                let b1: &__Vec<Var<'a, 'b, T>> = (*x).borrow();
-                let b2: &__Vec<Var<'a, 'b, T>> = (*y).borrow();
+                let b1: &__Vec<'b, T> = &**x;
+                let b2: &__Vec<'b, T> = &**y;
                 if b1.0.len() == b2.0.len() {
                     for (x, y) in b1.0.iter().zip(b2.0.iter()) {
-                        if *__PartialEq::ne(__ref(x), __ref(y))?.0 {
+                        if *__PartialEq::ne(Var::Owned(Cow::borrow(x)), Var::Owned(Cow::borrow(y)))?
+                            .0
+                        {
                             return __Ret::ok(Cow::owned(false), __noRet {});
                         }
                     }
@@ -74,14 +84,6 @@ pub fn vec() -> TokenStream {
                     __Ret::ok(Cow::owned(false), __noRet {})
                 }
             }
-        }
-
-        pub(crate) fn __push<T: ::std::clone::Clone, 'a, 'b, 'c, 'd, 'e: 'c + 'd + 'a>(
-            mut array: Var<'c, 'd, __Vec<Var<'a, 'b, T>>>,
-            el: Var<'e, 'b, T>,
-        ) -> __Result<Cow<'b, ()>> {
-            (**array).0.push(el);
-            Ok(Cow::owned(()))
         }
     )
 }

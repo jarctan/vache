@@ -26,6 +26,7 @@ pub mod context;
 pub mod examples;
 mod grammar;
 mod interpret;
+mod lft_name_gen;
 pub mod mir;
 mod miring;
 mod mode_farmer;

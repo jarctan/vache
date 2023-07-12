@@ -12,11 +12,33 @@ use PlaceKind::*;
 use StmtKind::*;
 use Ty::*;
 
+use crate::lft_name_gen::LftGenerator;
 use crate::tast::{
     Arg, ArgKind, Block, Enum, Expr, ExprKind, Fun, LhsMode, LhsPlace, LineCol, Mode, Pat, PatKind,
     Place, PlaceKind, Program, Stmt, StmtKind, Struct, Ty, TyVar, Varname,
 };
 use crate::Context;
+
+/// Wrapper type.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Wrapper {
+    /// Wrap in a `Vec`.
+    Vec,
+    /// `Cow`.
+    Cow,
+    /// Variable.
+    Var,
+}
+
+impl From<Wrapper> for TokenStream {
+    fn from(wrapper: Wrapper) -> Self {
+        match wrapper {
+            Wrapper::Cow => quote!(Cow),
+            Wrapper::Var => quote!(Var),
+            Wrapper::Vec => quote!(__Vec),
+        }
+    }
+}
 
 /// Compiler, that turns our language into source code for an
 /// executable language.
@@ -46,17 +68,11 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     }
 
     /// Translate a type into a Rust type.
-    pub fn translate_type(ty: &Ty, show_lifetime: bool, wrap_var: bool) -> TokenStream {
-        let wrapper = if wrap_var { quote!(Var) } else { quote!(Cow) };
-        let lft = if show_lifetime {
-            if wrap_var {
-                quote!('a, 'b, ) // two lifetimes are needed for `Var`
-            } else {
-                quote!('b, ) // only one is needed for `Cow`
-            }
-        } else {
-            quote!() // no lifetime needed then
-        };
+    ///
+    /// * wrapper: name of the wrapper type (`Cow`, `Var`, etc.).
+    pub fn translate_type(ty: &Ty, lifetimes: &[&syn::Lifetime], wrapper: Wrapper) -> TokenStream {
+        let lft = quote!(#(#lifetimes,)*);
+        let wrapper = TokenStream::from(wrapper);
         match ty {
             UnitT => quote!(()),
             BoolT => quote!(#wrapper<#lft bool>),
@@ -79,17 +95,17 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 unreachable!()
             }
             ArrayT(ty) => {
-                let ty = Self::translate_type(ty, show_lifetime, true);
-                quote!(#wrapper<#lft __Vec<#ty>>)
+                let ty = Self::translate_type(ty, lifetimes, Wrapper::Vec);
+                quote!(#wrapper<#lft #ty>)
             }
             TupleT(items) => {
                 let items = items
                     .iter()
-                    .map(|item| Self::translate_type(item, show_lifetime, true));
+                    .map(|item| Self::translate_type(item, lifetimes, Wrapper::Cow));
                 quote!(#wrapper<#lft (#(#items),*)>)
             }
             IterT(ty) => {
-                let ty = Self::translate_type(ty, show_lifetime, true);
+                let ty = Self::translate_type(ty, lifetimes, Wrapper::Cow);
                 quote!(#wrapper<#lft __Range<#ty>>)
             }
         }
@@ -110,9 +126,9 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         match &place.kind {
             VarP(var) => {
                 let var = self.visit_var(var);
-                let ty = Self::translate_type(&place.ty, false, true);
+                let ty = Self::translate_type(&place.ty, &[], Wrapper::Cow);
                 match place.mode {
-                    LhsMode::Assigning => quote!(*(#var)),
+                    LhsMode::Assigning => quote!(*#var.as_cow()),
                     LhsMode::Declaring => quote!(let mut #var: #ty),
                 }
             }
@@ -120,27 +136,27 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let LineCol { line, col } = index.span.start_line_col(self.ctx.files);
                 let filename = self.ctx.files.name();
                 let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
-                let array = self.visit_expr(array, false, f_ret_struct);
-                let index = self.visit_expr(index, false, f_ret_struct);
+                let array = self.visit_expr(array, Wrapper::Cow, f_ret_struct);
+                let index = self.visit_expr(index, Wrapper::Cow, f_ret_struct);
                 let index = quote!((#index).to_usize().unwrap());
                 match place.mode {
-                    LhsMode::Assigning => quote!(**(#array).get_mut(#index).context(#codespan)?),
+                    LhsMode::Assigning => quote!(*(#array).get_mut(#index).context(#codespan)?),
                     LhsMode::Declaring => unreachable!(),
                 }
             }
             FieldP(box strukt, field) => {
-                let strukt = self.visit_expr(strukt, false, f_ret_struct);
+                let strukt = self.visit_expr(strukt, Wrapper::Cow, f_ret_struct);
                 let field = format_ident!("{}", field);
                 match place.mode {
-                    LhsMode::Assigning => quote!(*(#strukt).#field),
+                    LhsMode::Assigning => quote!((#strukt).#field),
                     LhsMode::Declaring => unreachable!(),
                 }
             }
             ElemP(box tuple, elem) => {
-                let tuple = self.visit_expr(tuple, false, f_ret_struct);
+                let tuple = self.visit_expr(tuple, Wrapper::Cow, f_ret_struct);
                 let elem = syn::Index::from(*elem);
                 match place.mode {
-                    LhsMode::Assigning => quote!(*(#tuple).#elem),
+                    LhsMode::Assigning => quote!((#tuple).#elem),
                     LhsMode::Declaring => unreachable!(),
                 }
             }
@@ -151,157 +167,135 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     fn visit_place(
         &mut self,
         place: &Place<'ctx>,
-        wrap_var: bool,
+        wrapper: Wrapper,
         f_ret_struct: &syn::Ident,
     ) -> TokenStream {
         match &place.kind {
             VarP(var) => {
                 let var = self.visit_var(var);
                 match place.mode {
-                    Mode::Cloned => {
-                        if wrap_var {
-                            quote!(#var.clone())
-                        } else {
-                            quote!(Var::to_cow(&mut #var.clone()))
-                        }
-                    }
-                    Mode::Borrowed => {
-                        if wrap_var {
-                            quote!(__ref(&#var))
-                        } else {
-                            quote!(__borrow(&mut *#var))
-                        }
-                    }
+                    Mode::Cloned => match wrapper {
+                        Wrapper::Cow => quote!(Cow::clone(&#var)),
+                        Wrapper::Var => quote!(Var::Owned(Cow::clone(&#var))),
+                        Wrapper::Vec => unreachable!(),
+                    },
+                    Mode::Borrowed => match wrapper {
+                        Wrapper::Cow => quote!(Cow::borrow(&#var)),
+                        Wrapper::Var => quote!(Var::Owned(Cow::borrow(&#var))),
+                        Wrapper::Vec => unreachable!(),
+                    },
+                    Mode::MutBorrowed => match wrapper {
+                        Wrapper::Cow => unreachable!(),
+                        Wrapper::Var => quote!(Var::Mut(&mut #var)),
+                        Wrapper::Vec => unreachable!(),
+                    },
                     Mode::SBorrowed => quote!(#var),
-                    Mode::MutBorrowed => {
-                        if wrap_var {
-                            quote!(__ref_mut(&mut #var))
-                        } else {
-                            quote!(__borrow_mut(&mut *#var))
-                        }
-                    }
                     Mode::SMutBorrowed => quote!(#var),
-                    Mode::Moved => {
-                        if wrap_var {
-                            quote!(Var::__take(&mut #var))
-                        } else {
-                            quote!(Cow::__take(&mut #var))
-                        }
-                    }
+                    Mode::Moved => match wrapper {
+                        Wrapper::Cow => quote!(Cow::take(&mut #var)),
+                        Wrapper::Var => quote!(Var::Owned(Cow::take(&mut #var))),
+                        Wrapper::Vec => unreachable!(),
+                    },
                 }
             }
             IndexP(box array, box index) => {
                 let LineCol { line, col } = index.span.start_line_col(self.ctx.files);
                 let filename = self.ctx.files.name();
                 let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
-                let array = self.visit_expr(array, false, f_ret_struct);
-                let index = self.visit_expr(index, false, f_ret_struct);
+                let array = self.visit_expr(array, Wrapper::Cow, f_ret_struct);
+                let index = self.visit_expr(index, Wrapper::Cow, f_ret_struct);
                 let index = quote!((#index).to_usize().unwrap());
                 match place.mode {
-                    Mode::Borrowed => {
-                        if wrap_var {
-                            quote!(__ref((#array).get(#index).context(#codespan)?))
-                        } else {
-                            unimplemented!()
+                    Mode::Borrowed => match wrapper {
+                        Wrapper::Var => {
+                            quote!(Var::Owned(Cow::borrow((#array).get(#index).context(#codespan)?)))
                         }
-                    }
+                        Wrapper::Cow => unimplemented!(),
+                        Wrapper::Vec => unreachable!(),
+                    },
                     Mode::SBorrowed => quote!((#array).get(#index).context(#codespan)?),
-                    Mode::SMutBorrowed => {
-                        quote!(#array.get_mut(#index).context(#codespan)?)
-                    }
-                    Mode::MutBorrowed => {
-                        if wrap_var {
-                            quote!(__ref_mut((#array).get_mut(#index).context(#codespan)?))
-                        } else {
-                            unimplemented!()
+                    Mode::SMutBorrowed => quote!(#array.get_mut(#index).context(#codespan)?),
+                    Mode::MutBorrowed => match wrapper {
+                        Wrapper::Var => {
+                            quote!(Var::Mut((#array).get_mut(#index).context(#codespan)?))
                         }
-                    }
-                    Mode::Cloned => {
-                        if wrap_var {
-                            quote!(Var::clone((#array).get(#index).context(#codespan)?))
-                        } else {
+                        Wrapper::Cow => unimplemented!(),
+                        Wrapper::Vec => unreachable!(),
+                    },
+                    Mode::Cloned => match wrapper {
+                        Wrapper::Var => {
+                            quote!(Var::Owned(Cow::clone((#array).get(#index).context(#codespan)?)))
+                        }
+                        Wrapper::Cow => {
                             quote!(Cow::clone(&*(#array).get(#index).context(#codespan)?))
                         }
-                    }
-                    Mode::Moved => {
-                        if wrap_var {
-                            quote!(#array.remove(#index).context(#codespan)?)
-                        } else {
-                            quote!(Cow::remove(#array.__take(), #index).context(#codespan)?)
+                        Wrapper::Vec => unreachable!(),
+                    },
+                    Mode::Moved => match wrapper {
+                        Wrapper::Var => {
+                            quote!(Var::Owned(#array.remove(#index).context(#codespan)?))
                         }
-                    }
+                        Wrapper::Cow => {
+                            quote!(Cow::remove(&mut #array.take(), #index).context(#codespan)?)
+                        }
+                        Wrapper::Vec => unreachable!(),
+                    },
                 }
             }
             FieldP(box strukt, field) => {
-                let strukt = self.visit_expr(strukt, false, f_ret_struct);
+                let strukt = self.visit_expr(strukt, Wrapper::Cow, f_ret_struct);
                 let field = format_ident!("{}", field);
                 match place.mode {
-                    Mode::Borrowed => {
-                        if wrap_var {
-                            quote!(__ref(&(#strukt).#field))
-                        } else {
-                            quote!(__borrow(&*(#strukt).#field))
-                        }
-                    }
+                    Mode::Borrowed => match wrapper {
+                        Wrapper::Var => quote!(Var::Owned(Cow::borrow(&(#strukt).#field))),
+                        Wrapper::Cow => quote!(Cow::borrow(&(#strukt).#field)),
+                        Wrapper::Vec => unreachable!(),
+                    },
                     Mode::SBorrowed => unimplemented!(),
-                    Mode::MutBorrowed => {
-                        if wrap_var {
-                            quote!(__ref_mut(&mut (#strukt).#field))
-                        } else {
-                            quote!(__borrow_mut(&mut *(#strukt).#field))
-                        }
-                    }
+                    Mode::MutBorrowed => match wrapper {
+                        Wrapper::Var => quote!(Var::Mut(&mut (#strukt).#field)),
+                        Wrapper::Cow => unreachable!(),
+                        Wrapper::Vec => unreachable!(),
+                    },
                     Mode::SMutBorrowed => unimplemented!(),
-                    Mode::Cloned => {
-                        if wrap_var {
-                            quote!(Var::clone(&(#strukt).#field))
-                        } else {
-                            quote!(Cow::clone(&*(#strukt).#field))
-                        }
-                    }
-                    Mode::Moved => {
-                        if wrap_var {
-                            quote!(Var::__take(&mut (#strukt).#field))
-                        } else {
-                            quote!(Cow::__take(&mut (#strukt).#field))
-                        }
-                    }
+                    Mode::Cloned => match wrapper {
+                        Wrapper::Var => quote!(Var::Owned(Cow::clone(&(#strukt).#field))),
+                        Wrapper::Cow => quote!(Cow::clone(&(#strukt).#field)),
+                        Wrapper::Vec => unreachable!(),
+                    },
+                    Mode::Moved => match wrapper {
+                        Wrapper::Var => quote!(Var::Owned(Cow::take(&mut (#strukt).#field))),
+                        Wrapper::Cow => quote!(Cow::take(&mut (#strukt).#field)),
+                        Wrapper::Vec => unreachable!(),
+                    },
                 }
             }
             ElemP(box tuple, elem) => {
-                let tuple = self.visit_expr(tuple, false, f_ret_struct);
+                let tuple = self.visit_expr(tuple, Wrapper::Cow, f_ret_struct);
                 let elem = syn::Index::from(*elem);
                 match place.mode {
-                    Mode::Borrowed => {
-                        if wrap_var {
-                            quote!(__ref(&(#tuple).#elem))
-                        } else {
-                            quote!(__borrow(&(#tuple).#elem))
-                        }
-                    }
+                    Mode::Borrowed => match wrapper {
+                        Wrapper::Var => quote!(Var::borrow(&(#tuple).#elem)),
+                        Wrapper::Cow => quote!(__borrow(&(#tuple).#elem)),
+                        Wrapper::Vec => unreachable!(),
+                    },
                     Mode::SBorrowed => unimplemented!(),
-                    Mode::MutBorrowed => {
-                        if wrap_var {
-                            quote!(__ref_mut(&mut (#tuple).#elem))
-                        } else {
-                            quote!(__borrow_mut(&mut *(#tuple).#elem))
-                        }
-                    }
+                    Mode::MutBorrowed => match wrapper {
+                        Wrapper::Var => quote!(Var::borrow_mut(&mut (#tuple).#elem)),
+                        Wrapper::Cow => quote!(__borrow_mut(&mut *(#tuple).#elem)),
+                        Wrapper::Vec => unreachable!(),
+                    },
                     Mode::SMutBorrowed => unimplemented!(),
-                    Mode::Cloned => {
-                        if wrap_var {
-                            quote!(Var::clone(&(#tuple).#elem))
-                        } else {
-                            quote!(Cow::clone(&*(#tuple).#elem))
-                        }
-                    }
-                    Mode::Moved => {
-                        if wrap_var {
-                            quote!(Var::__take(&mut (#tuple).#elem))
-                        } else {
-                            quote!(Cow::__take(&mut (#tuple).#elem))
-                        }
-                    }
+                    Mode::Cloned => match wrapper {
+                        Wrapper::Var => quote!(Var::clone(&(#tuple).#elem)),
+                        Wrapper::Cow => quote!(Cow::clone(&*(#tuple).#elem)),
+                        Wrapper::Vec => unreachable!(),
+                    },
+                    Mode::Moved => match wrapper {
+                        Wrapper::Var => quote!(Var::Owned(Cow::take(&mut (#tuple).#elem))),
+                        Wrapper::Cow => quote!(Cow::take(&mut (#tuple).#elem)),
+                        Wrapper::Vec => unreachable!(),
+                    },
                 }
             }
         }
@@ -319,19 +313,23 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             TyVar::Gen(..) => unreachable!(),
         });
 
+        // Generate one lifetime for our structure.
+        let mut lft_generator = LftGenerator::new();
+        let b = lft_generator.generate();
+
         let fields: TokenStream = strukt
             .fields
             .iter()
             .map(|(field, ty)| {
                 let field = format_ident!("{field}");
-                let ty = Self::translate_type(&ty.kind, true, true);
+                let ty = Self::translate_type(&ty.kind, &[&b], Wrapper::Cow);
                 quote!(#field: #ty,)
             })
             .collect();
 
         quote!(
             #[derive(Debug, Clone)]
-            pub struct #name<#(#ty_params,)* 'a, 'b> {
+            pub struct #name<#b, #(#ty_params,)*> {
                 #fields
             }
         )
@@ -340,6 +338,10 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     /// Compiles an `enum`.
     fn visit_enum(&mut self, enun: &Enum) -> TokenStream {
         let name = format_ident!("{}", enun.name);
+
+        // Generate one lifetime for our structure.
+        let mut lft_generator = LftGenerator::new();
+        let a = lft_generator.generate();
 
         let variants: TokenStream = enun
             .variants
@@ -351,7 +353,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 } else {
                     let args = args
                         .iter()
-                        .map(|arg| Self::translate_type(&arg.kind, true, true));
+                        .map(|arg| Self::translate_type(&arg.kind, &[&a], Wrapper::Cow));
                     quote!(#variant(#(#args),*),)
                 }
             })
@@ -405,11 +407,11 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
 
         quote!(
             #[derive(Debug, Clone)]
-            pub enum #name<#(#ty_params_w_bounds,)* 'a, 'b> {
+            pub enum #name<#a, #(#ty_params_w_bounds,)*> {
                 #variants
             }
 
-            impl<#(#ty_params_w_bounds,)* 'a, 'b> ::std::fmt::Display for #name<#(#ty_params_wo_bounds,)* 'a, 'b> {
+            impl<#a, #(#ty_params_w_bounds,)*> ::std::fmt::Display for #name<#(#ty_params_wo_bounds,)* #a> {
                 fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
                     match self {
                         #(#variants_display)*
@@ -423,45 +425,45 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     fn visit_expr(
         &mut self,
         expr: &Expr<'ctx>,
-        wrap_var: bool,
+        wrapper: Wrapper,
         f_ret_struct: &syn::Ident,
     ) -> TokenStream {
-        let wrapper = if wrap_var { quote!(Var) } else { quote!(Cow) };
+        let wrapper_tkn = TokenStream::from(wrapper);
         match &expr.kind {
             UnitE => quote!(()),
-            BoolE(b) => quote!(#wrapper::owned(#b)),
+            BoolE(b) => quote!(#wrapper_tkn::owned(#b)),
             IntegerE(i) => {
                 let i = i
                     .to_u128()
                     .expect("Integer {i} is too big to be represented in source code");
-                quote!(#wrapper::owned( __Integer::try_from(#i).unwrap()))
+                quote!(#wrapper_tkn::owned( __Integer::try_from(#i).unwrap()))
             }
             StringE(s) => {
-                quote!(#wrapper::owned(__String::from(#s)))
+                quote!(#wrapper_tkn::owned(__String::from(#s)))
             }
-            PlaceE(p) => self.visit_place(p, wrap_var, f_ret_struct),
+            PlaceE(p) => self.visit_place(p, wrapper, f_ret_struct),
             StructE { name, fields } => {
                 let name = format_ident!("{name}");
                 let fields = fields.iter().map(|(name, expr)| {
                     let name = format_ident!("{name}");
-                    let expr = self.visit_expr(expr, true, f_ret_struct);
+                    let expr = self.visit_expr(expr, Wrapper::Cow, f_ret_struct);
                     quote!(#name: #expr)
                 });
-                quote!(#wrapper::owned(#name {
+                quote!(#wrapper_tkn::owned(#name {
                     #(#fields),*
                 }))
             }
             ArrayE(array) => {
                 let items = array
                     .iter()
-                    .map(|item| self.visit_expr(item, true, f_ret_struct));
-                quote!(#wrapper::owned(__Vec(vec![#(#items),*])))
+                    .map(|item| self.visit_expr(item, Wrapper::Cow, f_ret_struct));
+                quote!(#wrapper_tkn::owned(__Vec(vec![#(#items),*])))
             }
             TupleE(items) => {
                 let items = items
                     .iter()
-                    .map(|item| self.visit_expr(item, true, f_ret_struct));
-                quote!(#wrapper::owned((#(#items),*)))
+                    .map(|item| self.visit_expr(item, Wrapper::Cow, f_ret_struct));
+                quote!(#wrapper_tkn::owned((#(#items),*)))
             }
             CallE { name, args } => {
                 if name.name == "print" {
@@ -478,7 +480,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
 
                     let args = args
                         .iter()
-                        .map(|arg| self.visit_arg(arg, true, f_ret_struct));
+                        .map(|arg| self.visit_arg(arg, Wrapper::Var, f_ret_struct));
                     let fmt_str = builder.string().unwrap();
                     quote!(println!(#fmt_str, #(#args),*))
                 } else {
@@ -495,7 +497,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     // Tokenize the arguments and the real name of the function
                     let args = args
                         .iter()
-                        .map(|arg| self.visit_arg(arg, true, f_ret_struct));
+                        .map(|arg| self.visit_arg(arg, Wrapper::Var, f_ret_struct));
                     let name = match name.name {
                         "+" => quote!(__Add::add),
                         "-" => quote!(__Sub::sub),
@@ -520,10 +522,10 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     };
 
                     // If needed, wrap in a `final_res`
-                    let final_res = if wrap_var {
-                        quote!(Var::Owned(__res.0))
-                    } else {
-                        quote!(__res.0)
+                    let final_res = match wrapper {
+                        Wrapper::Var => quote!(Var::Owned(__res.0)),
+                        Wrapper::Cow => quote!(__res.0),
+                        Wrapper::Vec => unreachable!(),
                     };
 
                     quote!({
@@ -543,28 +545,28 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
 
                 // Special case for unit variant, do not show the `()`
                 if args.is_empty() {
-                    quote!(#wrapper::owned(#enun::#variant))
+                    quote!(#wrapper_tkn::owned(#enun::#variant))
                 } else {
                     let args = args
                         .iter()
-                        .map(|arg| self.visit_expr(arg, true, f_ret_struct));
-                    quote!(#wrapper::owned(#enun::#variant(#(#args),*)))
+                        .map(|arg| self.visit_expr(arg, Wrapper::Cow, f_ret_struct));
+                    quote!(#wrapper_tkn::owned(#enun::#variant(#(#args),*)))
                 }
             }
             IfE(box cond, box iftrue, box iffalse) => {
-                let cond = self.visit_expr(cond, false, f_ret_struct);
-                let iftrue = self.visit_block(iftrue, wrap_var, f_ret_struct);
-                let iffalse = self.visit_block(iffalse, wrap_var, f_ret_struct);
+                let cond = self.visit_expr(cond, Wrapper::Cow, f_ret_struct);
+                let iftrue = self.visit_block(iftrue, wrapper, f_ret_struct);
+                let iffalse = self.visit_block(iffalse, wrapper, f_ret_struct);
 
                 quote! {
                     if *(#cond) #iftrue else #iffalse
                 }
             }
             MatchE(box matched, branches) => {
-                let matched = self.visit_expr(matched, false, f_ret_struct);
+                let matched = self.visit_expr(matched, Wrapper::Cow, f_ret_struct);
                 let branches = branches.iter().map(|(pattern, branch)| {
                     let pattern = self.visit_pattern(pattern);
-                    let branch = self.visit_expr(branch, wrap_var, f_ret_struct);
+                    let branch = self.visit_expr(branch, wrapper, f_ret_struct);
                     quote!(| #pattern => #branch)
                 });
 
@@ -575,14 +577,14 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     }
                 }
             }
-            BlockE(box block) => self.visit_block(block, wrap_var, f_ret_struct),
+            BlockE(box block) => self.visit_block(block, wrapper, f_ret_struct),
             HoleE => {
                 panic!("Cannot compile code with holes; your code probably even did not typecheck")
             }
             RangeE(box start, box end) => {
-                let start = self.visit_expr(start, true, f_ret_struct);
-                let end = self.visit_expr(end, true, f_ret_struct);
-                quote!(#wrapper::owned(__Range::new(#start,#end)))
+                let start = self.visit_expr(start, Wrapper::Cow, f_ret_struct);
+                let end = self.visit_expr(end, Wrapper::Cow, f_ret_struct);
+                quote!(#wrapper_tkn::owned(__Range::new(#start,#end)))
             }
         }
     }
@@ -591,13 +593,13 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     fn visit_arg(
         &mut self,
         arg: &Arg<'ctx>,
-        wrap_var: bool,
+        wrapper: Wrapper,
         f_ret_struct: &syn::Ident,
     ) -> TokenStream {
         match &arg.kind {
-            ArgKind::Standard(arg) => self.visit_expr(arg, wrap_var, f_ret_struct),
-            ArgKind::InPlace(place) => self.visit_place(place, wrap_var, f_ret_struct),
-            ArgKind::Binding(arg, _) => self.visit_expr(arg, wrap_var, f_ret_struct),
+            ArgKind::Standard(arg) => self.visit_expr(arg, wrapper, f_ret_struct),
+            ArgKind::InPlace(place) => self.visit_place(place, wrapper, f_ret_struct),
+            ArgKind::Binding(arg, _) => self.visit_expr(arg, wrapper, f_ret_struct),
         }
     }
 
@@ -634,9 +636,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     fn visit_stmt(&mut self, stmt: &Stmt<'ctx>, f_ret_struct: &syn::Ident) -> TokenStream {
         match &stmt.kind {
             AssignS(lhs, rhs) => {
-                let lhs_mode = lhs.mode;
-                let rhs =
-                    self.visit_expr(rhs, matches!(lhs_mode, LhsMode::Declaring), f_ret_struct);
+                let rhs = self.visit_expr(rhs, Wrapper::Cow, f_ret_struct);
                 let lhs = self.visit_lhs_place(lhs, f_ret_struct);
 
                 // For fields, add a `Field` wrapper
@@ -645,14 +645,14 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 }
             }
             ExprS(expr) => {
-                let expr = self.visit_expr(expr, false, f_ret_struct);
+                let expr = self.visit_expr(expr, Wrapper::Cow, f_ret_struct);
                 quote! {
                     #expr;
                 }
             }
             WhileS { cond, body } => {
-                let cond = self.visit_expr(cond, false, f_ret_struct);
-                let body = self.visit_block(body, false, f_ret_struct);
+                let cond = self.visit_expr(cond, Wrapper::Cow, f_ret_struct);
+                let body = self.visit_block(body, Wrapper::Cow, f_ret_struct);
                 quote! {
                     while *#cond #body
                 }
@@ -660,8 +660,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
 
             ForS { item, iter, body } => {
                 let item = format_ident!("{}", item.name().as_str());
-                let iter = self.visit_expr(iter, false, f_ret_struct);
-                let body = self.visit_block(body, false, f_ret_struct);
+                let iter = self.visit_expr(iter, Wrapper::Cow, f_ret_struct);
+                let body = self.visit_block(body, Wrapper::Cow, f_ret_struct);
                 quote! {
                     for #item in #iter #body
                 }
@@ -670,7 +670,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             BreakS => quote!(break;),
             ContinueS => quote!(continue;),
             ReturnS(ret) => {
-                let ret = self.visit_expr(ret, false, f_ret_struct);
+                let ret = self.visit_expr(ret, Wrapper::Cow, f_ret_struct);
                 quote!(return __Ret::ok(#ret, #f_ret_struct { });)
             }
         }
@@ -680,7 +680,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     fn visit_block(
         &mut self,
         block: &Block<'ctx>,
-        wrap_var: bool,
+        wrapper: Wrapper,
         f_ret_struct: &syn::Ident,
     ) -> TokenStream {
         let stmts: Vec<_> = block
@@ -691,7 +691,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         let ret = if let ExprKind::UnitE = block.ret.kind {
             default()
         } else {
-            self.visit_expr(&block.ret, wrap_var, f_ret_struct)
+            self.visit_expr(&block.ret, wrapper, f_ret_struct)
         };
         quote! {
             {
@@ -713,13 +713,18 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             TyVar::Gen(..) => unreachable!(),
         });
 
+        // Generate two lifetimes for our structure.
+        let mut lft_generator = LftGenerator::new();
+        let a = lft_generator.generate();
+        let b = lft_generator.generate();
+
         // Tokenize all the parameters
         let params: Vec<TokenStream> = f
             .params
             .iter()
             .map(|param| {
                 let name = format_ident!("{}", param.name().as_str());
-                let ty = Self::translate_type(&param.ty(), true, true);
+                let ty = Self::translate_type(&param.ty(), &[&a, &b], Wrapper::Var);
                 quote! {
                     mut #name: #ty
                 }
@@ -729,7 +734,9 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         // Tokenize the user-facing return type of the function
         let ret_ty = match f.ret_ty.kind {
             UnitT => quote!(()),
-            ty => Self::translate_type(&ty, true, false), // DO NOT add a `Var` on the return type!!
+            ty => Self::translate_type(&ty, &[&b], Wrapper::Cow), /* DO NOT add a `Var` on the
+                                                                   * return
+                                                                   * type!! */
         };
 
         // Get the list of in-place parameters
@@ -737,7 +744,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         // Their type
         let ret_params_ty: Vec<_> = ret_params
             .iter()
-            .map(|param| Self::translate_type(&param.ty(), true, false))
+            .map(|param| Self::translate_type(&param.ty(), &[&b], Wrapper::Cow))
             .collect();
         // Their name
         let ret_vars: Vec<_> = ret_params
@@ -750,7 +757,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         let ret_struct_full_name = if ret_vars.is_empty() {
             quote!(#ret_struct_name)
         } else {
-            quote!(#ret_struct_name<'b>)
+            quote!(#ret_struct_name<#b>)
         };
         let ret_struct_fields = ret_vars
             .iter()
@@ -767,7 +774,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         let full_ret_ty = quote!(__Result<__Ret<#ret_ty, #ret_struct_full_name>>);
 
         // And we can also construct the return expression of the body
-        let body = self.visit_block(&f.body, false, &ret_struct_name);
+        let body = self.visit_block(&f.body, Wrapper::Cow, &ret_struct_name);
         let body = quote! {{
             let __res: __Result<#ret_ty> = try {
                 #body
@@ -783,7 +790,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         } else {
             quote! {
                 #ret_struct
-                pub fn #name<#(#ty_params,)* 'a, 'b>(#(#params),*) -> #full_ret_ty #body
+                pub fn #name<#(#ty_params,)* #a, #b>(#(#params),*) -> #full_ret_ty #body
             }
         }
     }

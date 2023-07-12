@@ -1,6 +1,6 @@
 //! Implementing the liveness analysis algorithm.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 use super::borrow::{Borrows, Loan};
 use super::flow::Flow;
@@ -186,54 +186,53 @@ pub fn liveness<'mir, 'ctx>(
                 let var_outs = &var_flow[&label].outs;
                 let borrows_in = &loan_flow[&label].ins;
 
-                // Get all the references of that instruction.
-                let references: Vec<_> = instr.references_mut().collect();
+                // Get all the references/pointers of that instruction.
+                let ptrs: Vec<_> = instr.references().map(|r| r.as_ptr()).collect();
+                let references_mut: Vec<_> = instr.references_mut().collect();
 
-                // Get, for each reference, the set of locations that are used by any reference
-                // after that one within the same instruction
-                // For example, for `print(a, a)`, we will see that we cannot move the first
-                // `a`, since it is used by a reference after that first `a`
-                // To do that, we compute the set of locations that cannot be moved for each
-                // reference in our `references`.
-                let mut cannot_move: VecDeque<_> = VecDeque::from([Set::new()]);
-                for r in references.iter().rev() {
-                    let el = cannot_move.back().unwrap().clone() + r.loc();
-                    cannot_move.push_front(el);
-                }
-                cannot_move.pop_front();
-                debug_assert!(cannot_move.len() == references.len());
-
-                for (i, reference) in references.into_iter().enumerate() {
+                for reference in references_mut.into_iter() {
                     match reference.mode() {
                         Mode::Borrowed
                         | Mode::MutBorrowed
                         | Mode::SMutBorrowed
                         | Mode::SBorrowed => {
                             let loc = reference.loc();
-                            if !var_outs.contains(loc) && !cannot_move[i].contains(loc) {
+                            // We cannot move if the location is still active after that
+                            // instruction, or if some part of the
+                            // location is used by some __other__ pointer in the same instruction.
+                            // instruction For example, for `print(a,
+                            // a)`, we will see that we cannot move the first
+                            // `a`, since it is used by a reference after that first `a`
+                            // To do that, we compute the set of locations that cannot be moved for
+                            // each reference in our `references`.
+                            if !var_outs.contains(loc)
+                                && !ptrs
+                                    .iter()
+                                    .filter(|ptr| ptr.id != reference.id)
+                                    .any(|ptr| loc <= ptr.loc)
+                            {
                                 // Move only if we have no more borrows into ourselves (except the
                                 // one we're about to free)
                                 // Otherwise don't, since this move would trigger
                                 // invalidations/clones
                                 // for all these borrows
-                                let loans = borrows_in
-                                    .loans(*reference.loc())
-                                    .filter(|b| b.ptr.id != reference.id)
-                                    .collect::<Vec<_>>();
-                                if loans.len() == 0 {
+                                let loans =
+                                    borrows_in.loans(*loc).filter(|b| b.ptr.id != reference.id);
+                                if loans.count() == 0 {
                                     updated = true;
                                     reference.set_mode(Mode::Moved);
-                                } else {
-                                    println!(
-                                        "Could not move {loc:?}§{label:?} because of {:?}",
-                                        loans
-                                    );
-                                }
+                                } /*else {
+                                      println!(
+                                          "Could not move {loc:?}§{label:?} because of {:?}",
+                                          loans
+                                      );
+                                  }*/
                             }
                         }
-                        Mode::Cloned => (), /* We clone, there's a reason fot that. So you can't */
-                        // move
-                        Mode::Moved => (), // already moved
+                        // If we are cloned, there's a reason fot that. So you can't move
+                        Mode::Cloned => (),
+                        // If already moved, nothing to do
+                        Mode::Moved => (),
                     }
                 }
             }
@@ -259,7 +258,6 @@ pub fn liveness<'mir, 'ctx>(
         // all
         invalidated.extend(loan_flow[&exit_l].outs.invalidations());
 
-        println!("Invalidations: {:?}", invalidated);
         match cfg_flow_label_order
             .iter()
             .filter_map(|&label| {
@@ -270,10 +268,8 @@ pub fn liveness<'mir, 'ctx>(
             })
             .next()
         {
-            Some(borrow @ Loan { label, ptr, .. }) => {
-                println!("Invalidated: {borrow:?}");
-                /*#[cfg(not(test))]
-                println!("Invalidation: {:?}", borrow);*/
+            Some(Loan { label, ptr, .. }) => {
+                /* println!("Invalidated: {:?}", borrow); */
                 cfg[&label].force_clone(&ptr);
             }
             None => {

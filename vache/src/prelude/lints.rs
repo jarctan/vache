@@ -15,5 +15,6 @@ pub fn lints() -> TokenStream {
         #![allow(unused_variables)]
         #![allow(unused_parens)]
         #![allow(non_camel_case_types)]
+        #![allow(unused_braces)]
     )
 }
