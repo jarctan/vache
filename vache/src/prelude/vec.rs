@@ -12,8 +12,12 @@ pub fn vec() -> TokenStream {
         #[derive(Clone)]
         pub struct __Vec<'b, T: ::std::clone::Clone>(::std::vec::Vec<Cow<'b, T>>);
 
+        pub(crate) struct __pushRet<'b, T: ::std::clone::Clone> {
+            array: Option<Cow<'b, __Vec<'b, T>>>,
+        }
+
         impl<'b, T: ::std::clone::Clone> __Vec<'b, T> {
-            pub fn remove(&mut self, index: usize) -> __Result<Cow<'b, T>> {
+            pub(crate) fn remove(&mut self, index: usize) -> __Result<Cow<'b, T>> {
                 if index < self.0.len() {
                     Ok(self.0.remove(index))
                 } else {
@@ -21,7 +25,7 @@ pub fn vec() -> TokenStream {
                 }
             }
 
-            pub fn consume(mut self, index: usize) -> __Result<Cow<'b, T>> {
+            pub(crate) fn consume(mut self, index: usize) -> __Result<Cow<'b, T>> {
                 if index < self.0.len() {
                     Ok(self.0.swap_remove(index))
                 } else {
@@ -29,13 +33,13 @@ pub fn vec() -> TokenStream {
                 }
             }
 
-            pub fn get(&self, index: usize) -> __Result<&Cow<'b, T>> {
+            pub(crate) fn get(&self, index: usize) -> __Result<&Cow<'b, T>> {
                 self.0
                     .get(index)
                     .with_context(|| format!("index {index} is out of bounds"))
             }
 
-            pub fn get_mut(&mut self, index: usize) -> __Result<&mut Cow<'b, T>> {
+            pub(crate) fn get_mut(&mut self, index: usize) -> __Result<&mut Cow<'b, T>> {
                 self.0
                     .get_mut(index)
                     .with_context(|| format!("index {index} is out of bounds"))
@@ -44,12 +48,14 @@ pub fn vec() -> TokenStream {
             pub(crate) fn push<'d: 'b, 'c, 'e>(
                 mut array: Var<'c, 'd, Self>,
                 el: Cow<'b, T>,
-            ) -> __Result<Cow<'e, ()>> {
-                let inner = Cow::take(&mut array);
-                let mut owned = inner.into_owned();
-                owned.0.push(el);
-                *array = Cow::Owned(owned);
-                Ok(Cow::owned(()))
+            ) -> __Result<__Ret<(), __pushRet<'b, T>>> {
+                (**array).0.push(el);
+                __Ret::ok(
+                    (),
+                    __pushRet {
+                        array: array.try_to_cow().ok(),
+                    },
+                )
             }
         }
 

@@ -128,7 +128,25 @@ pub fn cow() -> TokenStream {
             }
         }
 
-        impl<'a, B: Clone> Cow<'a, B> {
+        impl<B: Clone> ::std::ops::DerefMut for Cow<'_, B> {
+            #[inline(always)]
+            fn deref_mut(&mut self) -> &mut B {
+                match self {
+                    Cow::Borrowed(borrowed) => {
+                        *self = Cow::Owned(borrowed.clone());
+                        match self {
+                            Cow::Owned(ref mut owned) => owned,
+                            Cow::Borrowed(..) => unreachable!(),
+                            Cow::Uninit => unreachable!(),
+                        }
+                    }
+                    Cow::Owned(ref mut owned) => owned,
+                    Cow::Uninit => unreachable!(),
+                }
+            }
+        }
+
+        impl<'b, B: Clone> Cow<'b, B> {
             #[inline(always)]
             pub(crate) fn take(&mut self) -> Self {
                 ::std::mem::take(self)
@@ -163,10 +181,13 @@ pub fn cow() -> TokenStream {
             }
 
             #[inline(always)]
-            pub(crate) const fn borrow<'c>(&'c self) -> Cow<'c, B> {
+            pub(crate) const fn borrow<'c>(&'c self) -> Cow<'b, B> {
                 match self {
                     Cow::Borrowed(b) => Cow::Borrowed(b),
-                    Cow::Owned(ref o) => Cow::Borrowed(o),
+                    Cow::Owned(ref o) => unsafe {
+                        // Safe because the value will NOT be modified observably
+                        ::std::mem::transmute::<Cow<'c, B>, Cow<'b, B>>(Cow::Borrowed(o))
+                    },
                     Cow::Uninit => unreachable!(),
                 }
             }

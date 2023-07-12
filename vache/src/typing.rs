@@ -65,7 +65,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             name: "push",
             ty_params: vec![TyVar::Named("T")],
             params: vec![
-                ast::param("array", array_t),
+                ast::ref_param("array", array_t),
                 ast::param("el", VarT(TyVar::Named("T"))),
             ],
             ret_ty: UnitT,
