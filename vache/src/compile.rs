@@ -3,7 +3,7 @@
 use std::default::default;
 
 use itertools::Itertools;
-use num_traits::ToPrimitive;
+use num_traits::{One, ToPrimitive, Zero};
 use proc_macro2::TokenStream;
 use string_builder::Builder as StringBuilder;
 use ExprKind::*;
@@ -435,10 +435,17 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             UnitE => quote!(()),
             BoolE(b) => quote!(#wrapper_tkn::owned(#b)),
             IntegerE(i) => {
-                let i = i
-                    .to_u128()
-                    .expect("Integer {i} is too big to be represented in source code");
-                quote!(#wrapper_tkn::owned( __Integer::try_from(#i).unwrap()))
+                // Special shortcuts for zero and one because they are so common
+                if i.is_zero() {
+                    quote!(#wrapper_tkn::owned(__Integer::zero()))
+                } else if i.is_one() {
+                    quote!(#wrapper_tkn::owned(__Integer::one()))
+                } else {
+                    let i = i
+                        .to_u128()
+                        .expect("Integer {i} is too big to be represented in source code");
+                    quote!(#wrapper_tkn::owned( __Integer::try_from(#i).unwrap()))
+                }
             }
             StringE(s) => {
                 quote!(#wrapper_tkn::owned(__String::from(#s)))
