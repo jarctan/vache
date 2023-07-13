@@ -5,7 +5,9 @@ fn main() {
     while i < 4 {
         var j = 0;
         while j < i {
-            a[i][j] <-> a[j][i];
+            var c = a[i][j];
+            a[i][j] = a[j][i];
+            a[j][i] = c;
             j = j + 1;
         }
         i = i + 1;

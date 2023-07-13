@@ -657,7 +657,11 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let place1 = self.visit_rhs_place(place1, Wrapper::Cow, f_ret_struct);
                 let place2 = self.visit_rhs_place(place2, Wrapper::Cow, f_ret_struct);
                 quote! {
-                    ::std::mem::swap(#place1, #place2);
+                    let __p1: *mut _ = #place1;
+                    let __p2: *mut _ = #place2;
+                    unsafe {
+                        ::std::ptr::swap(__p1, __p2);
+                    }
                 }
             }
             ExprS(expr) => {
