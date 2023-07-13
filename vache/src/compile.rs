@@ -290,7 +290,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     Mode::SMutBorrowed => unimplemented!(),
                     Mode::Cloned => match wrapper {
                         Wrapper::Var => quote!(Var::clone(&(#tuple).#elem)),
-                        Wrapper::Cow => quote!(Cow::clone(&*(#tuple).#elem)),
+                        Wrapper::Cow => quote!(Cow::clone(&(#tuple).#elem)),
                         Wrapper::Vec => unreachable!(),
                     },
                     Mode::Moved => match wrapper {
