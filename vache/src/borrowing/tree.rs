@@ -235,7 +235,7 @@ impl<'ctx, T: Default> LocTree<'ctx, T> {
                     unreachable!()
                 }
             }
-            CompoundL(_) => panic!("Path cannot be created."),
+            CompoundL(_) => panic!("Path for {loc:?} cannot be created."),
         }
     }
 }
@@ -460,7 +460,7 @@ impl<'ctx> Add<Loc<'ctx>> for LocTree<'ctx, ()> {
     type Output = Self;
 
     fn add(mut self, loc: Loc<'ctx>) -> Self {
-        self.get_mut_or_insert(loc);
+        self.get_node_mut_or_insert(loc);
         self
     }
 }
