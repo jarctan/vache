@@ -144,6 +144,10 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
                     [(DefaultB, dest_l)],
                 )
             }
+            anf::StmtKind::SwapS(place1, place2) => self.insert(
+                self.instr(InstrKind::SwapS(place1, place2), s.span),
+                [(DefaultB, dest_l)],
+            ),
             anf::StmtKind::WhileS {
                 cond,
                 body,

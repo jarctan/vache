@@ -123,8 +123,9 @@ impl fmt::Debug for Span {
 /// User-friendly representation of a position.
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub struct LineCol {
-    /// Line of the position.
+    /// Line of the position in the file.
     pub line: usize,
+    /// Column of the position in the file.
     pub col: usize,
 }
 

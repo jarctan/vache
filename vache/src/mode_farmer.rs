@@ -85,6 +85,10 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
     fn visit_stmt(&mut self, s: &Stmt<'ctx>) {
         match &s.kind {
             AssignS(_, e) | ExprS(e) => self.visit_expr(e),
+            SwapS(place1, place2) => {
+                self.visit_place(place1);
+                self.visit_place(place2);
+            }
             WhileS { cond, body } => {
                 self.visit_expr(cond);
                 self.visit_block(body);

@@ -163,8 +163,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         }
     }
 
-    /// Compiles a place.
-    fn visit_place(
+    /// Compiles a (rhs) place.
+    fn visit_rhs_place(
         &mut self,
         place: &Place<'ctx>,
         wrapper: Wrapper,
@@ -189,8 +189,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         Wrapper::Var => quote!(Var::Mut(&mut #var)),
                         Wrapper::Vec => unreachable!(),
                     },
-                    Mode::SBorrowed => quote!(#var),
-                    Mode::SMutBorrowed => quote!(#var),
+                    Mode::SBorrowed => quote!((&#var)),
+                    Mode::SMutBorrowed => quote!((&mut #var)),
                     Mode::Moved => match wrapper {
                         Wrapper::Cow => quote!(Cow::take(&mut #var)),
                         Wrapper::Var => quote!(Var::Owned(Cow::take(&mut #var))),
@@ -210,7 +210,9 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         Wrapper::Var => {
                             quote!(Var::Owned(Cow::borrow((#array).get(#index).context(#codespan)?)))
                         }
-                        Wrapper::Cow => unimplemented!(),
+                        Wrapper::Cow => {
+                            quote!(Cow::borrow((#array).get(#index).context(#codespan)?))
+                        }
                         Wrapper::Vec => unreachable!(),
                     },
                     Mode::SBorrowed => quote!((#array).get(#index).context(#codespan)?),
@@ -441,7 +443,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             StringE(s) => {
                 quote!(#wrapper_tkn::owned(__String::from(#s)))
             }
-            PlaceE(p) => self.visit_place(p, wrapper, f_ret_struct),
+            PlaceE(p) => self.visit_rhs_place(p, wrapper, f_ret_struct),
             StructE { name, fields } => {
                 let name = format_ident!("{name}");
                 let fields = fields.iter().map(|(name, expr)| {
@@ -605,7 +607,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     ) -> TokenStream {
         match &arg.kind {
             ArgKind::Standard(arg) => self.visit_expr(arg, wrapper, f_ret_struct),
-            ArgKind::InPlace(place) => self.visit_place(place, wrapper, f_ret_struct),
+            ArgKind::InPlace(place) => self.visit_rhs_place(place, wrapper, f_ret_struct),
             ArgKind::Binding(arg, _) => self.visit_expr(arg, wrapper, f_ret_struct),
         }
     }
@@ -649,6 +651,13 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 // For fields, add a `Field` wrapper
                 quote! {
                     #lhs = #rhs;
+                }
+            }
+            SwapS(place1, place2) => {
+                let place1 = self.visit_rhs_place(place1, Wrapper::Cow, f_ret_struct);
+                let place2 = self.visit_rhs_place(place2, Wrapper::Cow, f_ret_struct);
+                quote! {
+                    ::std::mem::swap(#place1, #place2);
                 }
             }
             ExprS(expr) => {

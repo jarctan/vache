@@ -2,7 +2,7 @@
 
 use std::default::default;
 
-use super::{Block, Expr, LhsPlace, Span, TySubst, TyVar, VarDef};
+use super::{Block, Expr, LhsPlace, Place, Span, TySubst, TyVar, VarDef};
 use crate::utils::set::Set;
 use crate::Arena;
 
@@ -59,6 +59,7 @@ pub enum StmtKind<'ctx> {
         /// For loop body.
         body: Block<'ctx>,
     },
+    SwapS(Place<'ctx>, Place<'ctx>),
     /// Hole statement.
     #[default]
     HoleS,
@@ -77,6 +78,9 @@ impl<'ctx> StmtKind<'ctx> {
     pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         match self {
             AssignS(lhs, rhs) => AssignS(lhs.subst_ty(arena, subst), rhs.subst_ty(arena, subst)),
+            SwapS(place1, place2) => {
+                SwapS(place1.subst_ty(arena, subst), place2.subst_ty(arena, subst))
+            }
             ExprS(e) => ExprS(e.subst_ty(arena, subst)),
             BreakS => BreakS,
             ContinueS => ContinueS,
@@ -98,6 +102,7 @@ impl<'ctx> StmtKind<'ctx> {
     pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         match self {
             AssignS(lhs, rhs) => lhs.free_ty_vars() + rhs.free_ty_vars(),
+            SwapS(place1, place2) => place1.free_ty_vars() + place2.free_ty_vars(),
             ExprS(e) => e.free_ty_vars(),
             BreakS | ContinueS | HoleS => default(),
             ReturnS(e) => e.free_ty_vars(),

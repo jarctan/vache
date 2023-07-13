@@ -16,7 +16,7 @@ block = { lcb ~ (!(expr ~ rcb) ~ stmt)* ~ expr? ~ rcb }
 
 // Note: put expressions that can be used as statements without a ";"
 // AFTER the (expr ~ sc) because of greediness
-stmt = { return_stmt | break_stmt | continue_stmt | while_loop | loop_loop | for_loop | declare | assign | (expr ~ sc) | if_then | match_expr | block }
+stmt = { return_stmt | break_stmt | continue_stmt | while_loop | loop_loop | for_loop | declare | assign | swap | (expr ~ sc) | if_then | match_expr | block }
 
 return_stmt = { return_kw ~ expr? ~ sc }
 
@@ -31,6 +31,8 @@ loop_loop = { loop_kw ~ block }
 for_loop = { for_kw ~ ident ~ in_kw ~ expr ~ block }
 
 assign = { expr ~ eq ~ expr ~ sc }
+
+swap = { expr ~ swap_kw ~ expr ~ sc }
 
 declare = { var_kw ~ (vardef | ident) ~ eq ~ expr ~ sc }
 
@@ -104,7 +106,8 @@ int_ty = { "int" }
 keyword = { var_kw | struct_kw | if_kw | else_kw | while_kw | for_kw | in_kw | bool_ty | str_ty | int_ty | fn_kw | match_kw | break_kw | return_kw | continue_kw | loop_kw }
 
 prefix = { bang }
-infix  = { add | sub | mul | div | rem | pow | le | lt | ge | gt | eqq | neq | and | or | not_in }
+// Do not match swap keyword, that unfortunately starts with the same
+infix = { !swap_kw ~ (add | sub | mul | div | rem | pow | le | lt | ge | gt | eqq | neq | and | or | not_in) }
 
 // second case is a hack to also match identifiers that start with a keyword
 // https://stackoverflow.com/questions/61619285/peg-grammar-to-parse-identifier-name-which-is-not-a-keyword
@@ -130,15 +133,16 @@ rp  = { ")" }
 lb  = { "[" }
 rb  = { "]" }
 
-sc     = { ";" }
-eq     = { "=" }
-cln    = { ":" }
-cma    = { "," }
-dt     = { "." }
-clncln = { "::" }
-arw    = { "->" }
-farw   = { "=>" }
-pipe   = { "|" }
+sc      = { ";" }
+eq      = { "=" }
+cln     = { ":" }
+cma     = { "," }
+dt      = { "." }
+clncln  = { "::" }
+arw     = { "->" }
+farw    = { "=>" }
+pipe    = { "|" }
+swap_kw = { "<->" }
 
 add = { "+" }
 sub = { "-" }

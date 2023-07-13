@@ -548,6 +548,11 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 let lhs_ref = self.visit_lhs_place(stmts, place, ret_ptr);
                 stmts.push(Stmt::new(AssignS(lhs_ref, RValue::Place(rhs)), s.span));
             }
+            tast::StmtKind::SwapS(place1, place2) => {
+                let place1 = self.visit_rhs_place(stmts, place1, ret_ptr);
+                let place2 = self.visit_rhs_place(stmts, place2, ret_ptr);
+                stmts.push(Stmt::new(SwapS(place1, place2), s.span));
+            }
             tast::StmtKind::WhileS { cond, body } => {
                 let mut cond_block = vec![];
                 self.push_scope();

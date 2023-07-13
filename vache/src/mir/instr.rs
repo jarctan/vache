@@ -47,6 +47,8 @@ pub enum InstrKind<'mir, 'ctx> {
     Noop,
     /// Assigns a variable.
     Assign(LhsRef<'mir, 'ctx>, RValue<'mir, 'ctx>),
+    /// Swaps two values.
+    SwapS(Reference<'mir, 'ctx>, Reference<'mir, 'ctx>),
     /// Performs a call to `name(args)`, putting the result in variable
     /// `destination`.
     Call {
@@ -69,6 +71,9 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
     pub fn mutated_ptrs<'a>(&'a self) -> Box<dyn Iterator<Item = Pointer<'ctx>> + 'a> {
         match self {
             InstrKind::Noop | InstrKind::Branch(..) => boxed(std::iter::empty()),
+            InstrKind::SwapS(place1, place2) => {
+                boxed([place1.as_ptr(), place2.as_ptr()].into_iter())
+            }
             InstrKind::Call {
                 name: _,
                 destination: lhs,
@@ -109,6 +114,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
             InstrKind::Noop => boxed(std::iter::empty()),
             InstrKind::Branch(r) | InstrKind::PhantomUse(r) => boxed(std::iter::once(r)),
             InstrKind::Assign(_, rval) => rval.references_mut(),
+            InstrKind::SwapS(place1, place2) => boxed([place1, place2].into_iter()),
             InstrKind::Call {
                 name: _,
                 args,
@@ -125,6 +131,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
             InstrKind::Noop => boxed(std::iter::empty()),
             InstrKind::Branch(r) | InstrKind::PhantomUse(r) => boxed(std::iter::once(r)),
             InstrKind::Assign(_, rval) => rval.references(),
+            InstrKind::SwapS(place1, place2) => boxed([place1, place2].into_iter()),
             InstrKind::Call {
                 name: _,
                 args,
@@ -160,6 +167,7 @@ impl<'mir, 'ctx> fmt::Debug for InstrKind<'mir, 'ctx> {
         match self {
             InstrKind::Noop => write!(f, "()"),
             InstrKind::Assign(lhs, rhs) => write!(f, "{lhs:?} = {rhs:?}"),
+            InstrKind::SwapS(place1, place2) => write!(f, "{place1:?} <-> {place2:?}"),
             InstrKind::Call {
                 name,
                 args,

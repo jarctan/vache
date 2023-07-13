@@ -404,6 +404,11 @@ impl<'ctx> Ledger<'ctx> {
             Some(&self.unrecoverables)
         }
     }
+
+    /// Swaps the borrows for two memory locations in the ledger.
+    pub(crate) fn swap(&mut self, loc1: Loc<'ctx>, loc2: Loc<'ctx>) {
+        self.borrows.swap(loc1, loc2);
+    }
 }
 
 impl fmt::Debug for Ledger<'_> {

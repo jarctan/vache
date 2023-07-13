@@ -96,6 +96,8 @@ pub fn pretty_print_rule(rule: &Rule) -> &'static str {
         Rule::lb => "`[`",
         Rule::rb => "`]`",
         Rule::dt => "`.`",
+        Rule::swap_kw => "`<->`",
+        Rule::swap => "a swap operation",
         Rule::clncln => "`::`",
         Rule::while_kw => "`while`",
         Rule::loop_kw => "`loop`",

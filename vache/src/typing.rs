@@ -71,6 +71,16 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ret_ty: UnitT,
             span: default(),
         });
+        typer.add_fun(ast::FunSig {
+            name: "swap",
+            ty_params: vec![TyVar::Named("T")],
+            params: vec![
+                ast::ref_param("x", VarT(TyVar::Named("T"))),
+                ast::ref_param("y", VarT(TyVar::Named("T"))),
+            ],
+            ret_ty: UnitT,
+            span: default(),
+        });
         typer.add_fun(binop_int_sig("<=", BoolT));
         typer.add_fun(binop_int_sig("<", BoolT));
         typer.add_fun(binop_int_sig(">=", BoolT));
@@ -1070,6 +1080,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                 Expr::new(MatchE(boxed(matched), new_branches), ty, common_stm, span)
             }
+            ast::ExprKind::HoleE => unreachable!(),
         }
     }
 
@@ -1277,6 +1288,14 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     }
                     ReturnS(ret).with_span(s.span)
                 }
+                ast::StmtKind::SwapS(place1, place2) => {
+                    let place1 =
+                        self.visit_rhs_place(place1, Some(Mode::SMutBorrowed), ret_ty, in_loop)?;
+                    let place2 =
+                        self.visit_rhs_place(place2, Some(Mode::SMutBorrowed), ret_ty, in_loop)?;
+                    SwapS(place1, place2).with_span(s.span)
+                }
+                ast::StmtKind::HoleS => unreachable!(),
             }
         };
         res.unwrap_or_default()
@@ -1623,6 +1642,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
             }
             ast::ExprKind::NamespacedE(_) => todo!(),
+            ast::ExprKind::HoleE => unreachable!(),
         }
     }
 

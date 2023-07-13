@@ -21,7 +21,7 @@ impl<'mir, 'ctx> Stmt<'mir, 'ctx> {
     }
 }
 
-/// A statement.
+/// A statement kind.
 #[derive(Debug)]
 pub enum StmtKind<'mir, 'ctx> {
     /// An assignment.
@@ -53,6 +53,8 @@ pub enum StmtKind<'mir, 'ctx> {
         /// While body.
         body: Block<'mir, 'ctx>,
     },
+    /// A memory swap between two references.
+    SwapS(Reference<'mir, 'ctx>, Reference<'mir, 'ctx>),
     /// Return statement.
     ReturnS,
     /// Break statement.

@@ -7,7 +7,7 @@ use super::flow::Flow;
 use super::ledger::Ledger;
 use super::tree::LocTree;
 use crate::codes::BORROW_ERROR;
-use crate::mir::{Cfg, CfgI, CfgLabel, Loc, Mode, Stratum, Varname};
+use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
 use crate::reporter::{Diagnostic, Diagnostics, Reporter};
 use crate::utils::set::Set;
 use crate::utils::MultiSet;
@@ -102,17 +102,50 @@ fn loan_liveness<'ctx>(
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
             let mut outs: Ledger = ins.clone();
 
-            for assigned in instr.mutated_ptrs() {
-                let borrows = refs
-                    .iter()
-                    .filter(|r| r.id != assigned.id)
-                    .map(|reference| outs.borrow(*assigned.loc(), reference, label))
-                    .collect::<Vec<_>>();
-                let borrows = outs.flatten(borrows.into_iter());
-                if var_flow[&label].outs.contains(assigned.loc()) {
-                    outs.set_borrows(assigned.place(), Borrows::Distinct(borrows));
-                } else {
-                    outs.flush_place(assigned.place(), true);
+            match &instr.kind {
+                InstrKind::SwapS(r1, r2) => {
+                    let (place1, place2) = (r1.place(), r2.place());
+                    match (Loc::try_from(*r1.place()), Loc::try_from(*r2.place())) {
+                        (Ok(loc1), Ok(loc2)) => {
+                            outs.swap(loc1, loc2);
+                        }
+                        _ => {
+                            if place1.root() == place2.root() {
+                                // Simplest case: r1 and r2 have the same root:
+                                // nothing to do, exchanging
+                                // swapping elements in the same location is
+                                // fine, since the borrows for that location
+                                // stay the same
+                                // We check that first since it is really easy
+                                // to compute, compared to the other cases
+                            }
+                            if ins.borrows(place1).map(Loan::from).collect::<Set<_>>()
+                                == ins.borrows(place2).map(Loan::from).collect::<Set<_>>()
+                            {
+                                // If they have the same borrows (modulo
+                                // the name of the borrower, which is why we
+                                // convert the `Borrow`s to `Loan`s), that's
+                                // fine too, and we have nothing to do
+                            } else {
+                                panic!("Invalid swap");
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    for assigned in instr.mutated_ptrs() {
+                        let borrows = refs
+                            .iter()
+                            .filter(|r| r.id != assigned.id)
+                            .map(|reference| outs.borrow(*assigned.loc(), reference, label))
+                            .collect::<Vec<_>>();
+                        let borrows = outs.flatten(borrows.into_iter());
+                        if var_flow[&label].outs.contains(assigned.loc()) {
+                            outs.set_borrows(assigned.place(), Borrows::Distinct(borrows));
+                        } else {
+                            outs.flush_place(assigned.place(), true);
+                        }
+                    }
                 }
             }
 

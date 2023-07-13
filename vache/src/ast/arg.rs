@@ -53,7 +53,7 @@ impl<'ctx> Arg<'ctx> {
     }
 }
 
-impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Arg<'ctx> {
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Option<Arg<'ctx>> {
     fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         assert!(matches!(pair.as_rule(), Rule::arg));
         let span = Span::from(pair.as_span());
@@ -68,19 +68,19 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Arg<'ctx> {
             Rule::in_place_arg => {
                 let mut pairs = pair.into_inner();
                 consume!(pairs, Rule::as_mut);
-                let p = ctx.parse(consume!(pairs));
+                let p = Option::<Place>::parse(consume!(pairs), ctx)?;
                 ArgKind::InPlace(p)
             }
             Rule::binding_arg => {
                 let mut pairs = pair.into_inner();
                 let e = ctx.parse(consume!(pairs));
                 consume!(pairs, Rule::as_mut);
-                let p = ctx.parse(consume!(pairs));
+                let p = Option::<Place>::parse(consume!(pairs), ctx)?;
                 ArgKind::Binding(e, p)
             }
             rule => panic!("parser internal error: expected an argument, found {rule:?}"),
         };
-        Arg { kind, span }
+        Some(Arg { kind, span })
     }
 }
 

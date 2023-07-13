@@ -487,6 +487,15 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
         self.add_value(value, stm)
     }
 
+    /// Swaps two value locations.
+    fn swap_values(&mut self, r1: ValueRef, r2: ValueRef) {
+        debug_assert!(
+            r1.stratum == r2.stratum,
+            "Swapped values should be of the same stratum"
+        );
+        self.env[usize::from(r1.stratum)].swap_values(r1, r2);
+    }
+
     /// Visits a function argument, optionally choosing to clone the value.
     pub fn visit_arg(&mut self, arg: &Arg<'mir, 'ctx>, stratum: Stratum) -> ValueRef {
         match arg {
@@ -592,6 +601,10 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                         }
                     }
                 }
+                DefaultB
+            }
+            InstrKind::SwapS(place1, place2) => {
+                self.swap_values(self.get_ptr(place1), self.get_ptr(place2));
                 DefaultB
             }
             InstrKind::Call {

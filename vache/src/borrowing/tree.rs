@@ -205,6 +205,19 @@ impl<'ctx, T> LocTree<'ctx, T> {
             }
         }
     }
+
+    /// Swaps two memory locations.
+    pub(crate) fn swap(&mut self, loc1: Loc<'ctx>, loc2: Loc<'ctx>) {
+        // If either one is not defined, that means that it does not have any borrow.
+        // In which case, we create an empty entry when retrieving that location from
+        // the tree. Hence the `get_node_mut_or_insert` instead of
+        // `get_node_mut`.
+        let pa: *mut _ = self.get_node_mut_or_insert(loc1);
+        let pb: *mut _ = self.get_node_mut_or_insert(loc2);
+        unsafe {
+            std::ptr::swap(pa, pb);
+        }
+    }
 }
 
 impl<'ctx, T: Default> LocTree<'ctx, T> {

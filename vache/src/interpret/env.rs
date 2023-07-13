@@ -82,6 +82,25 @@ impl<'ctx> Env<'ctx> {
         std::mem::take(&mut self.slab[key])
     }
 
+    /// Swaps the values at two memory locations.
+    ///
+    /// # Panics
+    /// Panics if the two locations are not in the same stratum.
+    pub fn swap_values(&mut self, r1: ValueRef, r2: ValueRef) {
+        debug_assert!(
+            r1.stratum == r2.stratum,
+            "Swapped values should be of the same stratum"
+        );
+        // https://stackoverflow.com/questions/25531963/how-can-i-swap-items-in-a-vector-slice-or-array-in-rust
+        // Can't take two mutable loans from one slab, so instead just cast
+        // them to their raw pointers to do the swap
+        let pa: *mut Value = &mut self.slab[r1.key];
+        let pb: *mut Value = &mut self.slab[r2.key];
+        unsafe {
+            std::ptr::swap(pa, pb);
+        }
+    }
+
     /// Gets the definition of a variable.
     pub fn get_var(&self, v: impl Borrow<Varname<'ctx>>) -> Option<&ValueRef> {
         self.var_env.get(v.borrow())

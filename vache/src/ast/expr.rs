@@ -112,6 +112,10 @@ pub enum ExprKind<'ctx> {
     NamespacedE(Namespaced<'ctx>),
     /// A pattern matching.
     MatchE(Box<Expr<'ctx>>, Vec<(Expr<'ctx>, Expr<'ctx>)>),
+    /// Hole expression.
+    ///
+    /// In case the parsing we do fails.
+    HoleE,
 }
 
 use ExprKind::*;
@@ -219,6 +223,10 @@ impl<'ctx> Expr<'ctx> {
         } else {
             None
         }
+    }
+
+    fn hole(span: Span) -> Expr<'ctx> {
+        Self { kind: HoleE, span }
     }
 }
 
@@ -595,17 +603,24 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                                 consume_back!(pairs, Rule::rp);
                                 let pairs =
                                     pairs.filter(|pair| !matches!(pair.as_rule(), Rule::cma));
+                                let mut args = vec![];
+                                for pair in pairs {
+                                    match ctx.parse(pair) {
+                                        Some(arg) => args.push(arg),
+                                        None => return Expr::hole(span),
+                                    }
+                                }
                                 match acc.kind {
                                     PlaceE(place) if let VarP(name) = place.kind => CallE {
                                         name: Namespaced::name_with_span(
                                             name.as_str(),
                                             name.as_span(),
                                         ),
-                                        args: pairs.map(|pair| ctx.parse(pair)).collect(),
+                                        args,
                                     },
                                     NamespacedE(name) => CallE {
                                         name,
-                                        args: pairs.map(|pair| ctx.parse(pair)).collect(),
+                                        args,
                                     },
                                     _ => panic!("Expected a callable expression"),
                                 }

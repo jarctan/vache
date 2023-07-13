@@ -64,6 +64,12 @@ pub enum StmtKind<'ctx> {
         /// For loop body.
         body: Block<'ctx>,
     },
+    /// Swaps two places.
+    SwapS(Place<'ctx>, Place<'ctx>),
+    /// Hole statement.
+    ///
+    /// In case the parsing we do fails.
+    HoleS,
 }
 
 use StmtKind::*;
@@ -138,6 +144,11 @@ impl<'ctx> Stmt<'ctx> {
             None
         }
     }
+
+    /// Hole statement, in case we fail to parse.
+    fn hole(span: Span) -> Self {
+        Self { kind: HoleS, span }
+    }
 }
 
 impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
@@ -163,7 +174,12 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
             }
             Rule::assign => {
                 let mut pairs = pair.into_inner();
-                let lhs = ctx.parse(consume!(pairs));
+                let lhs = match ctx.parse(consume!(pairs)) {
+                    Some(place) => place,
+                    None => {
+                        return Stmt::hole(span);
+                    }
+                };
                 consume!(pairs, Rule::eq);
                 let rhs = ctx.parse(consume!(pairs));
                 AssignS(lhs, rhs)
@@ -178,6 +194,23 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Stmt<'ctx> {
                 let cond = ctx.parse(consume!(pairs));
                 let body = ctx.parse(consume!(pairs));
                 WhileS { cond, body }
+            }
+            Rule::swap => {
+                let mut pairs = pair.into_inner().peekable();
+                let place1 = match ctx.parse(consume!(pairs)) {
+                    Some(place) => place,
+                    None => {
+                        return Stmt::hole(span);
+                    }
+                };
+                consume!(pairs, Rule::swap_kw);
+                let place2 = match ctx.parse(consume!(pairs)) {
+                    Some(place) => place,
+                    None => {
+                        return Stmt::hole(span);
+                    }
+                };
+                SwapS(place1, place2)
             }
             Rule::loop_loop => {
                 let mut pairs = pair.into_inner();

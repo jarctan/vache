@@ -2,10 +2,12 @@
 
 use std::default::default;
 
+use codespan_reporting::diagnostic::Diagnostic;
 use pest::iterators::Pair;
 
 use super::{Context, Parsable};
 use super::{Expr, ExprKind, Mode, Span, VarUse};
+use crate::codes::*;
 use crate::grammar::*;
 use crate::utils::boxed;
 
@@ -68,14 +70,22 @@ impl<'ctx> From<&'ctx str> for Place<'ctx> {
     }
 }
 
-impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Place<'ctx> {
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Option<Place<'ctx>> {
     fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
         assert_eq!(pair.as_rule(), Rule::expr);
 
         let expr: Expr = ctx.parse(pair);
         match expr.kind {
-            PlaceE(place) => place,
-            _ => panic!("Parser internal error: expected place, found {:?}", expr),
+            PlaceE(place) => Some(place),
+            _ => {
+                ctx.emit(
+                    Diagnostic::error()
+                        .with_code(PARSER_ERROR)
+                        .with_message("expected a place (`a[b]`, `c`, `s.x`, ...)")
+                        .with_labels(vec![expr.span.as_label()]),
+                );
+                None
+            }
         }
     }
 }
