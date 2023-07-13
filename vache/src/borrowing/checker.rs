@@ -33,10 +33,9 @@ impl BorrowChecker {
     /// Borrow-checks a function.
     fn visit_fun<'mir, 'ctx>(
         &mut self,
-        ctx: &mut Context<'ctx>,
         mut f: Fun<'mir, 'ctx>,
     ) -> Result<Fun<'mir, 'ctx>, Diagnostics<'ctx>> {
-        f.body = liveness(f.body, f.entry_l, f.ret_l, &f.strata, &mut ctx.reporter)?;
+        f.body = liveness(f.body, f.entry_l, f.ret_l, &f.strata)?;
         Ok(f)
     }
 
@@ -48,7 +47,7 @@ impl BorrowChecker {
     ) -> Result<Program<'mir, 'ctx>, Diagnostics<'ctx>> {
         let mut funs: HashMap<&str, Fun> = default();
         for (name, f) in p.funs {
-            funs.insert(name, self.visit_fun(ctx, f)?);
+            funs.insert(name, self.visit_fun(f)?);
         }
 
         if ctx.reporter.has_errors() {

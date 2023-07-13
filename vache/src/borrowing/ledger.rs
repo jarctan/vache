@@ -1,17 +1,13 @@
 //! Declaring here the annotations to the CFG we compute during the analysis.
 
-use std::collections::HashMap;
 use std::default::default;
 use std::fmt;
 use std::iter::Extend;
 use std::iter::Sum;
 
-use super::{Borrow, BorrowCnt, BorrowSet, Borrows, Loan, LoanCnt, Loans, LocTree};
+use super::{Borrow, BorrowCnt, Borrows, Loan, LoanCnt, LocTree};
 use crate::mir::{CfgLabel, Loc, Mode, Place, Reference};
 use crate::utils::set::Set;
-
-/// Borrows that cannot be recovered from.
-pub type UnrecoverableBorrows<'ctx> = HashMap<Borrow<'ctx>, Borrow<'ctx>>;
 
 /// A loan ledger.
 #[derive(Clone, Eq, Default)]
@@ -23,15 +19,11 @@ pub struct Ledger<'ctx> {
     ///
     /// Invariant: `self.loans` and `self.borrows` are consistent (`Borrow`s are
     /// in both).
-    loans: LocTree<'ctx, Loans<'ctx>>,
+    loans: LocTree<'ctx, Borrows<'ctx>>,
     /// Invalidated borrows.
     ///
     /// Currently, these are only immutable invalidations.
     invalidations: LoanCnt<'ctx>,
-    /// Unrecoverable invalidated borrows.
-    ///
-    /// Currently, these are only mutable invalidations.
-    unrecoverables: UnrecoverableBorrows<'ctx>,
 }
 
 impl<'ctx> PartialEq for Ledger<'ctx> {
@@ -39,7 +31,6 @@ impl<'ctx> PartialEq for Ledger<'ctx> {
         self.borrows == other.borrows
             && self.loans == other.loans
             && self.invalidations.as_set() == other.invalidations.as_set()
-            && self.unrecoverables == other.unrecoverables
     }
 }
 
@@ -113,45 +104,32 @@ impl<'ctx> Ledger<'ctx> {
             loc,
             if force { " forcefully" } else { "" }
         );*/
-
-        match borrows {
-            Borrows::None => default(),
-            Borrows::Aliased(alias) => {
+        for borrow in borrows.iter() {
+            // If the borrow is not invalidated, remove it from the loans.
+            if !self.invalidations.contains(&Loan::from(*borrow)) {
                 self.loans
-                            .get_mut(alias.borrowed_loc())
-                            .unwrap_or_else(|| panic!("Ledger error: want to free a non-invalidated borrow {alias:?} but loaner is not alive anymore!"))
-                            .remove(&alias);
-                [alias].into_iter().collect()
-            }
-            Borrows::Distinct(borrows) => {
-                for borrow in borrows.iter() {
-                    // If the borrow is not invalidated, remove it from the loans.
-                    if !self.invalidations.contains(&Loan::from(*borrow)) {
-                        self.loans
                             .get_mut(borrow.borrowed_loc())
                             .unwrap_or_else(|| panic!("Ledger error: want to free a non-invalidated borrow {borrow:?} but loaner is not alive anymore!"))
                             .remove(borrow);
-                    }
-                }
-
-                if !borrows.is_empty() || force {
-                    let removed_loans = self
-                        .loans
-                        .remove(loc)
-                        .map(BorrowCnt::from)
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(Loan::from);
-                    /*if !removed_loans.is_empty() {
-                        #[cfg(not(test))]
-                        println!("Invalidated ici with {:?}", removed_loans);
-                    }*/
-                    self.invalidations.extend(removed_loans);
-                }
-
-                borrows
             }
         }
+
+        if !borrows.is_empty() || force {
+            let removed_loans = self
+                .loans
+                .remove(loc)
+                .map(BorrowCnt::from)
+                .unwrap_or_default()
+                .into_iter()
+                .map(Loan::from);
+            /*if !removed_loans.is_empty() {
+                #[cfg(not(test))]
+                println!("Invalidated ici with {:?}", removed_loans);
+            }*/
+            self.invalidations.extend(removed_loans);
+        }
+
+        borrows
     }
 
     /// Simultaneous removal of several locations from the ledger.
@@ -185,19 +163,13 @@ impl<'ctx> Ledger<'ctx> {
                 to_clean.insert(*loc);
             }
 
-            match borrows {
-                Borrows::None => (),
-                Borrows::Aliased(_) => todo!(),
-                Borrows::Distinct(borrows) => {
-                    for borrow in borrows.iter() {
-                        // If the borrow is not invalidated, remove it from the loans.
-                        if !self.invalidations.contains(&Loan::from(*borrow)) {
-                            self.loans
+            for borrow in borrows.iter() {
+                // If the borrow is not invalidated, remove it from the loans.
+                if !self.invalidations.contains(&Loan::from(*borrow)) {
+                    self.loans
                             .get_mut(borrow.borrowed_loc())
                             .unwrap_or_else(|| panic!("Ledger error: want to free a non-invalidated borrow {borrow:?} but loaner is not alive anymore!"))
                             .remove(borrow);
-                        }
-                    }
                 }
             }
         }
@@ -228,92 +200,8 @@ impl<'ctx> Ledger<'ctx> {
         }
     }
 
-    /// Tries to flatten/merge the list of sets of borrows into a set of
-    /// borrows, checking for consistency between borrows (we cannot merge
-    /// if we have two mutable borrows, for instance).
-    ///
-    /// Assertion: the inner sets are consistent.
-    ///
-    /// Invariant: always returns a set that does not contradict itself.
-    pub fn flatten<I1: IntoIterator<Item = Borrow<'ctx>>, I2: IntoIterator<Item = I1>>(
-        &mut self,
-        borrows: I2,
-    ) -> BorrowSet<'ctx> {
-        let mut map = HashMap::new();
-        let mut retained = Set::new();
-        for borrows in borrows {
-            for borrow in borrows {
-                let loans: &mut Loans = map.entry(borrow.borrowed_loc()).or_default();
-
-                // Depending on the result of the insertion, find who to blame
-                // We always try to invalidate immutable borrows first because
-                // that's what we can handle best afterward But
-                // if need but, we emit an unrecoverable invalidation
-                match loans.insert(borrow) {
-                    Ok(borrows) => {
-                        for borrow in borrows {
-                            /*#[cfg(not(test))]
-                            println!("Invalidated flatten {:?}", borrow);*/
-                            self.invalidations.insert(borrow.into());
-                        }
-                        retained.insert(borrow);
-                    }
-                    Err(_contra) => {
-                        /*#[cfg(not(test))]
-                        println!("Invalidated flatten 2 {:?}", borrow);*/
-                        self.invalidations.insert(borrow.into());
-                    }
-                }
-            }
-        }
-        retained
-    }
-
     /// Records the updated borrows of a place in the ledger.
     pub fn set_borrows(&mut self, place: impl Into<Place<'ctx>>, borrows: Borrows<'ctx>) {
-        match borrows {
-            Borrows::None => self.set_borrow_set(place, Set::new()),
-            Borrows::Distinct(set) => self.set_borrow_set(place, set),
-            Borrows::Aliased(alias) => self.set_aliased(place, alias),
-        }
-    }
-
-    /// Sets the new `place` as an alias wrt `borrows`
-    fn set_aliased(&mut self, place: impl Into<Place<'ctx>>, borrow: Borrow<'ctx>) {
-        let place = place.into();
-
-        if 1 <= 3 {
-            unreachable!();
-        }
-
-        // First, flush the place.
-        self.flush_place(place, true);
-
-        // Register on the loaner side
-        match self
-            .loans
-            .get_mut_or_insert(borrow.borrowed_loc())
-            .insert(borrow)
-        {
-            Ok(borrows) => {
-                for borrow in borrows {
-                    self.invalidations.insert(borrow.into());
-                }
-            }
-            Err(_contra) => {
-                self.invalidations.insert(borrow.into());
-            }
-        }
-
-        // Register on the borrower side
-        let loc = Loc::try_from(place).expect("Alias must be locations");
-        *self.borrows.get_mut_or_insert(loc) = Borrows::Aliased(borrow);
-    }
-
-    /// Sets the new `borrows` of `place`.
-    ///
-    /// Note: will filter borrows that are made into `place` itself.
-    pub fn set_borrow_set(&mut self, place: impl Into<Place<'ctx>>, borrows: BorrowSet<'ctx>) {
         let place = place.into();
         let loc = place.root();
 
@@ -322,30 +210,9 @@ impl<'ctx> Ledger<'ctx> {
 
         // Register on the loaner side
         for &borrow in &borrows {
-            match self
-                .loans
+            self.loans
                 .get_mut_or_insert(borrow.borrowed_loc())
-                .insert(borrow)
-            {
-                Ok(borrows) => {
-                    if !borrows.is_empty() {
-                        /*#[cfg(not(test))]
-                        println!("Mutable borrow {borrow:?} invalidates {borrows:?}");*/
-                    }
-                    for borrow in borrows {
-                        /*#[cfg(not(test))]
-                        println!("Invalidated flatten 3 {:?}", borrow);*/
-                        self.invalidations.insert(borrow.into());
-                    }
-                }
-                Err(_contra) => {
-                    /*#[cfg(not(test))]
-                    println!("Invalidated there");
-                    #[cfg(not(test))]
-                    println!("Invalidated flatten 4 {:?}", borrow);*/
-                    self.invalidations.insert(borrow.into());
-                }
-            }
+                .insert(borrow);
         }
 
         // Register on the borrower side
@@ -354,12 +221,7 @@ impl<'ctx> Ledger<'ctx> {
                 if borrows.is_empty() {
                     self.borrows.remove(loc);
                 } else {
-                    /*#[cfg(not(test))]
-                    println!("Registering borrows");*/
-                    *self.borrows.get_mut_or_insert(loc) = Borrows::Distinct(borrows);
-                    /*let borrows: Vec<Borrow> = self.borrows.get_all(loc).collect();
-                    #[cfg(not(test))]
-                    println!("Registered borrows {borrows:?}");*/
+                    *self.borrows.get_mut_or_insert(loc) = borrows;
                 }
             }
             Err(()) => {
@@ -368,11 +230,7 @@ impl<'ctx> Ledger<'ctx> {
                     // to the old ones, since we have no way to know which (if any) borrows are
                     // invalidated by that assignment.
                     let entry = self.borrows.get_mut_or_insert(loc);
-                    match entry {
-                        Borrows::None => *entry = Borrows::Distinct(borrows),
-                        Borrows::Aliased(_) => unreachable!(),
-                        Borrows::Distinct(set) => set.extend(borrows),
-                    }
+                    entry.extend(borrows);
                 }
             }
         }
@@ -396,15 +254,6 @@ impl<'ctx> Ledger<'ctx> {
         self.invalidations.iter().copied()
     }
 
-    /// Get the unrecoverables invalidations.
-    pub fn unrecoverables<'a>(&'a self) -> Option<&'a UnrecoverableBorrows<'ctx>> {
-        if self.unrecoverables.is_empty() {
-            None
-        } else {
-            Some(&self.unrecoverables)
-        }
-    }
-
     /// Swaps the borrows for two memory locations in the ledger.
     pub(crate) fn swap(&mut self, loc1: Loc<'ctx>, loc2: Loc<'ctx>) {
         self.borrows.swap(loc1, loc2);
@@ -416,29 +265,25 @@ impl fmt::Debug for Ledger<'_> {
         f.debug_struct("Ledger")
             .field("borrows", &self.borrows)
             .field("invalidations", &self.invalidations)
-            .field("unrecoverables", &self.unrecoverables)
             .finish()
     }
 }
 
 impl<'ctx> Sum for Ledger<'ctx> {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        let mut loans: LocTree<Loans> = default();
+        let mut loans: LocTree<Borrows> = default();
         let mut borrows: LocTree<Borrows> = default();
         let mut invalidations: LoanCnt = default();
-        let mut unrecoverables: UnrecoverableBorrows<'ctx> = default();
 
         for ledger in iter {
-            invalidations.extend(loans.append(ledger.loans).into_iter().map(Loan::from));
+            loans.append(ledger.loans);
             borrows.append(ledger.borrows);
             invalidations.extend(ledger.invalidations);
-            unrecoverables.extend(ledger.unrecoverables);
         }
         Self {
             loans,
             borrows,
             invalidations,
-            unrecoverables,
         }
     }
 }

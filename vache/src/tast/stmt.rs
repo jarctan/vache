@@ -59,6 +59,7 @@ pub enum StmtKind<'ctx> {
         /// For loop body.
         body: Block<'ctx>,
     },
+    /// A swap statement that exchanges two places.
     SwapS(Place<'ctx>, Place<'ctx>),
     /// Hole statement.
     #[default]

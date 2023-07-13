@@ -2,13 +2,12 @@
 
 use std::collections::HashMap;
 
-use super::borrow::{Borrows, Loan};
+use super::borrow::Loan;
 use super::flow::Flow;
 use super::ledger::Ledger;
 use super::tree::LocTree;
-use crate::codes::BORROW_ERROR;
 use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
-use crate::reporter::{Diagnostic, Diagnostics, Reporter};
+use crate::reporter::Diagnostics;
 use crate::utils::set::Set;
 use crate::utils::MultiSet;
 
@@ -137,11 +136,10 @@ fn loan_liveness<'ctx>(
                         let borrows = refs
                             .iter()
                             .filter(|r| r.id != assigned.id)
-                            .map(|reference| outs.borrow(*assigned.loc(), reference, label))
-                            .collect::<Vec<_>>();
-                        let borrows = outs.flatten(borrows.into_iter());
+                            .flat_map(|reference| outs.borrow(*assigned.loc(), reference, label))
+                            .collect();
                         if var_flow[&label].outs.contains(assigned.loc()) {
-                            outs.set_borrows(assigned.place(), Borrows::Distinct(borrows));
+                            outs.set_borrows(assigned.place(), borrows);
                         } else {
                             outs.flush_place(assigned.place(), true);
                         }
@@ -196,7 +194,6 @@ pub fn liveness<'mir, 'ctx>(
     entry_l: CfgLabel,
     exit_l: CfgLabel,
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
-    reporter: &mut Reporter<'ctx>,
 ) -> Result<CfgI<'mir, 'ctx>, Diagnostics<'ctx>> {
     let cfg_flow_label_order = cfg
         .postorder(entry_l)
@@ -251,12 +248,7 @@ pub fn liveness<'mir, 'ctx>(
                                 if loans.count() == 0 {
                                     updated = true;
                                     reference.set_mode(Mode::Moved);
-                                } /*else {
-                                      println!(
-                                          "Could not move {loc:?}§{label:?} because of {:?}",
-                                          loans
-                                      );
-                                  }*/
+                                }
                             }
                         }
                         // These ones are used for intermediate variables and for the Rust backend
@@ -307,37 +299,6 @@ pub fn liveness<'mir, 'ctx>(
             }
             None => {
                 // If we have no invalidated anymore, we reach a stable state and we can return.
-
-                // If there are some unrecoverables loan issues in the final ledger, emit the
-                // corresponding warnings.
-                if let Some(unrecoverables) = loan_flow[&exit_l].outs.unrecoverables() {
-                    for (&borrow, &contradiction) in unrecoverables {
-                        reporter.emit(
-                            Diagnostic::error()
-                                .with_code(BORROW_ERROR)
-                                .with_message(format!(
-                                    "cannot use `{}` mutably here",
-                                    borrow.borrowed_loc(),
-                                ))
-                                .with_labels(vec![
-                                    borrow.span.as_label().with_message(
-                                        "second mutable use but L0 is still active"
-                                    ),
-                                    contradiction.span.as_secondary_label().with_message(
-                                        "first mutable use L0"
-                                    ),
-                                ])
-                                .with_notes(vec![
-                                    "remember: there cannot be two simultaneously active mutable uses at any line".to_string(),
-                                    "help: consider removing one of the two mutable uses".to_string(),
-                                    format!(
-                                        "Debug information: {:?} {:?} {:?}",
-                                        borrow.label, borrow.borrower, borrow.ptr
-                                    ),
-                                ]),
-                        );
-                    }
-                }
                 //cfg.print_image("cfg").unwrap();
                 break Ok(cfg);
             }

@@ -225,6 +225,7 @@ impl<'ctx> Expr<'ctx> {
         }
     }
 
+    /// Hole expression, in case we cannot parse the expression.
     fn hole(span: Span) -> Expr<'ctx> {
         Self { kind: HoleE, span }
     }

@@ -12,7 +12,7 @@ use std::ops::Sub;
 
 use Loc::*;
 
-use super::{Borrow, BorrowCnt, BorrowSet, Borrows, Loans};
+use super::{Borrow, BorrowCnt, Borrows};
 use crate::mir::Loc;
 use crate::utils::boxed;
 
@@ -272,7 +272,7 @@ impl<'ctx> LocTree<'ctx, Borrows<'ctx>> {
     /// location.
     pub fn get_all<'a>(&'a self, loc: Loc<'ctx>) -> Box<dyn Iterator<Item = Borrow<'ctx>> + 'a> {
         if let Some(node) = self.get_node(loc) {
-            node.get_all(self)
+            node.get_all()
         } else {
             boxed(std::iter::empty())
         }
@@ -298,77 +298,6 @@ impl<'ctx> LocTreeNode<'ctx, Borrows<'ctx>> {
     ///
     /// If the location of `self` is an alias, it will return the borrows of the
     /// aliased location.
-    fn get_all<'a>(
-        &'a self,
-        tree: &'a LocTree<'ctx, Borrows<'ctx>>,
-    ) -> Box<dyn Iterator<Item = Borrow<'ctx>> + 'a> {
-        match &self.kind {
-            AtomL(Borrows::None) => boxed(std::iter::empty()),
-            AtomL(Borrows::Distinct(set)) => boxed(set.iter().copied()),
-            AtomL(Borrows::Aliased(alias)) => boxed(tree.get_all(alias.borrowed_loc())),
-            CompoundL(map) => map
-                .values()
-                .map(|v| v.get_all(tree))
-                .fold(boxed(std::iter::empty()), |acc, set| boxed(acc.chain(set))),
-        }
-    }
-
-    /// Concatenates `self` and `other`.
-    fn append(&mut self, other: Self) {
-        match (&mut self.kind, other.kind) {
-            (AtomL(s @ Borrows::None), AtomL(o)) => *s = o,
-            (AtomL(_), AtomL(Borrows::None)) => (),
-            (AtomL(Borrows::Distinct(s)), AtomL(Borrows::Distinct(o))) => {
-                s.extend(o.iter().copied())
-            }
-            (CompoundL(s), CompoundL(o)) => {
-                for (k, v) in o {
-                    s.entry(k)
-                        .or_insert(LocTreeNode {
-                            kind: default(),
-                            loc: v.loc,
-                        })
-                        .append(v);
-                }
-            }
-            (AtomL(..), CompoundL(..))
-            | (CompoundL(..), AtomL(..))
-            | (AtomL(Borrows::Aliased(_)), AtomL(_))
-            | (AtomL(_), AtomL(Borrows::Aliased(_))) => panic!("Not append-able"),
-        }
-    }
-}
-
-impl<'ctx> LocTree<'ctx, Loans<'ctx>> {
-    /// Gets the `Loans` for a given path.
-    pub fn get_all<'a>(&'a self, loc: Loc<'ctx>) -> Box<dyn Iterator<Item = Borrow<'ctx>> + 'a> {
-        if let Some(node) = self.get_node(loc) {
-            node.get_all()
-        } else {
-            boxed(std::iter::empty())
-        }
-    }
-
-    /// Concatenates `self` and `other`.
-    #[must_use = "Add these loans to your immutable invalidations"]
-    pub fn append(&mut self, other: Self) -> BorrowCnt<'ctx> {
-        let mut set = BorrowCnt::default();
-        for (var, other_tree) in other.0 {
-            match self.0.entry(var) {
-                hash_map::Entry::Occupied(mut entry) => {
-                    set.extend(entry.get_mut().append(other_tree));
-                }
-                hash_map::Entry::Vacant(entry) => {
-                    entry.insert(other_tree);
-                }
-            };
-        }
-        set
-    }
-}
-
-impl<'ctx> LocTreeNode<'ctx, Loans<'ctx>> {
-    /// Gets *all* the `Borrows`.
     fn get_all<'a>(&'a self) -> Box<dyn Iterator<Item = Borrow<'ctx>> + 'a> {
         match &self.kind {
             AtomL(set) => boxed(set.iter().copied()),
@@ -380,23 +309,18 @@ impl<'ctx> LocTreeNode<'ctx, Loans<'ctx>> {
     }
 
     /// Concatenates `self` and `other`.
-    #[must_use = "Add these loans to your immutable invalidations"]
-    fn append(&mut self, other: Self) -> BorrowCnt<'ctx> {
+    fn append(&mut self, other: Self) {
         match (&mut self.kind, other.kind) {
             (AtomL(s), AtomL(o)) => s.extend(o.iter().copied()),
             (CompoundL(s), CompoundL(o)) => {
-                let mut set = BorrowCnt::default();
                 for (k, v) in o {
-                    set.extend(
-                        s.entry(k)
-                            .or_insert(LocTreeNode {
-                                kind: default(),
-                                loc: v.loc,
-                            })
-                            .append(v),
-                    );
+                    s.entry(k)
+                        .or_insert(LocTreeNode {
+                            kind: default(),
+                            loc: v.loc,
+                        })
+                        .append(v);
                 }
-                set
             }
             (AtomL(..), CompoundL(..)) | (CompoundL(..), AtomL(..)) => panic!("Not append-able"),
         }
@@ -407,23 +331,15 @@ impl<'ctx> From<LocTreeNode<'ctx, Borrows<'ctx>>> for Borrows<'ctx> {
     fn from(value: LocTreeNode<'ctx, Borrows<'ctx>>) -> Self {
         match value.kind {
             AtomL(borrows) => borrows,
-            CompoundL(map) => Borrows::Distinct(
-                map.into_values()
-                    .flat_map(|v| match Borrows::from(v) {
-                        Borrows::None => None,
-                        Borrows::Aliased(_) => None,
-                        Borrows::Distinct(set) => Some(set),
-                    })
-                    .sum(),
-            ),
+            CompoundL(map) => map.into_values().map(Borrows::from).sum(),
         }
     }
 }
 
-impl<'ctx> From<LocTreeNode<'ctx, Loans<'ctx>>> for BorrowCnt<'ctx> {
-    fn from(value: LocTreeNode<'ctx, Loans<'ctx>>) -> Self {
+impl<'ctx> From<LocTreeNode<'ctx, Borrows<'ctx>>> for BorrowCnt<'ctx> {
+    fn from(value: LocTreeNode<'ctx, Borrows<'ctx>>) -> Self {
         match value.kind {
-            AtomL(set) => BorrowCnt::from(BorrowSet::from(set)),
+            AtomL(set) => BorrowCnt::from(set),
             CompoundL(map) => map.into_values().map(|v| v.into()).sum(),
         }
     }
