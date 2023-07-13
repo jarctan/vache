@@ -45,5 +45,7 @@ pub const BAD_SIGNATURE: &str = "E0020";
 pub const WRONG_REF_MODE_ERROR: &str = "E0021";
 /// `expr;` where expr computes to an unused non-unit value
 pub const UNUSED_RESULT: &str = "E0022";
+/// Swapped places are not from the same scope.
+pub const SAME_SCOPE_SWAP_ERROR: &str = "E0023";
 /// Temporary: empty match error.
 pub const EMPTY_MATCH_ERROR: &str = "E0101";

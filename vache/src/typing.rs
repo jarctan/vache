@@ -1293,6 +1293,32 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         self.visit_rhs_place(place1, Some(Mode::SMutBorrowed), ret_ty, in_loop)?;
                     let place2 =
                         self.visit_rhs_place(place2, Some(Mode::SMutBorrowed), ret_ty, in_loop)?;
+                    if place1.stm != place2.stm {
+                        let scope_str = |s, other| {
+                            if s < other {
+                                "lives longer"
+                            } else {
+                                "lives shorter"
+                            }
+                        };
+                        self.ctx.emit(
+                            Diagnostic::error()
+                                .with_code(SAME_SCOPE_SWAP_ERROR)
+                                .with_message("swapped places must belong to the same scope")
+                                .with_labels(vec![
+                                    place1
+                                        .span
+                                        .as_label()
+                                        .with_message(scope_str(place1.stm, place2.stm)),
+                                    place2
+                                        .span
+                                        .as_label()
+                                        .with_message(scope_str(place2.stm, place1.stm)),
+                                ])
+                                .with_notes(vec!["help: swapped places must have been declared in the same scope".to_string(),
+                                "help: consider swapping the places manually (using a temporary variable) if you really want to exchange the values, but this will necessarily trigger a clone".to_string()]),
+                        );
+                    }
                     SwapS(place1, place2).with_span(s.span)
                 }
                 ast::StmtKind::HoleS => unreachable!(),

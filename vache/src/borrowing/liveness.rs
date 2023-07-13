@@ -127,7 +127,7 @@ fn loan_liveness<'ctx>(
                                 // convert the `Borrow`s to `Loan`s), that's
                                 // fine too, and we have nothing to do
                             } else {
-                                panic!("Invalid swap");
+                                panic!("Invalid swap between {place1:?} and {place2:?}");
                             }
                         }
                     }
