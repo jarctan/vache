@@ -19,7 +19,7 @@ pub fn simple_array_indexing<'ctx>() -> Program<'ctx> {
                 ]),
             ),
             declare(vardef("item", StrT), index(var("list"), int(1))),
-            print([var("item")]),
+            debug([var("item")]),
         ]),
         ..default()
     }
@@ -41,7 +41,7 @@ pub fn separate_index_for_array<'ctx>() -> Program<'ctx> {
             ),
             declare(vardef("ix", IntT), int(2)),
             declare(vardef("item", StrT), index(var("list"), var("ix"))),
-            print([var("item"), var("ix")]),
+            debug([var("item"), var("ix")]),
         ]),
         ..default()
     }
@@ -64,7 +64,7 @@ pub fn simple_array_assignment<'ctx>() -> Program<'ctx> {
             declare(vardef("ix", IntT), int(2)),
             assign(idx_place(var("list"), var("ix")), string("cucumber")),
             declare(vardef("item", StrT), index(var("list"), var("ix"))),
-            print([var("item"), var("ix")]),
+            debug([var("item"), var("ix")]),
         ]),
         ..default()
     }
@@ -88,7 +88,7 @@ pub fn assignment_while_borrowed<'ctx>() -> Program<'ctx> {
             declare(vardef("item_bef", StrT), index(var("list"), var("ix"))),
             assign(idx_place(var("list"), var("ix")), string("cucumber")),
             declare(vardef("item", StrT), index(var("list"), var("ix"))),
-            print([var("item"), var("item_bef"), var("ix")]),
+            debug([var("item"), var("item_bef"), var("ix")]),
         ]),
         ..default()
     }
@@ -113,7 +113,7 @@ pub fn cloning_array<'ctx>() -> Program<'ctx> {
             assign(idx_place(var("list"), int(2)), string("cucumber")),
             declare(vardef("item1", StrT), index(var("list"), int(2))),
             declare(vardef("item2", StrT), index(var("list2"), int(1))),
-            print([var("item1"), var("item2")]),
+            debug([var("item1"), var("item2")]),
         ]),
         ..default()
     }

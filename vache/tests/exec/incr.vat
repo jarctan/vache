@@ -1,13 +1,13 @@
 fn incr(@a: int) {
     a = a + 1;
-    print(a);
+    debug(a);
 }
 fn main() {
     var t = [1, 2, 3, 4];
     incr(t[1] + 1 @ t[0]);
     incr(t[2]@t[1]);
     incr(@t[2]);
-    print(t);
+    debug(t);
 }
 ################################
 4

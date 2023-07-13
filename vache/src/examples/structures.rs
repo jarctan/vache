@@ -32,7 +32,7 @@ pub fn get_field_and_mutate<'ctx>() -> Program<'ctx> {
                 ),
                 declare(vardef("n", strT()), field(var("john"), "name")),
                 assign(Place::from("n"), string("12")),
-                print(vec![var("n"), field(var("john"), "name")]),
+                debug(vec![var("n"), field(var("john"), "name")]),
             ]),
             ..default()
         }],

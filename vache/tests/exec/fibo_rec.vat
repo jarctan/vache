@@ -9,10 +9,10 @@ fn fibo(i: int) -> int {
 }
 
 fn main() {
-    print(fibo(0));
-    print(fibo(1));
-    print(fibo(2));
-    print(fibo(11));
+    debug(fibo(0));
+    debug(fibo(1));
+    debug(fibo(2));
+    debug(fibo(11));
 }
 ################################
 0

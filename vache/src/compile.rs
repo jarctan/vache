@@ -2,7 +2,6 @@
 
 use std::default::default;
 
-use itertools::Itertools;
 use num_traits::{One, ToPrimitive, Zero};
 use proc_macro2::TokenStream;
 use string_builder::Builder as StringBuilder;
@@ -310,7 +309,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         let ty_params = strukt.ty_params.iter().map(|param| match param {
             TyVar::Named(name) => {
                 let name = format_ident!("{}", name);
-                quote!(#name: ::std::fmt::Debug + ::std::fmt::Display + ::std::clone::Clone)
+                quote!(#name: ::std::fmt::Debug + ::std::clone::Clone)
             }
             TyVar::Gen(..) => unreachable!(),
         });
@@ -361,29 +360,6 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             })
             .collect();
 
-        // Add an implementation of `Display` for enums
-        // For that, create the branches of the match we'll use in the impl of
-        // `Display`.
-        let variants_display: Vec<_> = enun
-            .variants
-            .iter()
-            .map(|(&variant, args)| {
-                let variant_str = variant;
-                let variant_ident = format_ident!("{}", variant);
-                if !args.is_empty() {
-                    // Create the list of left-hand side arguments, the one we're going to introduce with the pattern matching
-                    // and then use again on the other side of the `=>`, in the `write!`
-                    let args = (0..args.len()).map(|i| format_ident!("__arg{i}")).collect::<Vec<_>>();
-                    // Compute the format string for the arguments of that variant in the display
-                    // Overall, some `{} {} {} {} ...`
-                    let variant_str = format!("{variant_str}({})", (0..args.len()).map(|_| "{}").join(", "));
-                    quote!(#name::#variant_ident(#(#args),*) => write!(f, #variant_str, #(#args),*),)
-                } else {
-                    quote!(#name::#variant_ident => write!(f, #variant_str),)
-                }
-            })
-            .collect();
-
         // Type parameters with trait bounds
         let ty_params_w_bounds: Vec<_> = enun
             .ty_params
@@ -391,18 +367,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             .map(|param| match param {
                 TyVar::Named(name) => {
                     let name = format_ident!("{}", name);
-                    quote!(#name: ::std::fmt::Debug + ::std::fmt::Display + ::std::clone::Clone)
+                    quote!(#name: ::std::fmt::Debug + ::std::clone::Clone)
                 }
-                TyVar::Gen(..) => unreachable!(),
-            })
-            .collect();
-
-        // Type parameters list without trait bounds
-        let ty_params_wo_bounds: Vec<_> = enun
-            .ty_params
-            .iter()
-            .map(|param| match param {
-                TyVar::Named(name) => format_ident!("{}", name),
                 TyVar::Gen(..) => unreachable!(),
             })
             .collect();
@@ -411,14 +377,6 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             #[derive(Debug, Clone)]
             pub enum #name<#a, #(#ty_params_w_bounds,)*> {
                 #variants
-            }
-
-            impl<#a, #(#ty_params_w_bounds,)*> ::std::fmt::Display for #name<#(#ty_params_wo_bounds,)* #a> {
-                fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                    match self {
-                        #(#variants_display)*
-                    }
-                }
             }
         )
     }
@@ -475,16 +433,16 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 quote!(#wrapper_tkn::owned((#(#items),*)))
             }
             CallE { name, args } => {
-                if name.name == "print" {
+                if name.name == "debug" {
                     let mut builder = StringBuilder::default();
 
                     // Compute the format string, which is essentially `{} {} {}...`
                     let mut args_iter = args.iter();
                     if args_iter.next().is_some() {
-                        builder.append("{}");
+                        builder.append("{:?}");
                     }
                     for _ in args_iter {
-                        builder.append(" {}");
+                        builder.append(" {:?}");
                     }
 
                     let args = args.iter().map(|arg| {
@@ -735,7 +693,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         let ty_params = f.ty_params.into_iter().map(|param| match param {
             TyVar::Named(name) => {
                 let name = format_ident!("{}", name);
-                quote!(#name: ::std::fmt::Debug + ::std::fmt::Display + ::std::clone::Clone)
+                quote!(#name: ::std::fmt::Debug + ::std::clone::Clone)
             }
             TyVar::Gen(..) => unreachable!(),
         });

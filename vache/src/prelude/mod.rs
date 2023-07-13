@@ -11,7 +11,6 @@
 use proc_macro2::TokenStream;
 
 mod cow;
-mod field;
 mod functions;
 mod imports;
 mod integer;
@@ -19,6 +18,7 @@ mod lints;
 mod range;
 mod reexports;
 mod res;
+mod string;
 mod var;
 mod vec;
 
@@ -31,7 +31,7 @@ pub fn prelude() -> TokenStream {
     let range = range::range();
     let cow = cow::cow();
     let var = var::var();
-    let field = field::field();
+    let string = string::string();
     let functions = functions::functions();
     let vec = vec::vec();
     let res = res::res();
@@ -57,6 +57,6 @@ pub fn prelude() -> TokenStream {
 
         #functions
 
-        #field
+        #string
     )
 }

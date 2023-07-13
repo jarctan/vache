@@ -17,8 +17,8 @@ fn min(a: int, b: int) -> int {
 fn main() {
     var a: int = 830198309123808;
     var b: int = 830198309123809;
-    print(max(a, b));
-    print(min(a, b));
+    debug(max(a, b));
+    debug(min(a, b));
 }
 ################################
 830198309123804

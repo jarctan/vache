@@ -232,7 +232,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                 args,
                 stratum,
             ),
-            "print" => {
+            "debug" => {
                 let args = args.iter().map(|arg| self.display(arg)).join(" ");
                 self.stdout.append(args);
                 self.stdout.append("\n");

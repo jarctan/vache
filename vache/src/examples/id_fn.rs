@@ -27,7 +27,7 @@ pub fn id_fn<'ctx>() -> Program<'ctx> {
                         span: default(),
                     }),
                 ),
-                print(vec![var("res")]),
+                debug(vec![var("res")]),
             ]),
             ..default()
         },

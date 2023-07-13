@@ -3,7 +3,7 @@ fn main() {
     if n == [true] {
         
     } else {
-        print(false);
+        debug(false);
     }
 }
 ################################

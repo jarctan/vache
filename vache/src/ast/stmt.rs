@@ -273,8 +273,8 @@ pub fn assign<'ctx>(lhs: impl Into<Place<'ctx>>, rhs: impl Into<Expr<'ctx>>) -> 
 }
 
 /// Shortcut to print several expressions in our program.
-pub fn print<'ctx>(stmts: impl IntoIterator<Item = Expr<'ctx>>) -> Stmt<'ctx> {
-    ExprS(super::expr::call("print", stmts)).into()
+pub fn debug<'ctx>(stmts: impl IntoIterator<Item = Expr<'ctx>>) -> Stmt<'ctx> {
+    ExprS(super::expr::call("debug", stmts)).into()
 }
 
 /// Shortcut to make a call.
@@ -318,7 +318,7 @@ mod tests {
         assert_eq!(expr.as_string().unwrap(), "test");
     }
 
-    #[parses("while x { x = x; print(x); }" as stmt)]
+    #[parses("while x { x = x; debug(x); }" as stmt)]
     #[test]
     fn while_loop(stmt: Stmt) {
         let (cond, block) = stmt.as_while_loop().unwrap();

@@ -8,9 +8,9 @@ fn main() {
     if x > 0 {
         x = x + 1;
     } else {
-        print(x);
+        debug(x);
     }
-    print(x);
+    debug(x);
 }
 ################################
 13

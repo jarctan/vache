@@ -11,16 +11,16 @@ enum User2 {
 fn main() {
     var a: int = 0;
     var user: User = User::Test(a);
-    print("a before:", a);
+    debug("a before:", a);
     a = 5;
-    print("a after:", a);
-    print(user);
+    debug("a after:", a);
+    debug(user);
     var x: User = User::Test(a);
     a = a + 1;
-    print(x);
+    debug(x);
     var y: User = User::Test(a);
     var a: int = a + 1;
-    print(a, y);
+    debug(a, y);
 }
 ################################
 a before: 0

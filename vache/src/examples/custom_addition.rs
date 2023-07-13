@@ -24,7 +24,7 @@ pub fn custom_addition() -> impl Into<Program<'static>> {
                 stmts: vec![
                     declare(vardef("n", intT()), int(12)),
                     declare(vardef("res", intT()), call("add", vec![var("n"), var("n")])),
-                    print(vec![var("res"), var("n")]),
+                    debug(vec![var("res"), var("n")]),
                 ],
                 ret: UnitE.into(),
                 span: default(),

@@ -7,7 +7,7 @@ fn hello_world() -> Program {
         body: Block {
             stmts: vec![
                 declare(vardef("s", StrT), string("Hello, world!")),
-                print(vec![var("s")]),
+                debug(vec![var("s")]),
             ],
             ret: UnitE.into(),
             span: default(),

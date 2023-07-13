@@ -1,13 +1,13 @@
 fn main() {
     var x: int = 150;
     while x > 0 {
-        print(x);
+        debug(x);
         if x < 140 {
             break;
         }
         x = x - 1;
     }
-    print(x);
+    debug(x);
 }
 ################################
 150

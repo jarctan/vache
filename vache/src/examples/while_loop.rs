@@ -15,12 +15,12 @@ pub fn while_loop<'ctx>() -> Program<'ctx> {
             WhileS {
                 cond: binop(var("n"), ">=", int(5)),
                 body: stmts(vec![
-                    print(vec![var("n")]),
+                    debug(vec![var("n")]),
                     assign(Place::from("n"), binop(var("n"), "-", int(1))),
                 ]),
             }
             .into(),
-            print(vec![var("n")]),
+            debug(vec![var("n")]),
         ]),
         ..default()
     }
@@ -36,21 +36,21 @@ pub fn while_loop2<'ctx>() -> Program<'ctx> {
             WhileS {
                 cond: binop(var("n"), ">=", int(5)),
                 body: stmts(vec![
-                    print(vec![var("n")]),
+                    debug(vec![var("n")]),
                     assign(Place::from("n"), binop(var("n"), "-", int(1))),
                 ]),
             }
             .into(),
-            print(vec![var("n")]),
+            debug(vec![var("n")]),
             WhileS {
                 cond: binop(var("n"), ">=", int(1)),
                 body: stmts(vec![
-                    print(vec![var("n")]),
+                    debug(vec![var("n")]),
                     assign(Place::from("n"), binop(var("n"), "-", int(1))),
                 ]),
             }
             .into(),
-            print(vec![var("n")]),
+            debug(vec![var("n")]),
         ]),
         ..default()
     }

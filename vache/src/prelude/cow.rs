@@ -23,7 +23,7 @@ pub fn cow() -> TokenStream {
         {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 match *self {
-                    Cow::Borrowed(ref b) => write!(f, "&{:?}", b),
+                    Cow::Borrowed(ref b) => write!(f, "{:?}", b),
                     Cow::Owned(ref o) => write!(f, "{:?}", o),
                     Cow::Uninit => unreachable!(),
                 }

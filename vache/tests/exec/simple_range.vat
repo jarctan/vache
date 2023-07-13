@@ -1,7 +1,7 @@
 fn main() {
     var range: int.. = 1..5;
     for i in range {
-        print(i);
+        debug(i);
     }
 }
 ################################

@@ -3,12 +3,12 @@ fn main() {
     var b: int = 830198309123809;
     var res: bool = a > 0 && b < 0;
     if !res {
-        print("garfield");
+        debug("garfield");
     }
     if a > b && a > 0 {
-        print("odie");
+        debug("odie");
     }
-    print("john");
+    debug("john");
 }
 ################################
 garfield

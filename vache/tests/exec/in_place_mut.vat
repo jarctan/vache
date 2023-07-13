@@ -5,7 +5,7 @@ fn incr(@a: int) {
 fn main() {
     var a: int = 830198309123808;
     incr(@a); // in place update
-    print(a);
+    debug(a);
 }
 ################################
 830198309123809

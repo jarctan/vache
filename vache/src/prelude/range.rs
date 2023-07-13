@@ -17,9 +17,9 @@ pub fn range() -> TokenStream {
             }
         }
 
-        impl<T: ::std::fmt::Display> ::std::fmt::Display for __Range<T> {
+        impl<T: ::std::fmt::Debug> ::std::fmt::Debug for __Range<T> {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                write!(f, "{}..{}", self.0.start, self.0.end)
+                write!(f, "{:?}..{:?}", self.0.start, self.0.end)
             }
         }
 

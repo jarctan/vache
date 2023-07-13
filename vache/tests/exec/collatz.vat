@@ -11,10 +11,10 @@ fn collatz(n: int) -> int {
 }
 
 fn main() {
-    print(collatz(12));
-    print(collatz(6));
-    print(collatz(9));
-    print(collatz(11));
+    debug(collatz(12));
+    debug(collatz(6));
+    debug(collatz(9));
+    debug(collatz(11));
 }
 ################################
 1

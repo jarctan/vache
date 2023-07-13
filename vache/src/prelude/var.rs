@@ -18,7 +18,7 @@ pub fn var() -> TokenStream {
         {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 match *self {
-                    Var::Mut(ref b) => write!(f, "&mut {:?}", b),
+                    Var::Mut(ref b) => write!(f, "{:?}", b),
                     Var::Owned(ref o) => write!(f, "{:?}", o),
                 }
             }

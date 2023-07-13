@@ -3,7 +3,7 @@ fn main() {
     var x: int = y;
     // We mutate y but we don't need y, so x can own it
     y = 36; 
-    print(x);
+    debug(x);
 }
 ################################
 42

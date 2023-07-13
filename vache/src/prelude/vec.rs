@@ -59,15 +59,15 @@ pub fn vec() -> TokenStream {
             }
         }
 
-        impl<'b, T: ::std::clone::Clone + ::std::fmt::Display> ::std::fmt::Display for __Vec<'b, T> {
+        impl<'b, T: ::std::clone::Clone + ::std::fmt::Debug> ::std::fmt::Debug for __Vec<'b, T> {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 write!(f, "[")?;
                 let mut iter = self.0.iter();
                 if let Some(i) = iter.next() {
-                    write!(f, "{}", i)?;
+                    write!(f, "{:?}", i)?;
                 }
                 for i in iter {
-                    write!(f, ", {}", i)?;
+                    write!(f, ", {:?}", i)?;
                 }
                 write!(f, "]")
             }

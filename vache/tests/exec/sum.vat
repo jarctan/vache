@@ -7,7 +7,7 @@ fn sum(i: int) -> int {
 }
 
 fn main() {
-    print(sum(10));
+    debug(sum(10));
 }
 ################################
 55

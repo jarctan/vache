@@ -7,6 +7,5 @@ use proc_macro2::TokenStream;
 pub fn reexports() -> TokenStream {
     quote!(
         use ::anyhow::Result as __Result;
-        pub type __String = String;
     )
 }

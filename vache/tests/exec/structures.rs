@@ -30,7 +30,7 @@ fn simple_field_access() -> Program {
                     ),
                 ),
                 declare(vardef("n", StrT), field(var("john"), "name")),
-                print(vec![var("n")]),
+                debug(vec![var("n")]),
             ]),
             ..default()
         }],

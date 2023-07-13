@@ -29,7 +29,7 @@ pub fn multiple_refs() -> impl Into<Program<'static>> {
                 declare(vardef("even2", BoolT), call("is_even", vec![var("n")])),
                 assign(Place::from("n"), int(11)),
                 declare(vardef("even3", BoolT), call("is_even", vec![var("n")])),
-                print(vec![var("even1"), var("even2"), var("even3")]),
+                debug(vec![var("even1"), var("even2"), var("even3")]),
             ]),
             ..default()
         },

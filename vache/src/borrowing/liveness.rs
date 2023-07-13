@@ -227,7 +227,7 @@ pub fn liveness<'mir, 'ctx>(
                             // We cannot move if the location is still active after that
                             // instruction, or if some part of the
                             // location is used by some __other__ pointer in the same instruction.
-                            // instruction For example, for `print(a,
+                            // instruction For example, for `debug(a,
                             // a)`, we will see that we cannot move the first
                             // `a`, since it is used by a reference after that first `a`
                             // To do that, we compute the set of locations that cannot be moved for

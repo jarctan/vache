@@ -696,7 +696,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ast::ExprKind::CallE {
                 name,
                 args: old_args,
-            } if name.name == "print" => {
+            } if name.name == "debug" => {
                 let mut args = vec![];
                 for arg in old_args.into_iter() {
                     match arg.into_standard() {

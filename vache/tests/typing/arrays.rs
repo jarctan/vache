@@ -66,7 +66,7 @@ fn simple_array_indexing() -> Result<()> {
                 array([int(0), int(1), int(2), int(3)]),
             ),
             declare(vardef("item", IntT), index(var("list"), int(1))),
-            print([var("item")]),
+            debug([var("item")]),
         ]),
         ..default()
     }))

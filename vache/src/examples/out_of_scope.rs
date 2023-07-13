@@ -15,7 +15,7 @@ pub fn out_of_scope() -> impl Into<Program<'static>> {
                 assign(Place::from("n"), var("p")),
                 assign(Place::from("p"), int(27)),
             ])),
-            print(vec![var("n")]),
+            debug(vec![var("n")]),
         ]),
         ..default()
     }]

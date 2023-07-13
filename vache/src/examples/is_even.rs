@@ -25,7 +25,7 @@ pub fn is_10_even() -> impl Into<Program<'static>> {
     let main = Fun {
         name: "main",
         body: stmts(vec![call_stmt(
-            "print",
+            "debug",
             vec![call("is_even", vec![int(10)])],
         )]),
         ..default()
@@ -39,7 +39,7 @@ pub fn is_11_even() -> impl Into<Program<'static>> {
     let main = Fun {
         name: "main",
         body: stmts(vec![call_stmt(
-            "print",
+            "debug",
             vec![call("is_even", vec![int(11)])],
         )]),
         ..default()

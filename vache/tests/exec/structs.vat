@@ -8,13 +8,13 @@ fn main() {
         x: 2,
         y: "4",
     };
-    print(p.x);
+    debug(p.x);
     var x: int = p.x;
     var y: str = p.y;
     p.x = p.x + 1;
     p.y = "12";
-    print(x, y);
-    print(p.x);
+    debug(x, y);
+    debug(p.x);
 }
 ################################
 2
