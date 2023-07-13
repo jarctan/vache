@@ -225,10 +225,7 @@ pub fn liveness<'mir, 'ctx>(
 
                 for reference in references_mut.into_iter() {
                     match reference.mode() {
-                        Mode::Borrowed
-                        | Mode::MutBorrowed
-                        | Mode::SMutBorrowed
-                        | Mode::SBorrowed => {
+                        Mode::Borrowed | Mode::MutBorrowed => {
                             let loc = reference.loc();
                             // We cannot move if the location is still active after that
                             // instruction, or if some part of the
@@ -262,6 +259,9 @@ pub fn liveness<'mir, 'ctx>(
                                   }*/
                             }
                         }
+                        // These ones are used for intermediate variables and for the Rust backend
+                        // and are not intended to be changed to `moved`
+                        Mode::SMutBorrowed | Mode::SBorrowed => (),
                         // If we are cloned, there's a reason fot that. So you can't move
                         Mode::Cloned => (),
                         // If already moved, nothing to do
