@@ -94,7 +94,16 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 unreachable!()
             }
             ArrayT(ty) => {
-                let ty = Self::translate_type(ty, lifetimes, Wrapper::Vec);
+                let ty = Self::translate_type(
+                    ty,
+                    // Note: only transmit the second lifetime
+                    if !lifetimes.is_empty() {
+                        &lifetimes[lifetimes.len() - 1..]
+                    } else {
+                        &[]
+                    },
+                    Wrapper::Vec,
+                );
                 quote!(#wrapper<#lft #ty>)
             }
             TupleT(items) => {
@@ -408,7 +417,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     let i = i
                         .to_u128()
                         .expect("Integer {i} is too big to be represented in source code");
-                    quote!(#wrapper_tkn::owned( __Integer::try_from(#i).unwrap()))
+                    quote!(#wrapper_tkn::owned(__Integer::try_from(#i).unwrap()))
                 }
             }
             StringE(s) => {
@@ -496,6 +505,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         "assert" => quote!(__assert),
                         "rand" => quote!(__rand),
                         "push" => quote!(__Vec::push),
+                        "len" => quote!(__Vec::len),
                         _ => {
                             let ident = format_ident!("{}", name.name);
                             quote!(#ident)

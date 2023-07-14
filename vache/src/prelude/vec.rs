@@ -45,8 +45,8 @@ pub fn vec() -> TokenStream {
                     .with_context(|| format!("index {index} is out of bounds"))
             }
 
-            pub(crate) fn push<'d: 'b, 'c, 'e>(
-                mut array: Var<'c, 'd, Self>,
+            pub(crate) fn push<'c>(
+                mut array: Var<'c, 'b, Self>,
                 el: Cow<'b, T>,
             ) -> __Result<__Ret<(), __pushRet<'b, T>>> {
                 (**array).0.push(el);
@@ -55,6 +55,15 @@ pub fn vec() -> TokenStream {
                     __pushRet {
                         array: array.try_to_cow().ok(),
                     },
+                )
+            }
+
+            pub(crate) fn len(
+                mut array: Cow<'b, Self>,
+            ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
+                __Ret::ok(
+                    Cow::Owned(__Integer::try_from(array.0.len() as u128).unwrap()),
+                    __noRet {},
                 )
             }
         }

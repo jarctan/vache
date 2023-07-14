@@ -81,6 +81,13 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ret_ty: UnitT,
             span: default(),
         });
+        typer.add_fun(ast::FunSig {
+            name: "len",
+            ty_params: vec![TyVar::Named("T")],
+            params: vec![ast::param("x", VarT(TyVar::Named("T")))],
+            ret_ty: IntT,
+            span: default(),
+        });
         typer.add_fun(binop_int_sig("rand", IntT));
         typer.add_fun(binop_int_sig("<=", BoolT));
         typer.add_fun(binop_int_sig("<", BoolT));
