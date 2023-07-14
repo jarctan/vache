@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use super::{CfgI, CfgLabel, FunParam, Pointer, Stratum, Varname};
-use crate::utils::set::Set;
+use crate::utils::Set;
 
 /// A function in the parser AST.
 pub struct Fun<'mir, 'ctx> {

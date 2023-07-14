@@ -15,7 +15,7 @@ use anyhow::Result;
 
 use super::{Branch, Instr};
 use crate::utils::boxed;
-use crate::utils::set::Set;
+use crate::utils::Set;
 
 /// A node index in the graph.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]

@@ -7,7 +7,7 @@ use Branch::*;
 
 use crate::anf;
 use crate::mir::*;
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// ANF to MIR transformer.

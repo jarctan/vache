@@ -4,7 +4,7 @@ use std::fmt;
 
 use super::{Block, Span, Stratum, Ty, TySubst, TyUse, TyVar, VarDef, Varname};
 use crate::ast;
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// A function parameter. Can optionally take by reference.

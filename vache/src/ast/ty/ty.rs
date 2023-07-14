@@ -7,7 +7,7 @@ use itertools::Itertools;
 
 use super::*;
 use crate::ast::Span;
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// Types in our language.

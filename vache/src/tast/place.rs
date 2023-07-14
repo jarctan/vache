@@ -2,7 +2,7 @@
 
 use super::{Expr, LhsMode, Mode, Span, Stratum, Ty, TySubst, TyVar, VarUse};
 use crate::utils::boxed;
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// A place in the AST: allowed left hand side expressions.

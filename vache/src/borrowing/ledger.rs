@@ -7,7 +7,7 @@ use std::iter::Sum;
 
 use super::{Borrow, BorrowCnt, Borrows, Loan, LoanCnt, LocTree};
 use crate::mir::{CfgLabel, Loc, Mode, Place, Reference};
-use crate::utils::set::Set;
+use crate::utils::Set;
 
 /// A loan ledger.
 #[derive(Clone, Eq, Default)]

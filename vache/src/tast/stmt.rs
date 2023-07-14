@@ -3,7 +3,7 @@
 use std::default::default;
 
 use super::{Block, Expr, LhsPlace, Place, Span, TySubst, TyVar, VarDef};
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// A statement.

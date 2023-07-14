@@ -3,7 +3,7 @@
 use std::default::default;
 
 use super::{Span, Ty, TySubst, TyVar, VarDef};
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// Code pattern, that represents some data structure to match.

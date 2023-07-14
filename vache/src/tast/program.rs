@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use super::{Enum, Fun, Struct, TyVar};
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// A program: a collection of:

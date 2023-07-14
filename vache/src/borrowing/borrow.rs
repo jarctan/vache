@@ -3,8 +3,8 @@
 use std::fmt;
 
 use crate::mir::{CfgLabel, Loc, Place, Pointer, Span};
-use crate::utils::set::Set;
 use crate::utils::MultiSet;
+use crate::utils::Set;
 
 /// A loan: a variable that has been borrowed.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

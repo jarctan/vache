@@ -6,7 +6,7 @@ use num_bigint::BigInt;
 
 use super::{Arg, Block, Namespaced, Pat, Place, Span, Stratum, Ty, TySubst, TyVar};
 use crate::utils::boxed;
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// An expression in the typed AST.

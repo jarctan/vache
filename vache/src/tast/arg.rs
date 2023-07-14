@@ -1,7 +1,7 @@
 //! Function arguments are special kinds of expressions.
 
 use super::{Expr, LhsPlace, Place, Span, Stratum, Ty, TySubst, TyVar};
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// Function call argument.

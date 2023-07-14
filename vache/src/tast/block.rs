@@ -1,7 +1,7 @@
 //! Defining typed blocks.
 
 use super::{Expr, Span, Stmt, TySubst, TyVar};
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// A block in the typed AST.

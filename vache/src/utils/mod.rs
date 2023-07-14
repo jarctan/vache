@@ -9,6 +9,7 @@ pub mod multiset;
 pub mod set;
 
 pub use multiset::*;
+pub use set::*;
 
 /// Checks if the keys match a list (more precisely, an iterator) of keys.
 ///

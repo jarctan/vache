@@ -7,7 +7,7 @@ use std::sync::atomic::AtomicU64;
 
 use super::{Span, Stratum, Ty, TySubst, TyVar, Varname};
 use crate::ast;
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// Fresh variable counter.

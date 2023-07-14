@@ -8,8 +8,8 @@ use super::ledger::Ledger;
 use super::tree::LocTree;
 use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
 use crate::reporter::Diagnostics;
-use crate::utils::set::Set;
 use crate::utils::MultiSet;
+use crate::utils::Set;
 
 /// Variable liveness analysis.
 ///

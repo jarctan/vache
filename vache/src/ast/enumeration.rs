@@ -9,7 +9,7 @@ use pest::iterators::Pair;
 
 use super::{Context, Parsable};
 use super::{Span, TySubst, TyUse, TyVar};
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::{grammar::*, Arena};
 
 /// An enumerated type (tag union of types).

@@ -8,7 +8,7 @@ use pest::iterators::Pair;
 
 use super::*;
 use crate::ast::{Context, Parsable, Span};
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::{grammar::*, Arena};
 
 /// A type in the source code.

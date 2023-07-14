@@ -10,7 +10,7 @@ use pest::iterators::Pair;
 use super::{Context, Parsable};
 use super::{Span, Ty, TySubst, TyUse, TyVar, VarDef};
 use crate::grammar::*;
-use crate::utils::set::Set;
+use crate::utils::Set;
 use crate::Arena;
 
 /// A C-like `struct`.
