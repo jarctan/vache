@@ -132,21 +132,57 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         self.env.insert(vardef.name(), vardef);
     }
 
+    /// Checks if some global identifier is already declared in scope.
+    ///
+    /// If it is already declared, it will emit an error.
+    ///
+    /// * `name`: The name of the identifier.
+    /// * `span`: The span of the identifier.
+    fn check_already_declared(&self, name: &str, span: Span) {
+        // Compute the `span` of the already defined item, if any.
+        let item = if let Some(f) = self.fun_env.get(name) {
+            Some(f.span)
+        } else if let Some(s) = self.struct_env.get(name) {
+            Some(s.span)
+        } else if let Some(e) = self.enum_env.get(name) {
+            Some(e.span)
+        } else {
+            None
+        };
+
+        if let Some(span2) = item {
+            self.ctx.emit(
+                Diagnostic::error()
+                    .with_code(ITEM_REDEFINED_ERROR)
+                    .with_message(format!("Duplicate definition with the same name `{name}`"))
+                    .with_labels(vec![
+                        span.as_label().with_message("new definition"),
+                        span2
+                            .as_secondary_label()
+                            .with_message("previous definition"),
+                    ]),
+            );
+        }
+    }
+
     /// Declares a new function in the context.
     fn add_fun(&mut self, fun_def: impl Into<ast::FunSig<'ctx>>) {
         let fun_def = fun_def.into();
+        self.check_already_declared(fun_def.name, fun_def.span);
         self.fun_env.insert(fun_def.name, self.ctx.alloc(fun_def));
     }
 
     /// Declares a new structure in the context.
     fn add_struct(&mut self, strukt: impl Into<Struct<'ctx>>) {
         let strukt = strukt.into();
+        self.check_already_declared(strukt.name, strukt.span);
         self.struct_env.insert(strukt.name, self.ctx.alloc(strukt));
     }
 
     /// Declares a new enum in the context.
     fn add_enum(&mut self, enun: impl Into<Enum<'ctx>>) {
         let enun = enun.into();
+        self.check_already_declared(enun.name, enun.span);
         self.enum_env.insert(enun.name, self.ctx.alloc(enun));
     }
 
