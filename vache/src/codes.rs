@@ -47,5 +47,7 @@ pub const WRONG_REF_MODE_ERROR: &str = "E0021";
 pub const UNUSED_RESULT: &str = "E0022";
 /// Swapped places are not from the same scope.
 pub const SAME_SCOPE_SWAP_ERROR: &str = "E0023";
+/// Error for reserved identifiers.
+pub const RESERVED_IDENT: &str = "E0024";
 /// Temporary: empty match error.
 pub const EMPTY_MATCH_ERROR: &str = "E0101";
