@@ -1,13 +1,10 @@
 use super::*;
 
 fn person_struct<'ctx>() -> Struct<'ctx> {
-    Struct {
-        name: "Person",
-        fields: vec![("name", strT()), ("age", intT()), ("country", strT())]
-            .into_iter()
-            .collect(),
-        ..default()
-    }
+    struct_def(
+        "Person",
+        [("name", strT()), ("age", intT()), ("country", strT())],
+    )
 }
 
 #[vache_test("doe\n")]

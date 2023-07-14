@@ -109,7 +109,7 @@ pub use program::Program;
 use reporting::pretty_print_rule;
 pub use span::{LineCol, LineColSpan, Span};
 pub use stmt::{Stmt, StmtKind};
-pub use structure::Struct;
+pub use structure::{struct_def, Struct};
 pub use ty::{arrayT, boolT, intT, strT, unitT, varT, Ty, TySubst, TyUse, TyVar};
 pub use var::{VarDef, VarUse, Varname};
 

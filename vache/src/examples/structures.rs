@@ -8,13 +8,10 @@ use super::*;
 
 pub fn get_field_and_mutate<'ctx>() -> Program<'ctx> {
     Program::new(
-        vec![Struct {
-            name: "Person",
-            fields: vec![("name", strT()), ("age", intT()), ("country", strT())]
-                .into_iter()
-                .collect(),
-            ..default()
-        }],
+        vec![struct_def(
+            "Person",
+            [("name", strT()), ("age", intT()), ("country", strT())],
+        )],
         default(),
         vec![Fun {
             name: "main",

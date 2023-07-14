@@ -318,10 +318,16 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         let mut lft_generator = LftGenerator::new();
         let b = lft_generator.generate();
 
+        println!("{:?}", strukt.fields_order);
+
         let fields: TokenStream = strukt
-            .fields
+            // Note: we use the same order as in the code, so that the `Debug` of it is
+            // deterministic
+            .fields_order
             .iter()
-            .map(|(field, ty)| {
+            .map(|field| {
+                // Unwrap ok because the name was retrieved from `fields_order`
+                let ty = strukt.fields.get(field).unwrap();
                 let field = format_ident!("{field}");
                 let ty = Self::translate_type(&ty.kind, &[&b], Wrapper::Cow);
                 quote!(#field: #ty,)

@@ -20,6 +20,7 @@ pub fn interpret(p: Program) -> String {
     let mut i = Interpreter {
         env: vec![Env::new(Stratum::static_stm())],
         fun_env: &p.funs,
+        struct_env: p.structs,
         stdout: StringBuilder::default(),
     };
     i.call("main", vec![], i.current_stratum());

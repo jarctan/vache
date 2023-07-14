@@ -5,13 +5,10 @@ use super::*;
 #[allow(missing_docs)]
 pub fn change_field<'ctx>() -> Program<'ctx> {
     Program::new(
-        vec![Struct {
-            name: "Person",
-            fields: vec![("name", strT()), ("age", intT()), ("country", strT())]
-                .into_iter()
-                .collect(),
-            ..default()
-        }],
+        vec![struct_def(
+            "Person",
+            [("name", strT()), ("age", intT()), ("country", strT())],
+        )],
         default(),
         vec![Fun {
             name: "main",

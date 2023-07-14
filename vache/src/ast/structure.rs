@@ -2,6 +2,7 @@
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::default::default;
 use std::fmt;
 
 use itertools::Itertools;
@@ -14,22 +15,48 @@ use crate::utils::Set;
 use crate::Arena;
 
 /// A C-like `struct`.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Struct<'ctx> {
     /// Name of the structure.
     pub name: &'ctx str,
     /// Type parameters.
     pub ty_params: Vec<TyVar<'ctx>>,
+    /// The ordered of fields names in the code, if we ever need that order
+    /// in the backend.
+    pub fields_order: Vec<&'ctx str>,
     /// Map of field names and their types.
     pub fields: HashMap<&'ctx str, TyUse<'ctx>>,
     /// Code span.
     pub span: Span,
 }
 
+/// Shortcut to create a `struct` directly.
+pub fn struct_def<'ctx>(
+    name: &'ctx str,
+    fields: impl IntoIterator<Item = (&'ctx str, TyUse<'ctx>)>,
+) -> Struct<'ctx> {
+    let mut new_fields = HashMap::new();
+    let mut fields_order = vec![];
+
+    for (name, ty) in fields {
+        new_fields.insert(name, ty);
+        fields_order.push(name);
+    }
+
+    Struct {
+        name,
+        ty_params: vec![],
+        fields_order,
+        fields: new_fields,
+        span: default(),
+    }
+}
+
 impl fmt::Debug for Struct<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
             name,
+            fields_order: _,
             ty_params,
             fields,
             span: _,
@@ -61,6 +88,7 @@ impl<'ctx> Struct<'ctx> {
 
         Self {
             name: self.name,
+            fields_order: self.fields_order,
             ty_params: self.ty_params,
             fields: self
                 .fields
@@ -80,6 +108,7 @@ impl<'ctx> Struct<'ctx> {
     pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self {
             name: _,
+            fields_order: _,
             fields,
             ty_params,
             span: _,
@@ -113,16 +142,20 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Struct<'ctx> {
 
         // Parse fields
         consume!(pairs, Rule::lcb);
-        let fields = pairs
-            .filter(|field| !matches!(field.as_rule(), Rule::cma | Rule::rcb))
-            .map(|field| {
-                let vardef: VarDef = ctx.parse(field);
-                (vardef.name.as_str(), vardef.ty)
-            })
-            .collect();
+
+        let mut fields = HashMap::new();
+        let mut fields_order = vec![];
+
+        for field in pairs.filter(|field| !matches!(field.as_rule(), Rule::cma | Rule::rcb)) {
+            let vardef: VarDef = ctx.parse(field);
+            let name = vardef.name.as_str();
+            fields.insert(name, vardef.ty);
+            fields_order.push(name);
+        }
 
         Struct {
             name,
+            fields_order,
             ty_params,
             fields,
             span,

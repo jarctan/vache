@@ -23,7 +23,7 @@ pub enum Value<'ctx> {
     ///
     /// `StructV(name, fields)`
     ///
-    /// We keep the name to display structures nicely in the end.
+    /// We keep the name and order to always print the fields in the same order.
     StructV(&'ctx str, HashMap<&'ctx str, ValueRef>),
     /// Array.
     ArrayV(Vec<ValueRef>),

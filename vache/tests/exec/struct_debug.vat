@@ -1,0 +1,14 @@
+struct Pos {
+    x: int,
+    y: str,
+}
+
+fn main() {
+    var p = Pos {
+        x: 2,
+        y: "4",
+    };
+    debug(p);
+}
+################################
+Pos { x: 2, y: 4 }

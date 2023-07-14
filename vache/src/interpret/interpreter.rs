@@ -18,7 +18,7 @@ use super::env::Env;
 use super::value::{Value, ValueRef};
 use crate::mir::{
     Arg, Branch, CfgI, CfgLabel, Fun, InstrKind, LhsMode, Mode, Place, Pointer, RValue, Reference,
-    Varname,
+    Struct, Varname,
 };
 use crate::tast::Stratum;
 
@@ -28,6 +28,11 @@ pub(crate) struct Interpreter<'a, 'mir, 'ctx> {
     pub env: Vec<Env<'ctx>>,
     /// Map between function names and their definition.
     pub fun_env: &'a HashMap<&'ctx str, Fun<'mir, 'ctx>>,
+    /// Map between structure names and their definition.
+    ///
+    /// Used to get the ordering of the fields in the definition, when debugging
+    /// a structure.
+    pub struct_env: &'a HashMap<&'ctx str, Struct<'ctx>>,
     /// Standard output, as a growable string.
     pub stdout: StringBuilder,
 }
@@ -92,18 +97,20 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
             StrV(s) => format!("{s}"),
             BoolV(b) => format!("{b}"),
             StructV(name, fields) => {
-                // Display the  fields
-                let fields = fields
+                // Retrieve the order of the fields.
+                let fields_order = &self.struct_env[name].fields_order;
+
+                // Display the fields
+                let fields = fields_order
                     .iter()
-                    .map(|(name, value)| format!("\t{}: {}", name, self.display(value)))
-                    .join(",\n");
+                    .map(|field| {
+                        let value = &fields[field];
+                        format!(" {}: {}", field, self.display(value))
+                    })
+                    .join(",");
 
                 // Extra `\n` if there are some fields
-                if !fields.is_empty() {
-                    format!("{name} {{\n{fields}\n}}")
-                } else {
-                    format!("{name} {{\n}}")
-                }
+                format!("{name} {{{fields} }}")
             }
             RangeV(start, end) => {
                 format!("{}..{}", self.display(start), self.display(end))

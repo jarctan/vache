@@ -144,10 +144,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             Some(f.span)
         } else if let Some(s) = self.struct_env.get(name) {
             Some(s.span)
-        } else if let Some(e) = self.enum_env.get(name) {
-            Some(e.span)
         } else {
-            None
+            self.enum_env.get(name).map(|e| e.span)
         };
 
         if let Some(span2) = item {

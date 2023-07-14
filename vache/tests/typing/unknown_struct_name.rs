@@ -5,30 +5,24 @@
 use super::*;
 
 fn person_struct<'ctx>() -> Struct<'ctx> {
-    Struct {
-        name: "Person",
-        fields: vec![("name", strT()), ("age", intT()), ("country", strT())]
-            .into_iter()
-            .collect(),
-        ..default()
-    }
+    struct_def(
+        "Person",
+        [("name", strT()), ("age", intT()), ("country", strT())],
+    )
 }
 
 #[test]
 #[should_fail(UNKNOWN_TYPE_VAR)]
 fn unknown_struct_in_field() -> Program {
     Program::new(
-        vec![Struct {
-            name: "Person",
-            fields: vec![
+        vec![struct_def(
+            "Person",
+            [
                 ("name", strT()),
                 ("age", intT()),
                 ("house", varT("UnknownStruct")), // should fail
-            ]
-            .into_iter()
-            .collect(),
-            ..default()
-        }],
+            ],
+        )],
         default(),
         vec![Fun {
             name: "main",
