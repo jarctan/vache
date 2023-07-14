@@ -12,5 +12,7 @@ pub fn imports() -> TokenStream {
         use ::anyhow::Context as __AnyhowContext;
         use ::num_traits::Zero as __Zero;
         use ::num_traits::One as __One;
+        use ::rand::Rng as __RandRng;
+        use ::rand::distributions::uniform::UniformSampler as __RandUniformSampler;
     )
 }

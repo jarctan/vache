@@ -217,5 +217,15 @@ pub fn integer() -> TokenStream {
                 Ok(Self(t.try_into()?))
             }
         }
+
+        pub(crate) fn __rand<'b>(
+            start: Cow<'b, __Integer>,
+            end: Cow<'b, __Integer>,
+        ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
+            let mut rng = ::rand::thread_rng();
+            let range = ::num_bigint::UniformBigInt::new(&start.0, &end.0);
+
+            __Ret::ok(Cow::Owned(__Integer(range.sample(&mut rng))), __noRet {})
+        }
     )
 }

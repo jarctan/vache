@@ -162,7 +162,7 @@ pub fn functions() -> TokenStream {
             __Ret::ok(Cow::Owned(neg), __noRet {})
         }
 
-        pub(crate) fn __assert<'a, 'b>(
+        pub(crate) fn __assert<'b>(
             pred: Cow<'b, bool>,
         ) -> __Result<__Ret<Cow<'b, ()>, __noRet>> {
             ::anyhow::ensure!(*pred, "Assertion failed");

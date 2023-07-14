@@ -494,6 +494,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         "||" => quote!(__or),
                         "!" => quote!(__not),
                         "assert" => quote!(__assert),
+                        "rand" => quote!(__rand),
                         "push" => quote!(__Vec::push),
                         _ => {
                             let ident = format_ident!("{}", name.name);

@@ -319,7 +319,8 @@ mod steps {
         edition = \"2021\"
         
         [dependencies]
-        num-bigint = \"0.4.3\"
+        rand = \"0.8.5\"
+        num-bigint = {{ version = \"0.4.3\", features = [\"rand\"] }}
         num-traits = \"0.2.15\"
         thiserror = \"1.0.40\"
         anyhow = \"1.0.71\"
