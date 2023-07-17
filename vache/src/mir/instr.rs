@@ -140,13 +140,12 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
         }
     }
 
-    /// Changes the instruction to change `to_find`'s referencing mode to
-    /// [`Mode::Cloned`].
+    /// Returns a mutable handle into the [`Reference`] that matches `to_find`.
     ///
     /// # Panics
     /// Panics if the instruction does not contain `to_find`.
-    pub fn force_clone(&mut self, to_find: &Pointer<'ctx>) {
-        let mut els = self
+    pub(crate) fn find(&mut self, to_find: &Pointer<'ctx>) -> &mut Reference<'mir, 'ctx> {
+        let els = self
             .references_mut()
             .filter(|reference| reference.as_ptr() == *to_find)
             .collect::<Vec<_>>();
@@ -154,11 +153,20 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
         assert_eq!(
             els.len(),
             1,
-            "Could not find {to_find:?} to clone in {self:?} ({:?} possible entries)",
+            "Could not find {to_find:?} to clone {:?} possible entries)",
             els.len()
         );
 
-        els[0].set_mode(Mode::Cloned);
+        els.into_iter().next().unwrap()
+    }
+
+    /// Changes the instruction to change `to_find`'s referencing mode to
+    /// [`Mode::Cloned`].
+    ///
+    /// # Panics
+    /// Panics if the instruction does not contain `to_find`.
+    pub(crate) fn force_clone(&mut self, to_find: &Pointer<'ctx>) {
+        self.find(to_find).set_mode(Mode::Cloned);
     }
 }
 

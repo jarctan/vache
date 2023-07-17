@@ -2,12 +2,13 @@
 
 use std::collections::HashMap;
 
-use super::borrow::Loan;
+use super::borrow::{Borrows, Loan};
 use super::flow::Flow;
 use super::ledger::Ledger;
 use super::tree::LocTree;
+use crate::codes::BORROW_ERROR;
 use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
-use crate::reporter::Diagnostics;
+use crate::reporter::{Diagnostic, Diagnostics, Reporter};
 use crate::utils::MultiSet;
 use crate::utils::Set;
 
@@ -133,7 +134,7 @@ fn loan_liveness<'ctx>(
                 }
                 _ => {
                     for assigned in instr.mutated_ptrs() {
-                        let borrows = refs
+                        let borrows: Borrows = refs
                             .iter()
                             .filter(|r| r.id != assigned.id)
                             .flat_map(|reference| outs.borrow(*assigned.loc(), reference, label))
@@ -194,6 +195,7 @@ pub fn liveness<'mir, 'ctx>(
     entry_l: CfgLabel,
     exit_l: CfgLabel,
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
+    reporter: &mut Reporter<'ctx>,
 ) -> Result<CfgI<'mir, 'ctx>, Diagnostics<'ctx>> {
     let cfg_flow_label_order = cfg
         .postorder(entry_l)
@@ -278,6 +280,32 @@ pub fn liveness<'mir, 'ctx>(
                 }
             }
         }
+        //cfg.print_image("cfg").unwrap();
+
+        // List all borrows that are invalidated by mutation of a variable within the
+        // same instruction.
+        for (label, instr) in cfg.bfs_mut(entry_l, false) {
+            // Get all the mutated places of the instruction
+            let mutated_places = instr.mutated_places().collect::<Vec<_>>();
+            // The borrows at the entry of the instruction.
+            let borrows_in = &loan_flow[&label].ins;
+            // Compute the mapping of places, and the list of borrows made on that place
+            // that are used within the instruction.
+            let mut refs: HashMap<_, Vec<_>> = HashMap::new();
+            for r in instr.references() {
+                for b in borrows_in.borrows(r.place()) {
+                    refs.entry(b.borrowed_place()).or_default().push(b);
+                }
+            }
+            // For each mutated place, invalidate all the borrows given by the mapping.
+            for lhs in mutated_places {
+                if let Some(borrows) = refs.get(&lhs) {
+                    for &b in borrows {
+                        invalidated.insert(b.into());
+                    }
+                }
+            }
+        }
 
         // Extend with the invalidations of the ledger. Take them at exit_l to have them
         // all
@@ -294,12 +322,29 @@ pub fn liveness<'mir, 'ctx>(
             .next()
         {
             Some(Loan { label, ptr, .. }) => {
-                /* println!("Invalidated: {:?}", borrow); */
-                cfg[&label].force_clone(&ptr);
+                // Get the reference that must be cloned
+                let to_clone = cfg[&label].find(&ptr);
+                if matches!(to_clone.mode(), Mode::MutBorrowed | Mode::SMutBorrowed) {
+                    // If the mode was mutably borrowed, that comes from some user annotation
+                    // We won't fix it ourselves, so we report back to the user
+                    reporter.emit(
+                        Diagnostic::error()
+                            .with_code(BORROW_ERROR)
+                            .with_message(
+                                "you cannot use this mutably here, the value must be cloned",
+                            )
+                            .with_labels(vec![to_clone.span.as_label()])
+                            .with_notes(vec![format!("help: consider using the binding syntax `{:?}@new_var` to bind the result of the mutation to a new variable `new_var`", to_clone.place())]),
+                    );
+                    // This error cannot be recovered and makes us abort.
+                    break Ok(cfg);
+                } else {
+                    // Otherwise, it's fine to clone.
+                    to_clone.set_mode(Mode::Cloned);
+                }
             }
             None => {
                 // If we have no invalidated anymore, we reach a stable state and we can return.
-                //cfg.print_image("cfg").unwrap();
                 break Ok(cfg);
             }
         }
