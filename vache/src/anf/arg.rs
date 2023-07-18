@@ -3,7 +3,6 @@
 use std::fmt;
 
 use super::{LhsRef, Place, Pointer, Reference};
-use crate::utils::boxed;
 
 /// A function argument:
 /// * [`Arg::Standard`] either a pass by value argument
@@ -18,29 +17,27 @@ pub enum Arg<'mir, 'ctx> {
     Binding(Reference<'mir, 'ctx>, LhsRef<'mir, 'ctx>),
 }
 impl<'mir, 'ctx> Arg<'mir, 'ctx> {
-    /// Returns the references of this [`Arg`].
+    /// Returns the reference of this [`Arg`].
     ///
     /// References are the variables used (not defined) in the [`Arg`] (with the
     /// addressing modes on them).
-    pub fn references<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Reference<'mir, 'ctx>> + 'a> {
+    pub fn reference<'a>(&'a self) -> &'a Reference<'mir, 'ctx> {
         match self {
-            Arg::Standard(r) => boxed(std::iter::once(r)),
-            Arg::InPlace(r) => boxed(std::iter::once(r)),
-            Arg::Binding(from, _) => boxed(std::iter::once(from)),
+            Arg::Standard(r) => r,
+            Arg::InPlace(r) => r,
+            Arg::Binding(from, _) => from,
         }
     }
 
-    /// Returns mutable borrows into the references of this [`Arg`].
+    /// Returns mutable borrows into the reference of this [`Arg`].
     ///
     /// References are the variables used (not defined) in the [`Arg`] (with the
     /// addressing modes on them).
-    pub fn references_mut<'a>(
-        &'a mut self,
-    ) -> Box<dyn Iterator<Item = &'a mut Reference<'mir, 'ctx>> + 'a> {
+    pub fn reference_mut<'a>(&'a mut self) -> &'a mut Reference<'mir, 'ctx> {
         match self {
-            Arg::Standard(r) => boxed(std::iter::once(r)),
-            Arg::InPlace(r) => boxed(std::iter::once(r)),
-            Arg::Binding(from, _) => boxed(std::iter::once(from)),
+            Arg::Standard(r) => r,
+            Arg::InPlace(r) => r,
+            Arg::Binding(from, _) => from,
         }
     }
 

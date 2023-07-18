@@ -119,7 +119,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
                 name: _,
                 args,
                 destination: _,
-            } => boxed(args.iter_mut().flat_map(|arg| arg.references_mut())),
+            } => boxed(args.iter_mut().map(Arg::reference_mut)),
         }
     }
 
@@ -136,7 +136,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
                 name: _,
                 args,
                 destination: _,
-            } => boxed(args.iter().flat_map(Arg::references)),
+            } => boxed(args.iter().map(Arg::reference)),
         }
     }
 

@@ -39,17 +39,15 @@ impl<'ctx> Ledger<'ctx> {
     /// the borrow of `reference` at CFG label `label`.
     pub fn borrow<'mir>(
         &mut self,
-        borrower: Loc<'ctx>,
         reference: &Reference<'mir, 'ctx>,
         label: CfgLabel,
-    ) -> Vec<Borrow<'ctx>> {
+    ) -> Vec<Loan<'ctx>> {
         let span = reference.as_ptr().span;
         match reference.mode() {
             Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed | Mode::SMutBorrowed => {
                 // You clone their loans + the loan into the borrowed pointer
-                vec![Borrow {
+                vec![Loan {
                     ptr: reference.as_ptr(),
-                    borrower,
                     label,
                     span,
                 }]
@@ -64,9 +62,8 @@ impl<'ctx> Ledger<'ctx> {
                 // We remove the loans from that place
                 let borrows = self
                     .borrows(reference.place())
-                    .map(move |borrow| Borrow {
+                    .map(move |borrow| Loan {
                         label: borrow.label,
-                        borrower, // Note that we update the borrower
                         span: borrow.span,
                         ptr: borrow.ptr,
                     })

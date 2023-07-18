@@ -2,13 +2,16 @@
 
 use std::collections::HashMap;
 
+use anyhow::Result;
+
 use super::borrow::{Borrows, Loan};
 use super::flow::Flow;
 use super::ledger::Ledger;
 use super::tree::LocTree;
+use super::FunFlow;
 use crate::codes::BORROW_ERROR;
 use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
-use crate::reporter::{Diagnostic, Diagnostics, Reporter};
+use crate::reporter::{Diagnostic, Reporter};
 use crate::utils::MultiSet;
 use crate::utils::Set;
 
@@ -83,6 +86,7 @@ fn loan_liveness<'ctx>(
     cfg: &CfgI<'_, 'ctx>,
     entry_l: CfgLabel,
     var_flow: &Cfg<Flow<LocTree<'ctx, ()>>>,
+    fun_flow: &HashMap<&'ctx str, FunFlow>,
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
 ) -> Cfg<'ctx, Flow<Ledger<'ctx>>> {
     let out_of_scope: Cfg<LocTree<()>> =
@@ -97,7 +101,6 @@ fn loan_liveness<'ctx>(
 
         for (label, instr) in cfg.postorder(entry_l).rev() {
             let predecessors = cfg.preneighbors(label);
-            let refs = instr.references().collect::<Vec<_>>();
 
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
             let mut outs: Ledger = ins.clone();
@@ -133,11 +136,13 @@ fn loan_liveness<'ctx>(
                     }
                 }
                 _ => {
-                    for assigned in instr.mutated_ptrs() {
+                    let flow = instr.flow(fun_flow);
+
+                    for (assigned, refs) in flow {
                         let borrows: Borrows = refs
                             .iter()
-                            .filter(|r| r.id != assigned.id)
-                            .flat_map(|reference| outs.borrow(*assigned.loc(), reference, label))
+                            .flat_map(|reference| outs.borrow(reference, label))
+                            .map(|loan| loan.into_borrow(*assigned.loc()))
                             .collect();
                         if var_flow[&label].outs.contains(assigned.loc()) {
                             outs.set_borrows(assigned.place(), borrows);
@@ -194,9 +199,10 @@ pub fn liveness<'mir, 'ctx>(
     mut cfg: CfgI<'mir, 'ctx>,
     entry_l: CfgLabel,
     exit_l: CfgLabel,
+    fun_flow: &HashMap<&'ctx str, FunFlow>,
     strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
     reporter: &mut Reporter<'ctx>,
-) -> Result<CfgI<'mir, 'ctx>, Diagnostics<'ctx>> {
+) -> Result<CfgI<'mir, 'ctx>> {
     let cfg_flow_label_order = cfg
         .postorder(entry_l)
         .rev()
@@ -210,7 +216,7 @@ pub fn liveness<'mir, 'ctx>(
         // Loop until there is no change in moves.
         let loan_flow = loop {
             // Now, compute loan analysis
-            let loan_flow = loan_liveness(&cfg, entry_l, &var_flow, strata);
+            let loan_flow = loan_liveness(&cfg, entry_l, &var_flow, fun_flow, strata);
 
             let mut updated = false;
             // Check last variable use and replace with a move
@@ -280,7 +286,6 @@ pub fn liveness<'mir, 'ctx>(
                 }
             }
         }
-        //cfg.print_image("cfg").unwrap();
 
         // List all borrows that are invalidated by mutation of a variable within the
         // same instruction.
@@ -337,6 +342,8 @@ pub fn liveness<'mir, 'ctx>(
                             .with_notes(vec![format!("help: consider using the binding syntax `{:?}@new_var` to bind the result of the mutation to a new variable `new_var`", to_clone.place())]),
                     );
                     // This error cannot be recovered and makes us abort.
+                    // But this is not a compiler internal error per se, so we do not return `Err`.
+                    // Otherwise, that would abruptly terminate the compilation.
                     break Ok(cfg);
                 } else {
                     // Otherwise, it's fine to clone.
@@ -345,6 +352,7 @@ pub fn liveness<'mir, 'ctx>(
             }
             None => {
                 // If we have no invalidated anymore, we reach a stable state and we can return.
+                //cfg.print_image("cfg").unwrap();
                 break Ok(cfg);
             }
         }

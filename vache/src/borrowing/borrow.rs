@@ -16,6 +16,19 @@ pub struct Loan<'ctx> {
     /// Borrowed location. NOT the borrower.
     pub ptr: Pointer<'ctx>,
 }
+impl<'ctx> Loan<'ctx> {
+    /// Transforms a loan into a borrow by adding information about the
+    /// `borrower`.
+    pub(crate) fn into_borrow(self, borrower: Loc<'ctx>) -> Borrow<'ctx> {
+        let Self { label, span, ptr } = self;
+        Borrow {
+            label,
+            span,
+            ptr,
+            borrower,
+        }
+    }
+}
 
 impl<'ctx> From<Borrow<'ctx>> for Loan<'ctx> {
     fn from(borrow: Borrow<'ctx>) -> Self {
