@@ -107,7 +107,7 @@ pub fn functions() -> TokenStream {
         ) -> __Result<__Ret<Cow<'b, bool>, ____leRet>> {
             let b1: &B = &*x;
             let b2: &B = &*y;
-            __Ret::ok(Cow::Owned(b1 >= b2), ____leRet {})
+            __Ret::ok(Cow::Owned(b1 <= b2), ____leRet {})
         }
 
         struct ____ltRet {}
@@ -162,9 +162,7 @@ pub fn functions() -> TokenStream {
             __Ret::ok(Cow::Owned(neg), __noRet {})
         }
 
-        pub(crate) fn __assert<'b>(
-            pred: Cow<'b, bool>,
-        ) -> __Result<__Ret<Cow<'b, ()>, __noRet>> {
+        pub(crate) fn __assert<'b>(pred: Cow<'b, bool>) -> __Result<__Ret<Cow<'b, ()>, __noRet>> {
             ::anyhow::ensure!(*pred, "Assertion failed");
             __Ret::ok(Cow::Owned(()), __noRet {})
         }

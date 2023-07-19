@@ -327,8 +327,6 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         let mut lft_generator = LftGenerator::new();
         let b = lft_generator.generate();
 
-        println!("{:?}", strukt.fields_order);
-
         let fields: TokenStream = strukt
             // Note: we use the same order as in the code, so that the `Debug` of it is
             // deterministic

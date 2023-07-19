@@ -78,12 +78,16 @@ pub struct LocTree<'ctx, T>(HashMap<&'ctx str, LocTreeNode<'ctx, T>>);
 impl<T: fmt::Debug> fmt::Debug for LocTree<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Circumvent not to display quotes `"` for the keys.
-        let mut s = f.debug_struct("");
+        if self.0.is_empty() {
+            write!(f, "{{}}")
+        } else {
+            let mut s = f.debug_struct("");
 
-        for (name, v) in self.0.iter() {
-            s.field(name, v);
+            for (name, v) in self.0.iter() {
+                s.field(name, v);
+            }
+            s.finish()
         }
-        s.finish()
     }
 }
 
