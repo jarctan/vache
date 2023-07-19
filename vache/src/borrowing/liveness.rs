@@ -3,12 +3,9 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use itertools::Itertools;
 
-use super::borrow::{Borrows, InvalidationReason, Invalidations, Loan};
-use super::flow::Flow;
-use super::ledger::Ledger;
-use super::tree::LocTree;
-use super::FunFlow;
+use super::{Borrows, Flow, FunFlow, InvalidationReason, Invalidations, Ledger, Loan, LocTree};
 use crate::codes::BORROW_ERROR;
 use crate::mir::{Cfg, CfgI, CfgLabel, Fun, InstrKind, Loc, Mode};
 use crate::reporter::Diagnostic;
@@ -216,6 +213,7 @@ pub fn liveness<'ctx>(
         let var_flow = var_liveness(&f.body, f.entry_l);
 
         // Loop until there is no change in moves.
+        // Note: `loan_flow` is mutable because we flush its invalidations after.s
         let mut loan_flow = loop {
             // Now, compute loan analysis
             let loan_flow = loan_liveness(f, &var_flow, fun_flow);
@@ -287,7 +285,6 @@ pub fn liveness<'ctx>(
                     invalidated.insert(
                         borrow,
                         InvalidationReason::MutationWithLiveBorrow {
-                            borrow,
                             mutation_span: instr.span,
                         },
                     );
@@ -317,7 +314,6 @@ pub fn liveness<'ctx>(
                         invalidated.insert(
                             borrow,
                             InvalidationReason::MutationWithLiveBorrow {
-                                borrow,
                                 mutation_span: instr.span,
                             },
                         );
@@ -330,11 +326,22 @@ pub fn liveness<'ctx>(
         // all
         invalidated.extend(loan_flow[&f.ret_l].outs.invalidations());
 
+        // Choose the invalidation that is the first in the flow order amongst the most
+        // represented invalidations
         match cfg_flow_label_order
             .iter()
             .find_map(|&label| invalidated.most_represented().find(|b| b.label == label))
+            .copied()
         {
-            Some(Loan { label, ptr, .. }) => {
+            Some(loan @ Loan { label, ptr, .. }) => {
+                let reasons = invalidated
+                    .remove(loan)
+                    .into_iter()
+                    .unique()
+                    .map(|r| r.to_diagnostic(loan));
+                for reason in reasons {
+                    ctx.emit(reason);
+                }
                 // Get the reference that must be cloned
                 let to_clone = f.body[&label].find(&ptr);
                 if matches!(to_clone.mode(), Mode::MutBorrowed | Mode::SMutBorrowed) {
