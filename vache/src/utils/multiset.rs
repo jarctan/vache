@@ -32,6 +32,7 @@ impl<K> Default for MultiSet<K> {
 
 impl<K: Hash + Eq> Eq for MultiSet<K> {}
 
+#[allow(dead_code)]
 impl<K: Hash + Eq> MultiSet<K> {
     /// Creates a new empty HashMultiSet.
     pub fn new() -> Self {
@@ -208,7 +209,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn borrow_cnt_is_good() {
+    fn borrow_cnt_is_ok() {
         let mut borrow_cnt = MultiSet::default();
         borrow_cnt.insert(1);
         borrow_cnt.insert(2);
@@ -216,5 +217,15 @@ mod tests {
         println!("{:?}", borrow_cnt);
         let res = borrow_cnt.into_iter().collect::<Vec<_>>();
         assert_eq!(res.len(), 3, "expected 3 elements, found {res:?}");
+    }
+
+    #[test]
+    fn contains_is_ok() {
+        let mut borrow_cnt = MultiSet::default();
+        borrow_cnt.insert(1);
+        borrow_cnt.insert(2);
+        borrow_cnt.insert(1);
+        assert!(borrow_cnt.contains(&1));
+        assert!(borrow_cnt.contains(&2));
     }
 }

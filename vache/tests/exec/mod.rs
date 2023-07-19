@@ -12,6 +12,8 @@ mod multiple_refs;
 mod structures;
 mod while_loop;
 
+use std::default::default;
+
 use unindent::Unindent;
 use vache_lib::{
     borrow_check, check_all, config::Config, execute, farm_modes, interpret, mir, mir::Mode,
@@ -59,6 +61,7 @@ fn exec_va(filename: &str) {
     let config = Config {
         input,
         filename: Some(filename),
+        ..default()
     };
     let mut context = Context::new(config, &arena);
 
@@ -127,6 +130,7 @@ fn check_modes_va(filename: &str) {
     let config = Config {
         input,
         filename: Some(filename),
+        ..default()
     };
     let mut context = Context::new(config, &arena);
 
@@ -247,6 +251,7 @@ fn interpret_va(filename: &str) {
     let config = Config {
         input,
         filename: Some(filename),
+        ..default()
     };
     let mut context = Context::new(config, &arena);
 

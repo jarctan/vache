@@ -1,4 +1,7 @@
 #![feature(try_blocks)]
+#![feature(default_free_fn)]
+
+use std::default::default;
 
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
@@ -9,6 +12,7 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use vache_lib::examples::parse_file;
 use vache_lib::reporter::Diagnostics;
+use vache_lib::typecheck;
 use vache_lib::{config::Config, Arena, Context};
 
 #[derive(Debug)]
@@ -131,17 +135,18 @@ impl Backend {
         let config = Config {
             input: &params.input,
             filename: Some(params.uri.as_str()),
+            ..default()
         };
         let mut ctx = Context::new(config, &arena);
 
         let res: Result<_, Diagnostics> = try {
             // Parse
             let program = parse_file(&mut ctx)?;
-            /*// Type check
-            typecheck(&mut ctx, program)?;*/
+            // Type check
+            typecheck(&mut ctx, program)?;
         };
 
-        /*// Report any diagnostic.
+        // Report any diagnostic.
         if let Err(diagnostics) = res {
             let diagnostics = diagnostics
                 .into_iter()
@@ -156,7 +161,7 @@ impl Backend {
             self.client
                 .publish_diagnostics(params.uri.clone(), diagnostics, Some(params.version))
                 .await;
-        };*/
+        };
     }
 }
 
@@ -170,6 +175,7 @@ async fn main() {
     Server::new(stdin, stdout, socket).serve(service).await;
 }
 
+#[allow(dead_code)]
 fn offset_to_position(offset: usize, rope: &Rope) -> Option<Position> {
     let line = rope.try_char_to_line(offset).ok()?;
     let first_char_of_line = rope.try_line_to_char(line).ok()?;

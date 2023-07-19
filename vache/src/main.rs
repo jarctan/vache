@@ -1,6 +1,7 @@
 //! Toy Vache language compiler.
 
 #![feature(try_blocks)]
+#![feature(default_free_fn)]
 
 use std::process::Command;
 
@@ -13,44 +14,62 @@ use vache_lib::{
 };
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None)] // Read from `Cargo.toml`
 struct Cli {
     #[clap(subcommand)]
     command: Commands,
 }
 
-/// Vache commands.
+/// Compiler for the Vache programming language.
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Gives the MIR output of a program.
     Mir {
         /// The input file to compile.
         filename: String,
+        /// Report invalidations as warnings.
+        #[arg(short, long)]
+        invalidations: bool,
     },
     /// Type-checks a program.
     Check {
         /// The input file to type-check.
         filename: String,
+        /// Report invalidations as warnings.
+        #[arg(short, long)]
+        invalidations: bool,
     },
     /// Compiles a program.
     Compile {
         /// The input file to compile.
         filename: String,
+        /// Report invalidations as warnings.
+        #[arg(short, long)]
+        invalidations: bool,
     },
     /// Runs a program.
     Run {
         /// The input file to compile.
         filename: String,
+        /// Report invalidations as warnings.
+        #[arg(short, long)]
+        invalidations: bool,
     },
     /// Interprets a program.
     Interpret {
         /// The input file to compile.
         filename: String,
+        /// Report invalidations as warnings.
+        #[arg(short, long)]
+        invalidations: bool,
     },
     /// Gets the addressing modes of all elements of the program.
     Modes {
         /// The input file to compile.
         filename: String,
+        /// Report invalidations as warnings.
+        #[arg(short, long)]
+        invalidations: bool,
     },
 }
 
@@ -64,7 +83,10 @@ fn main() -> anyhow::Result<()> {
     }
 
     match Cli::parse().command {
-        Commands::Mir { ref filename } => {
+        Commands::Mir {
+            ref filename,
+            invalidations,
+        } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
             let input: &str =
@@ -74,6 +96,7 @@ fn main() -> anyhow::Result<()> {
             let config = Config {
                 input,
                 filename: Some(filename),
+                report_invalidations: invalidations,
             };
             let mut context = Context::new(config, &arena);
 
@@ -94,7 +117,10 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Commands::Check { ref filename } => {
+        Commands::Check {
+            ref filename,
+            invalidations,
+        } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
             let input: &str =
@@ -104,6 +130,7 @@ fn main() -> anyhow::Result<()> {
             let config = Config {
                 input,
                 filename: Some(filename),
+                report_invalidations: invalidations,
             };
             let mut context = Context::new(config, &arena);
 
@@ -117,7 +144,10 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Commands::Compile { ref filename } => {
+        Commands::Compile {
+            ref filename,
+            invalidations,
+        } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
             let input: &str =
@@ -127,6 +157,7 @@ fn main() -> anyhow::Result<()> {
             let config = Config {
                 input,
                 filename: Some(filename),
+                report_invalidations: invalidations,
             };
             let mut context = Context::new(config, &arena);
 
@@ -140,7 +171,10 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Commands::Run { ref filename } => {
+        Commands::Run {
+            ref filename,
+            invalidations,
+        } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
             let input: &str =
@@ -150,6 +184,7 @@ fn main() -> anyhow::Result<()> {
             let config = Config {
                 input,
                 filename: Some(filename),
+                report_invalidations: invalidations,
             };
             let mut context = Context::new(config, &arena);
             let res: Result<_, Diagnostics> = try {
@@ -168,7 +203,10 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        Commands::Interpret { ref filename } => {
+        Commands::Interpret {
+            ref filename,
+            invalidations,
+        } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
             let input: &str =
@@ -178,6 +216,7 @@ fn main() -> anyhow::Result<()> {
             let config = Config {
                 input,
                 filename: Some(filename),
+                report_invalidations: invalidations,
             };
             let mut context = Context::new(config, &arena);
             let res: Result<_, Diagnostics> = try {
@@ -201,7 +240,10 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        Commands::Modes { ref filename } => {
+        Commands::Modes {
+            ref filename,
+            invalidations,
+        } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
             let input: &str =
@@ -211,6 +253,7 @@ fn main() -> anyhow::Result<()> {
             let config = Config {
                 input,
                 filename: Some(filename),
+                report_invalidations: invalidations,
             };
             let mut context = Context::new(config, &arena);
             let res: Result<_, Diagnostics> = try {

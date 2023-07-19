@@ -213,7 +213,7 @@ pub fn liveness<'ctx>(
         let var_flow = var_liveness(&f.body, f.entry_l);
 
         // Loop until there is no change in moves.
-        // Note: `loan_flow` is mutable because we flush its invalidations after.s
+        // Note: `loan_flow` is mutable because we flush its invalidations after
         let mut loan_flow = loop {
             // Now, compute loan analysis
             let loan_flow = loan_liveness(f, &var_flow, fun_flow);
@@ -334,14 +334,20 @@ pub fn liveness<'ctx>(
             .copied()
         {
             Some(loan @ Loan { label, ptr, .. }) => {
-                let reasons = invalidated
-                    .remove(loan)
-                    .into_iter()
-                    .unique()
-                    .map(|r| r.to_diagnostic(loan));
-                for reason in reasons {
-                    ctx.emit(reason);
+                // We have at least one candidate, let's invalidate it
+
+                // If we asked to report invalidations, do it for the new invalidation
+                if ctx.config.report_invalidations {
+                    let reasons = invalidated
+                        .remove(loan)
+                        .into_iter()
+                        .unique()
+                        .map(|r| r.to_diagnostic(loan));
+                    for reason in reasons {
+                        ctx.emit(reason);
+                    }
                 }
+
                 // Get the reference that must be cloned
                 let to_clone = f.body[&label].find(&ptr);
                 if matches!(to_clone.mode(), Mode::MutBorrowed | Mode::SMutBorrowed) {

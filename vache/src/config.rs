@@ -7,4 +7,6 @@ pub struct Config<'ctx> {
     pub input: &'ctx str,
     /// Compiler input filename.
     pub filename: Option<&'ctx str>,
+    /// Do we report invalidations.
+    pub report_invalidations: bool,
 }
