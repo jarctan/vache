@@ -9,7 +9,7 @@ use std::{cmp::Ordering, fmt};
 
 use Place::*;
 
-use super::{Place, Pointer, Reference, VarUse, Varname};
+use super::{Place, Pointer, Reference, VarDef, VarUse, Varname};
 
 /// Location: `var.fields*`. Example: `var.field1.field2.field3`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -28,6 +28,14 @@ impl<'ctx> Loc<'ctx> {
         match self {
             VarL(_) => 1,
             FieldL(loc, _) => loc.len() + 1,
+        }
+    }
+
+    /// Returns the root variable of this location.
+    pub fn root(&self) -> Varname<'ctx> {
+        match self {
+            VarL(var) => *var,
+            FieldL(loc, _) => loc.root(),
         }
     }
 }
@@ -72,6 +80,12 @@ impl<'a, 'ctx> From<&'a Self> for Loc<'ctx> {
 impl<'ctx> From<Varname<'ctx>> for Loc<'ctx> {
     fn from(var: Varname<'ctx>) -> Self {
         VarL(var)
+    }
+}
+
+impl<'ctx> From<VarDef<'ctx>> for Loc<'ctx> {
+    fn from(vardef: VarDef<'ctx>) -> Self {
+        VarL(vardef.name())
     }
 }
 

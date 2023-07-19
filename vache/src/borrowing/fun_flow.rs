@@ -14,7 +14,7 @@ type ArgNb = usize;
 /// Argument dependencies.
 type ArgDeps = Vec<ArgNb>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 /// Compile-time dependencies between variables.
 pub struct FunFlow {
     /// For each argument, tell on which argument the result depends.

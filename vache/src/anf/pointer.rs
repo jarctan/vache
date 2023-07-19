@@ -4,7 +4,7 @@
 use std::fmt;
 use std::sync::atomic::AtomicU64;
 
-use super::{Loc, Place, Reference, Span};
+use super::{Loc, Place, Reference, Span, Varname};
 use crate::Arena;
 
 /// Fresh label counter.
@@ -43,6 +43,15 @@ impl<'ctx> Pointer<'ctx> {
     /// Gets the place of the pointer.
     pub fn place(&self) -> &'ctx Place<'ctx> {
         self.place
+    }
+
+    /// Creates a fresh pointer to a given variable.
+    pub(crate) fn from_var(
+        arena: &'ctx Arena<'ctx>,
+        var: Varname<'ctx>,
+        span: Span,
+    ) -> Pointer<'ctx> {
+        Self::new(arena, arena.alloc(var.into()), span)
     }
 }
 

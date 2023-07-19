@@ -10,10 +10,16 @@ use super::ledger::Ledger;
 use super::tree::LocTree;
 use super::FunFlow;
 use crate::codes::BORROW_ERROR;
-use crate::mir::{Cfg, CfgI, CfgLabel, InstrKind, Loc, Mode, Stratum, Varname};
-use crate::reporter::{Diagnostic, Reporter};
+use crate::mir::{Cfg, CfgI, CfgLabel, Fun, InstrKind, Loc, Mode};
+use crate::reporter::Diagnostic;
 use crate::utils::MultiSet;
 use crate::utils::Set;
+use crate::Context;
+
+/// Variable flow.
+type VarFlow<'ctx> = Cfg<'ctx, Flow<LocTree<'ctx, ()>>>;
+/// Loan flow.
+type LoanFlow<'ctx> = Cfg<'ctx, Flow<Ledger<'ctx>>>;
 
 /// Variable liveness analysis.
 ///
@@ -23,12 +29,9 @@ use crate::utils::Set;
 ///
 /// Returns a map of live variables at the entry and exit of each node in the
 /// CFG.
-pub fn var_liveness<'ctx>(
-    cfg: &CfgI<'_, 'ctx>,
-    entry_l: CfgLabel,
-) -> Cfg<'ctx, Flow<LocTree<'ctx, ()>>> {
+pub fn var_liveness<'ctx>(cfg: &CfgI<'_, 'ctx>, entry_l: CfgLabel) -> VarFlow<'ctx> {
     // Bootstrap with empty environments.
-    let mut var_flow: Cfg<Flow<LocTree<()>>> = cfg.map_ref(|_, _| Flow::default(), |_| ());
+    let mut var_flow: VarFlow = cfg.map_ref(|_, _| Flow::default(), |_| ());
 
     // Compute the fixpoint, iteratively.
     let mut updated = true;
@@ -83,24 +86,23 @@ pub fn var_liveness<'ctx>(
 /// Returns a map of live loans at the entry and exit of each node in the
 /// CFG.
 fn loan_liveness<'ctx>(
-    cfg: &CfgI<'_, 'ctx>,
-    entry_l: CfgLabel,
-    var_flow: &Cfg<Flow<LocTree<'ctx, ()>>>,
+    f: &Fun<'_, 'ctx>,
+    var_flow: &VarFlow<'ctx>,
     fun_flow: &HashMap<&'ctx str, FunFlow>,
-    strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
-) -> Cfg<'ctx, Flow<Ledger<'ctx>>> {
+) -> LoanFlow<'ctx> {
     let out_of_scope: Cfg<LocTree<()>> =
         var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
 
-    let mut loan_flow: Cfg<Flow<Ledger>> = cfg.map_ref(|_, _| Flow::default(), |_| ());
+    let mut loan_flow: LoanFlow = f.body.map_ref(|_, _| Flow::default(), |_| ());
 
     // Compute the fixpoint, iteratively.
     let mut updated = true;
     while updated {
         updated = false;
 
-        for (label, instr) in cfg.postorder(entry_l).rev() {
-            let predecessors = cfg.preneighbors(label);
+        for (label, instr) in f.body.postorder(f.entry_l).rev() {
+            // println!("Label: {label:?}");
+            let predecessors = f.body.preneighbors(label);
 
             let ins: Ledger = predecessors.map(|x| loan_flow[&x].outs.clone()).sum();
             let mut outs: Ledger = ins.clone();
@@ -160,16 +162,17 @@ fn loan_liveness<'ctx>(
             // Remove locations that can really be destroyed at the end of this instruction
             // To do so, compute the worst case stratum after that instruction, that is the
             // lowest stm that we can reach after that instruction
-            let successor_stm = cfg
+            let successor_stm = f
+                .body
                 .neighbors(label)
-                .map(|label| cfg[&label].scope)
+                .map(|label| f.body[&label].scope)
                 .min()
                 .unwrap_or(instr.scope);
 
             // We need to flush every variable between the successor stratum (not included)
             // and our stratum (included)
             for stm in successor_stm.higher()..=instr.scope {
-                if let Some(set) = strata.get(&stm) {
+                if let Some(set) = f.strata.get(&stm) {
                     outs.flush_locs(set.iter().map(Loc::from), true);
                 }
             }
@@ -190,37 +193,37 @@ fn loan_liveness<'ctx>(
 /// Liveness analysis.
 ///
 /// Takes as arguments:
-/// * The CFG.
-/// * The entry label in the CFG.
-/// * The set of variables for each stratum.
+/// * The function in the CFG.
+/// * The function flow of the previous iteration of the fixpoint.
+/// * The compiler context.
 ///
 /// Performs liveliness analysis, determining which borrows are invalidated.
-pub fn liveness<'mir, 'ctx>(
-    mut cfg: CfgI<'mir, 'ctx>,
-    entry_l: CfgLabel,
-    exit_l: CfgLabel,
+/// Returns the new function signature.
+pub fn liveness<'ctx>(
+    f: &mut Fun<'_, 'ctx>,
     fun_flow: &HashMap<&'ctx str, FunFlow>,
-    strata: &HashMap<Stratum, Set<Varname<'ctx>>>,
-    reporter: &mut Reporter<'ctx>,
-) -> Result<CfgI<'mir, 'ctx>> {
-    let cfg_flow_label_order = cfg
-        .postorder(entry_l)
+    ctx: &mut Context<'ctx>,
+) -> Result<FunFlow> {
+    // We compute the natural ordering of the labels of the CFG, once and for all.
+    let cfg_flow_label_order = f
+        .body
+        .postorder(f.entry_l)
         .rev()
         .map(|(label, _)| label)
         .collect::<Vec<_>>();
 
-    loop {
+    let loan_flow: Result<LoanFlow> = loop {
         // Compute the var analysis first
-        let var_flow = var_liveness(&cfg, entry_l);
+        let var_flow = var_liveness(&f.body, f.entry_l);
 
         // Loop until there is no change in moves.
         let loan_flow = loop {
             // Now, compute loan analysis
-            let loan_flow = loan_liveness(&cfg, entry_l, &var_flow, fun_flow, strata);
+            let loan_flow = loan_liveness(f, &var_flow, fun_flow);
 
             let mut updated = false;
             // Check last variable use and replace with a move
-            for (label, instr) in cfg.bfs_mut(entry_l, false) {
+            for (label, instr) in f.body.bfs_mut(f.entry_l, false) {
                 let var_outs = &var_flow[&label].outs;
                 let borrows_in = &loan_flow[&label].ins;
 
@@ -279,7 +282,7 @@ pub fn liveness<'mir, 'ctx>(
         let mut invalidated = MultiSet::new();
 
         // List all borrows that are invalidated by mutation of the variable afterwards.
-        for (label, instr) in cfg.bfs(entry_l, false) {
+        for (label, instr) in f.body.bfs(f.entry_l, false) {
             for lhs in instr.mutated_places() {
                 for borrow in loan_flow[&label].ins.loans(lhs.root()) {
                     invalidated.insert(borrow.into());
@@ -289,7 +292,7 @@ pub fn liveness<'mir, 'ctx>(
 
         // List all borrows that are invalidated by mutation of a variable within the
         // same instruction.
-        for (label, instr) in cfg.bfs_mut(entry_l, false) {
+        for (label, instr) in f.body.bfs_mut(f.entry_l, false) {
             // Get all the mutated places of the instruction
             let mutated_places = instr.mutated_places().collect::<Vec<_>>();
             // The borrows at the entry of the instruction.
@@ -314,8 +317,10 @@ pub fn liveness<'mir, 'ctx>(
 
         // Extend with the invalidations of the ledger. Take them at exit_l to have them
         // all
-        invalidated.extend(loan_flow[&exit_l].outs.invalidations());
+        invalidated.extend(loan_flow[&f.ret_l].outs.invalidations());
 
+        // If we have no invalidations anymore, we reached a stable state and we can
+        // return
         match cfg_flow_label_order
             .iter()
             .filter_map(|&label| {
@@ -328,11 +333,11 @@ pub fn liveness<'mir, 'ctx>(
         {
             Some(Loan { label, ptr, .. }) => {
                 // Get the reference that must be cloned
-                let to_clone = cfg[&label].find(&ptr);
+                let to_clone = f.body[&label].find(&ptr);
                 if matches!(to_clone.mode(), Mode::MutBorrowed | Mode::SMutBorrowed) {
                     // If the mode was mutably borrowed, that comes from some user annotation
                     // We won't fix it ourselves, so we report back to the user
-                    reporter.emit(
+                    ctx.emit(
                         Diagnostic::error()
                             .with_code(BORROW_ERROR)
                             .with_message(
@@ -344,19 +349,52 @@ pub fn liveness<'mir, 'ctx>(
                     // This error cannot be recovered and makes us abort.
                     // But this is not a compiler internal error per se, so we do not return `Err`.
                     // Otherwise, that would abruptly terminate the compilation.
-                    break Ok(cfg);
+                    break Ok(loan_flow);
                 } else {
                     // Otherwise, it's fine to clone.
                     to_clone.set_mode(Mode::Cloned);
                 }
             }
             None => {
-                // If we have no invalidated anymore, we reach a stable state and we can return.
-                //cfg.print_image("cfg").unwrap();
-                break Ok(cfg);
+                break Ok(loan_flow);
             }
         }
+    };
+    let loan_flow = loan_flow?;
+    // println!("{loan_flow:?}");
+
+    // Now, compute the function flow
+    // First, the flow of the returned value
+    let ret_flow = if let Some(ret_v) = f.ret_v {
+        let borrows = loan_flow[&f.ret_l].ins.borrows(*ret_v.place());
+        let borrowed_vars = borrows.map(|b| b.borrowed_loc().root()).collect::<Vec<_>>();
+        f.params
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| borrowed_vars.contains(&p.var.name()))
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>()
+    } else {
+        vec![]
+    };
+
+    // Then, the flow of the arguments passed by reference
+    let mut args_flow = HashMap::new();
+    for (i, p) in f.params.iter().enumerate().filter(|(_, p)| p.byref) {
+        let borrows = loan_flow[&f.ret_l].ins.borrows(p.var);
+        let borrowed_vars = borrows.map(|b| b.borrowed_loc().root()).collect::<Vec<_>>();
+        args_flow.insert(
+            i,
+            f.params
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| borrowed_vars.contains(&p.var.name()))
+                .map(|(i, _)| i)
+                .collect::<Vec<_>>(),
+        );
     }
+
+    Ok(FunFlow::new(args_flow, ret_flow))
 }
 
 #[cfg(test)]

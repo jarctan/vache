@@ -1,8 +1,6 @@
 fn fibo(i: int) -> int {
-    if i == 0 {
-        0
-    } else if i == 1 {
-        1
+    if i <= 1 {
+        i
     } else {
         fibo(i - 1) + fibo(i - 2)
     }
@@ -20,5 +18,5 @@ fn main() {
 1
 89
 ################################
-7:14:7:15:Borrowed // we need i for the second call to fibo
-7:28:7:29:Borrowed // we could think the second `i` could be moved, but in fact not because we do not know if the first `i` in `i - 1` is still live or not (in fact it is not, but it would be in the case of `i - 0`)
+5:14:5:15:Cloned // invalidated by the last move (nb: fibo(i) depends on i)
+5:28:5:29:Moved // last use of the variable (nb: fibo(i) depends on i)

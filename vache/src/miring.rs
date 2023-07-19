@@ -1,13 +1,11 @@
 //! CFG production.
 
-use std::collections::HashMap;
 use std::default::default;
 
 use Branch::*;
 
 use crate::anf;
 use crate::mir::*;
-use crate::utils::Set;
 use crate::Arena;
 
 /// ANF to MIR transformer.
@@ -16,8 +14,6 @@ pub(crate) struct MIRer<'mir, 'ctx> {
     cfg: CfgI<'mir, 'ctx>,
     /// Current stratum.
     stm: Stratum,
-    /// Collect the variables in each stratum.
-    strata: HashMap<Stratum, Set<Varname<'ctx>>>,
     /// Global arena.
     arena: &'ctx Arena<'ctx>,
 }
@@ -28,7 +24,6 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
         Self {
             cfg: Cfg::default(),
             stm: Stratum::static_stm(),
-            strata: default(),
             arena,
         }
     }
@@ -41,6 +36,18 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
             span: default(),
             scope: self.stm,
         })
+    }
+
+    /// Creates a fresh variable definition, that is related to some code`span`.
+    fn fresh_vardef(&mut self, ty: Ty<'ctx>, span: Span) -> VarDef<'ctx> {
+        let var = VarUse::fresh(self.arena, span);
+
+        VarDef {
+            var,
+            ty,
+            stm: self.stm,
+            span,
+        }
     }
 
     /// Generates an instruction with the right stratum.
@@ -133,17 +140,10 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
         break_l: Option<CfgLabel>,
     ) -> CfgLabel {
         match s.kind {
-            anf::StmtKind::AssignS(ptr, rvalue) => {
-                if ptr.mode() == LhsMode::Declaring {
-                    if let Place::VarP(var) = *ptr.place() {
-                        self.strata.entry(self.stm).or_default().insert(var);
-                    }
-                }
-                self.insert(
-                    self.instr(InstrKind::Assign(ptr, rvalue), s.span),
-                    [(DefaultB, dest_l)],
-                )
-            }
+            anf::StmtKind::AssignS(ptr, rvalue) => self.insert(
+                self.instr(InstrKind::Assign(ptr, rvalue), s.span),
+                [(DefaultB, dest_l)],
+            ),
             anf::StmtKind::SwapS(place1, place2) => self.insert(
                 self.instr(InstrKind::SwapS(place1, place2), s.span),
                 [(DefaultB, dest_l)],
@@ -237,6 +237,7 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
 
     /// Visits a function.
     fn visit_fun(&mut self, f: anf::Fun<'mir, 'ctx>) -> Fun<'mir, 'ctx> {
+        // External scope for parameters and returned values
         self.push_scope();
         // The return value is moved at the end of the function
         let ret_l = if let Some(ret_v) = f.ret_v {
@@ -250,6 +251,23 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
         } else {
             self.fresh_label()
         };
+
+        // Introduce new function parameters name
+        // This is a trick so that the inner body to introduce borrows onto the function
+        // parameters:
+
+        let params = f
+            .params
+            .iter()
+            .map(|param| FunParam {
+                var: self.fresh_vardef(param.ty(), param.span),
+                byref: param.byref,
+                span: param.span,
+            })
+            .collect::<Vec<_>>();
+
+        // Internal scope of the body of the function
+        self.push_scope();
 
         // The in-place arguments are marked as being mutably used after the function,
         // so that they be not moved during the function
@@ -275,16 +293,40 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
             });
         let entry_l = self.visit_stmts(f.body, ret_l, ret_l, None);
         self.pop_scope();
+        let entry_l =
+            f.params
+                .iter()
+                .zip(params.iter())
+                .fold(entry_l, |entry_l, (old_param, new_param)| {
+                    self.insert(
+                        self.instr(
+                            InstrKind::Assign(
+                                LhsRef::declare(Pointer::from_var(
+                                    self.arena,
+                                    old_param.name(),
+                                    old_param.span,
+                                )),
+                                RValue::Place(Reference::new(
+                                    Pointer::from_var(self.arena, new_param.name(), new_param.span),
+                                    self.arena.alloc_mut(Mode::SBorrowed),
+                                )),
+                            ),
+                            old_param.span,
+                        ),
+                        [(DefaultB, entry_l)],
+                    )
+                });
+        self.pop_scope();
 
         let body = std::mem::take(&mut self.cfg);
 
         Fun {
             name: f.name,
-            params: f.params,
+            params,
             ret_l,
             ret_v: f.ret_v,
             entry_l,
-            strata: std::mem::take(&mut self.strata),
+            strata: f.strata,
             body,
         }
     }

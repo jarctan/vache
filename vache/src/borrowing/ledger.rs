@@ -1,5 +1,6 @@
 //! Declaring here the annotations to the CFG we compute during the analysis.
 
+use std::cmp::Ordering;
 use std::default::default;
 use std::fmt;
 use std::iter::Extend;
@@ -93,7 +94,15 @@ impl<'ctx> Ledger<'ctx> {
     fn flush_loc(&mut self, loc: impl Into<Loc<'ctx>>, force: bool) -> Set<Borrow<'ctx>> {
         let loc = loc.into();
 
-        let borrows = self.borrows.remove(loc).map_or(default(), Borrows::from);
+        // Get back our borrows
+        //
+        let borrows: Borrows = self
+            .borrows
+            .remove(loc)
+            .map_or(default(), Borrows::from)
+            .into_iter()
+            .filter(|b| !matches!(loc.partial_cmp(&b.borrowed_loc()), Some(Ordering::Less)))
+            .collect();
 
         /*#[cfg(not(test))]
         println!(
@@ -152,7 +161,10 @@ impl<'ctx> Ledger<'ctx> {
             let borrows: Borrows = self
                 .borrows
                 .remove(loc)
-                .map_or(default(), |node| node.into());
+                .map_or(default(), Borrows::from)
+                .into_iter()
+                .filter(|b| !matches!(loc.partial_cmp(&b.borrowed_loc()), Some(Ordering::Less)))
+                .collect();
 
             if !borrows.is_empty() {
                 /*#[cfg(not(test))]

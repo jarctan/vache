@@ -1,6 +1,9 @@
 //! Defining typed functions.
 
-use super::{Block, FunParam, Pointer};
+use std::collections::HashMap;
+
+use super::{Block, FunParam, Pointer, Stratum, Varname};
+use crate::utils::Set;
 
 /// A function in the typed AST.
 #[derive(Debug)]
@@ -17,4 +20,6 @@ pub struct Fun<'mir, 'ctx> {
     /// Body of the function: a list of statements and
     /// a final expression.
     pub body: Block<'mir, 'ctx>,
+    /// Map between stratums and their variables.
+    pub strata: HashMap<Stratum, Set<Varname<'ctx>>>,
 }

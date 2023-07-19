@@ -8,6 +8,7 @@ use StmtKind::*;
 
 use crate::anf::*;
 use crate::tast;
+use crate::utils::Set;
 use crate::Arena;
 
 /// Typed AST to ANF transformer.
@@ -18,6 +19,8 @@ pub(crate) struct Normalizer<'mir, 'ctx> {
     arena: &'ctx Arena<'ctx>,
     /// Current stratum.
     stm: Stratum,
+    /// Collect the variables in each stratum.
+    strata: HashMap<Stratum, Set<Varname<'ctx>>>,
     /// Variable translation between pattern identifiers and the places they
     /// actually represent in the MIR.
     ///
@@ -40,6 +43,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
             arena,
             stm: Stratum::static_stm(),
             var_t9n: vec![default()],
+            strata: default(),
         };
 
         Program {
@@ -78,6 +82,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
 
         // Add the trivial translation for that vardef
         self.add_translation(var, self.arena.alloc(Place::from(var)));
+        self.strata.entry(self.stm).or_default().insert(var.name());
         VarDef {
             var,
             ty,
@@ -242,6 +247,9 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                         } else {
                             Place::VarP(var.name())
                         };
+
+                        // In any case, add the declared variable to the current stratum
+                        self.strata.entry(self.stm).or_default().insert(var.name());
 
                         // Add the translation AFTER we computed the rhs, so that the rhs
                         // may still refer to the old value
@@ -610,6 +618,9 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
 
     /// Visits a function.
     fn visit_fun(&mut self, f: &'mir mut tast::Fun<'ctx>) -> Fun<'mir, 'ctx> {
+        // External scope of the function parameters and return value
+        self.push_scope();
+
         let vardef = self.fresh_vardef(f.ret_ty.kind, f.body.ret.span);
         let ret_ptr = Pointer::new(
             self.arena,
@@ -617,8 +628,6 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
             f.body.ret.span,
         );
 
-        // Body scope
-        self.push_scope();
         for &param in &f.params {
             self.add_translation(param, self.arena.alloc(Place::from(param)));
         }
@@ -636,8 +645,10 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
 
         self.pop_scope();
 
+        // println!("{}: {:?}", f.name, self.strata);
         Fun {
             name: f.name,
+            strata: std::mem::take(&mut self.strata),
             params: f.params.clone(),
             ret_v: Some(ret_ptr),
             body,

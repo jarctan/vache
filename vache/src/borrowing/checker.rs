@@ -5,7 +5,6 @@
 //! * then `borrow_checker.check(&your_program)`
 
 use std::collections::HashMap;
-use std::default::default;
 
 use super::fun_flow::builtin_flows;
 use super::{liveness, FunFlow};
@@ -32,67 +31,60 @@ impl BorrowChecker {
     }
 
     /// Borrow-checks a function.
-    fn visit_fun<'mir, 'ctx>(
+    ///
+    /// Returns the new function signature.
+    fn visit_fun<'ctx>(
         &mut self,
-        mut f: Fun<'mir, 'ctx>,
+        f: &mut Fun<'_, 'ctx>,
         ctx: &mut Context<'ctx>,
-        fun_flow: &mut HashMap<&'ctx str, FunFlow>,
-    ) -> Result<Fun<'mir, 'ctx>, Diagnostics<'ctx>> {
-        f.body = liveness(
-            f.body,
-            f.entry_l,
-            f.ret_l,
-            fun_flow,
-            &f.strata,
-            &mut ctx.reporter,
-        )?;
-        Ok(f)
+        fun_flow: &HashMap<&'ctx str, FunFlow>,
+    ) -> Result<FunFlow, Diagnostics<'ctx>> {
+        let res = liveness(f, fun_flow, ctx)?;
+        // println!("Flow for {} is {res:?}", f.name);
+        // f.body.print_image(f.name)?;
+        Ok(res)
     }
 
     /// Borrow-checks a program.
     fn visit_program<'mir, 'ctx>(
         &mut self,
         ctx: &mut Context<'ctx>,
-        p: Program<'mir, 'ctx>,
+        mut p: Program<'mir, 'ctx>,
     ) -> Result<Program<'mir, 'ctx>, Diagnostics<'ctx>> {
-        let mut fun_flow = builtin_flows();
-
         // Bootstrap function flow with one for each function.
-        for (name, f) in &p.funs {
-            // Let's use the maximal flow here since we don't do any fixpoint
-            // The result depends on all the arguments, and the arguments depends on all
-            // arguments except themselves.
-            let nb_params = f.params.len();
-            let all_deps = || 0..nb_params;
-            fun_flow.insert(
-                name,
-                FunFlow::new(
-                    f.params
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, r)| r.byref)
-                        .map(|(i, _)| {
-                            // return all dependencies but the current i
-                            (i, all_deps().filter(move |&j| j != i))
-                        }),
-                    all_deps(),
-                ),
-            );
+        // The flow is empty for all functions except the builtins.
+        let mut fun_flow = builtin_flows();
+        for name in p.funs.keys() {
+            fun_flow.insert(name, FunFlow::default());
         }
-        let mut funs: HashMap<&str, Fun> = default();
 
-        for (name, f) in p.funs {
-            funs.insert(name, self.visit_fun(f, ctx, &mut fun_flow)?);
+        // Compute the fixpoint
+        // Iterate until all function signatures are stabilized
+        let mut updated = true;
+        while updated {
+            updated = false;
+            // Restart with at least the bulitin flows
+            let mut new_fun_flow = builtin_flows();
+
+            // For each function, add its flow to the new map
+            for (&name, f) in &mut p.funs {
+                let new_flow = self.visit_fun(f, ctx, &fun_flow)?;
+                // If the flow is updated, we'll need to do a new iteration of the `while` loop
+                if new_flow != fun_flow[name] {
+                    updated = true;
+                }
+                // In any case, push the new flow to the new map
+                new_fun_flow.insert(name, new_flow);
+            }
+
+            // Finally, update the overall flow with the newly computed one
+            fun_flow = new_fun_flow;
         }
 
         if ctx.reporter.has_errors() {
             Err(ctx.reporter.flush())
         } else {
-            Ok(Program {
-                funs,
-                structs: p.structs,
-                enums: p.enums,
-            })
+            Ok(p)
         }
     }
 }
