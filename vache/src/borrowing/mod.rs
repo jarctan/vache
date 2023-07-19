@@ -11,7 +11,7 @@ mod ledger;
 mod liveness;
 mod tree;
 
-use borrow::{Borrow, BorrowCnt, Borrows, Loan, LoanCnt};
+use borrow::{Borrow, BorrowCnt, Borrows, InvalidationReason, Invalidations, Loan};
 pub use checker::BorrowChecker;
 use fun_flow::FunFlow;
 use liveness::liveness;

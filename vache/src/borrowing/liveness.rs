@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use super::borrow::{Borrows, Loan};
+use super::borrow::{Borrows, InvalidationReason, Invalidations, Loan};
 use super::flow::Flow;
 use super::ledger::Ledger;
 use super::tree::LocTree;
@@ -12,7 +12,6 @@ use super::FunFlow;
 use crate::codes::BORROW_ERROR;
 use crate::mir::{Cfg, CfgI, CfgLabel, Fun, InstrKind, Loc, Mode};
 use crate::reporter::Diagnostic;
-use crate::utils::MultiSet;
 use crate::utils::Set;
 use crate::Context;
 
@@ -217,7 +216,7 @@ pub fn liveness<'ctx>(
         let var_flow = var_liveness(&f.body, f.entry_l);
 
         // Loop until there is no change in moves.
-        let loan_flow = loop {
+        let mut loan_flow = loop {
             // Now, compute loan analysis
             let loan_flow = loan_liveness(f, &var_flow, fun_flow);
 
@@ -279,13 +278,19 @@ pub fn liveness<'ctx>(
         };
 
         // Now, collect all invalidations.
-        let mut invalidated = MultiSet::new();
+        let mut invalidated = Invalidations::new();
 
         // List all borrows that are invalidated by mutation of the variable afterwards.
         for (label, instr) in f.body.bfs(f.entry_l, false) {
             for lhs in instr.mutated_places() {
                 for borrow in loan_flow[&label].ins.loans(lhs.root()) {
-                    invalidated.insert(borrow.into());
+                    invalidated.insert(
+                        borrow,
+                        InvalidationReason::MutationWithLiveBorrow {
+                            borrow,
+                            mutation_span: instr.span,
+                        },
+                    );
                 }
             }
         }
@@ -308,8 +313,14 @@ pub fn liveness<'ctx>(
             // For each mutated place, invalidate all the borrows given by the mapping.
             for lhs in mutated_places {
                 if let Some(borrows) = refs.get(&lhs) {
-                    for &b in borrows {
-                        invalidated.insert(b.into());
+                    for &borrow in borrows {
+                        invalidated.insert(
+                            borrow,
+                            InvalidationReason::MutationWithLiveBorrow {
+                                borrow,
+                                mutation_span: instr.span,
+                            },
+                        );
                     }
                 }
             }
@@ -319,17 +330,9 @@ pub fn liveness<'ctx>(
         // all
         invalidated.extend(loan_flow[&f.ret_l].outs.invalidations());
 
-        // If we have no invalidations anymore, we reached a stable state and we can
-        // return
         match cfg_flow_label_order
             .iter()
-            .filter_map(|&label| {
-                invalidated
-                    .most_represented()
-                    .copied()
-                    .find(|b| b.label == label)
-            })
-            .next()
+            .find_map(|&label| invalidated.most_represented().find(|b| b.label == label))
         {
             Some(Loan { label, ptr, .. }) => {
                 // Get the reference that must be cloned
@@ -356,6 +359,8 @@ pub fn liveness<'ctx>(
                 }
             }
             None => {
+                // If we have no invalidations anymore, we reached a stable state and we can
+                // return
                 break Ok(loan_flow);
             }
         }

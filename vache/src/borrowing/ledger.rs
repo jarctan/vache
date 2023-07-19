@@ -6,12 +6,12 @@ use std::fmt;
 use std::iter::Extend;
 use std::iter::Sum;
 
-use super::{Borrow, BorrowCnt, Borrows, Loan, LoanCnt, LocTree};
+use super::{Borrow, BorrowCnt, Borrows, InvalidationReason, Invalidations, Loan, LocTree};
 use crate::mir::{CfgLabel, Loc, Mode, Place, Reference};
 use crate::utils::Set;
 
 /// A loan ledger.
-#[derive(Clone, Eq, Default)]
+#[derive(Clone, Default)]
 pub struct Ledger<'ctx> {
     /// Map between variables defined in this environment and their borrows.
     borrows: LocTree<'ctx, Borrows<'ctx>>,
@@ -24,7 +24,7 @@ pub struct Ledger<'ctx> {
     /// Invalidated borrows.
     ///
     /// Currently, these are only immutable invalidations.
-    invalidations: LoanCnt<'ctx>,
+    invalidations: Invalidations<'ctx>,
 }
 
 impl<'ctx> PartialEq for Ledger<'ctx> {
@@ -34,6 +34,8 @@ impl<'ctx> PartialEq for Ledger<'ctx> {
             && self.invalidations.as_set() == other.invalidations.as_set()
     }
 }
+
+impl<'ctx> Eq for Ledger<'ctx> {}
 
 impl<'ctx> Ledger<'ctx> {
     /// Returns the complete (deep, nested) list of all borrows resulting from
@@ -56,7 +58,8 @@ impl<'ctx> Ledger<'ctx> {
             Mode::Moved => {
                 // All current loans will get invalidated
                 for loan in self.loans(*reference.loc()).collect::<Vec<_>>() {
-                    self.invalidations.insert(loan.into());
+                    self.invalidations
+                        .insert(loan, InvalidationReason::Moved(reference.as_ptr()));
                 }
 
                 // You take their place, so you take all their borrows!
@@ -127,7 +130,8 @@ impl<'ctx> Ledger<'ctx> {
                 .map(BorrowCnt::from)
                 .unwrap_or_default()
                 .into_iter()
-                .map(Loan::from);
+                .map(Loan::from)
+                .map(|loan| (loan, vec![InvalidationReason::OutOfScope(loc)]));
             /*if !removed_loans.is_empty() {
                 #[cfg(not(test))]
                 println!("Invalidated ici with {:?}", removed_loans);
@@ -193,11 +197,11 @@ impl<'ctx> Ledger<'ctx> {
                 .remove(loc)
                 .map(BorrowCnt::from)
                 .unwrap_or_default();
-            let removed_loans: Set<_> = removed_loans
+            let removed_loans = removed_loans
                 .into_iter()
                 .filter(|loan| !locs.contains(&loan.borrower))
                 .map(Loan::from)
-                .collect();
+                .map(|loan| (loan, vec![InvalidationReason::OutOfScope(*loc)]));
             /*if !removed_loans.is_empty() {
                 #[cfg(not(test))]
                 println!(
@@ -258,9 +262,9 @@ impl<'ctx> Ledger<'ctx> {
         self.borrows.get_all(place.into().root())
     }
 
-    /// Returns the list of invalidations.
-    pub fn invalidations<'a>(&'a self) -> impl Iterator<Item = Loan<'ctx>> + 'a {
-        self.invalidations.iter().copied()
+    /// **Flushes** and returns the list of invalidations.
+    pub fn invalidations(&mut self) -> Invalidations<'ctx> {
+        std::mem::take(&mut self.invalidations)
     }
 
     /// Swaps the borrows for two memory locations in the ledger.
@@ -282,7 +286,7 @@ impl<'ctx> Sum for Ledger<'ctx> {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         let mut loans: LocTree<Borrows> = default();
         let mut borrows: LocTree<Borrows> = default();
-        let mut invalidations: LoanCnt = default();
+        let mut invalidations: Invalidations = default();
 
         for ledger in iter {
             loans.append(ledger.loans);
