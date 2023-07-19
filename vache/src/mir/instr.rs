@@ -159,15 +159,6 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
 
         els.into_iter().next().unwrap()
     }
-
-    /// Changes the instruction to change `to_find`'s referencing mode to
-    /// [`Mode::Cloned`].
-    ///
-    /// # Panics
-    /// Panics if the instruction does not contain `to_find`.
-    pub(crate) fn force_clone(&mut self, to_find: &Pointer<'ctx>) {
-        self.find(to_find).set_mode(Mode::Cloned);
-    }
 }
 
 impl<'mir, 'ctx> fmt::Debug for InstrKind<'mir, 'ctx> {

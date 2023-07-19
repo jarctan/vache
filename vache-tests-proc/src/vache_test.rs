@@ -51,7 +51,7 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let arena = ::vache_lib::Arena::new();
                 let config = ::vache_lib::config::Config { input: "", ..::std::default::Default::default() };
                 let mut context = ::vache_lib::Context::new(config, &arena);
-                let res: Result<(), ::vache_lib::reporter::Diagnostics> = try {
+                let res: Result<()> = try {
                     let mut checked = ::vache_lib::typecheck(&mut context, p)?;
                     let mir = ::vache_lib::borrow_check(&mut context, ::vache_lib::mir(&mut checked)?)?;
                     let cur_dir = ::std::env::current_dir().context("Could not get current directory")?;
@@ -66,11 +66,11 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                     let dest_file = cur_dir.join(binary_name);
                     ::std::fs::remove_file(&dest_file).context("failed to remove binary at the end of the test")?;
                 };
-                if let Err(diagnostics) = res {
-                    diagnostics.display()?;
-                    ::anyhow::bail!("Compile errors");
+                if let Err(err) = res {
+                    context.reporter.display()?;
+                    ::anyhow::bail!(err);
                 }
-                Ok(())
+                res
             }
 
             #[test]
@@ -79,7 +79,7 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let arena = ::vache_lib::Arena::new();
                 let config = ::vache_lib::config::Config { input: "", ..::std::default::Default::default() };
                 let mut context = ::vache_lib::Context::new(config, &arena);
-                let res: Result<(), ::vache_lib::reporter::Diagnostics> = try {
+                let res: Result<()> = try {
                     let mut checked = ::vache_lib::typecheck(&mut context, p)?;
                     let mir = ::vache_lib::borrow_check(&mut context, ::vache_lib::mir(&mut checked)?)?;
                     eprintln!("MIR: {:#?}", mir);
@@ -90,11 +90,11 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                         "output mismatch\nexpected:\n{expected}\nfound:\n{res}"
                     );
                 };
-                if let Err(diagnostics) = res {
-                    diagnostics.display()?;
-                    ::anyhow::bail!("Compile errors");
+                if let Err(err) = res {
+                    context.reporter.display()?;
+                    ::anyhow::bail!(err);
                 }
-                Ok(())
+                res
             }
         }
     }

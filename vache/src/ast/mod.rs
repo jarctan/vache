@@ -117,7 +117,6 @@ use crate::codes::*;
 use crate::context::Context;
 use crate::grammar::{Grammar, Rule};
 use crate::reporter::Diagnostic;
-use crate::reporter::Diagnostics;
 
 /// Can be parsed from elements of `T`.
 pub trait Parsable<'ctx, T> {
@@ -136,10 +135,7 @@ impl<'ctx> Context<'ctx> {
 /// Parses some source code into some `pairs`.
 ///
 /// The source code is in the `config` of the context `ctx`.
-fn parse_pairs<'ctx>(
-    ctx: &mut Context<'ctx>,
-    rule: Rule,
-) -> Result<Pairs<'ctx, Rule>, Diagnostics<'ctx>> {
+fn parse_pairs<'ctx>(ctx: &mut Context<'ctx>, rule: Rule) -> Result<Pairs<'ctx, Rule>> {
     match Grammar::parse(rule, ctx.config.input) {
         Ok(pairs) => Ok(pairs),
         Err(err) => {
@@ -206,7 +202,7 @@ fn parse_pairs<'ctx>(
                     .with_labels(vec![span.as_label()])
                     .with_notes(notes),
             );
-            Err(ctx.reporter.flush())
+            bail!("found parse errors")
         }
     }
 }
@@ -219,7 +215,7 @@ fn parse_pairs<'ctx>(
 pub fn parse_rules<'ctx, T: Parsable<'ctx, Pairs<'ctx, Rule>>>(
     ctx: &mut Context<'ctx>,
     rule: Rule,
-) -> Result<T, Diagnostics<'ctx>> {
+) -> Result<T> {
     let pairs = parse_pairs(ctx, rule)?;
 
     let res: T = ctx.parse(pairs);
@@ -228,7 +224,7 @@ pub fn parse_rules<'ctx, T: Parsable<'ctx, Pairs<'ctx, Rule>>>(
     if !ctx.reporter.has_errors() {
         Ok(res)
     } else {
-        Err(ctx.reporter.flush())
+        Err(anyhow!("found parse errors"))
     }
 }
 
@@ -240,7 +236,7 @@ pub fn parse_rules<'ctx, T: Parsable<'ctx, Pairs<'ctx, Rule>>>(
 pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
     ctx: &mut Context<'ctx>,
     rule: Rule,
-) -> Result<T, Diagnostics<'ctx>> {
+) -> Result<T> {
     let mut pairs = parse_pairs(ctx, rule)?;
 
     let res: T = ctx.parse(pairs.next().context("Parser grammar error")?);
@@ -249,21 +245,18 @@ pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
     if !ctx.reporter.has_errors() {
         Ok(res)
     } else {
-        Err(ctx.reporter.flush())
+        Err(anyhow!("found parse errors"))
     }
 }
 
 /// Parses the source code for a file, and returns the parsed program.
 ///
 /// The source code is in the `config` of the context `ctx`.
-pub fn parse_file<'ctx>(ctx: &mut Context<'ctx>) -> Result<Program<'ctx>, Diagnostics<'ctx>> {
+pub fn parse_file<'ctx>(ctx: &mut Context<'ctx>) -> Result<Program<'ctx>> {
     print!("Parsing...");
     std::io::stdout().flush()?;
     let start = Instant::now();
-    let res = match parse_rules(ctx, Rule::program) {
-        Ok(res) => res,
-        Err(diagnostics) => return Err(diagnostics),
-    };
+    let res = parse_rules(ctx, Rule::program);
     println!("\rParsed file [{:?}]", start.elapsed());
-    Ok(res)
+    res
 }

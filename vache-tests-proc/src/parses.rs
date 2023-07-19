@@ -84,9 +84,9 @@ pub fn parses(attr: TokenStream, item: TokenStream) -> TokenStream {
 
             let #arg_name: #arg_ty = match parse_rule(&mut ctx, crate::grammar::Rule::#rule) {
                 Ok(el) => el,
-                Err(diagnostics) => {
-                    diagnostics.display()?;
-                    bail!("Parsing errors");
+                Err(err) => {
+                    ctx.reporter.display()?;
+                    bail!(err);
                 }
             };
             eprintln!("Parsed expression: {:?}", #arg_name);

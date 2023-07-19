@@ -6,10 +6,11 @@
 
 use std::collections::HashMap;
 
+use anyhow::Result;
+
 use super::fun_flow::builtin_flows;
 use super::{liveness, FunFlow};
 use crate::mir::{Fun, Program};
-use crate::reporter::Diagnostics;
 use crate::Context;
 
 /// The borrow-checker.
@@ -26,7 +27,7 @@ impl BorrowChecker {
         &mut self,
         ctx: &mut Context<'ctx>,
         p: Program<'mir, 'ctx>,
-    ) -> Result<Program<'mir, 'ctx>, Diagnostics<'ctx>> {
+    ) -> Result<Program<'mir, 'ctx>> {
         self.visit_program(ctx, p)
     }
 
@@ -38,7 +39,7 @@ impl BorrowChecker {
         f: &mut Fun<'_, 'ctx>,
         ctx: &mut Context<'ctx>,
         fun_flow: &HashMap<&'ctx str, FunFlow>,
-    ) -> Result<FunFlow, Diagnostics<'ctx>> {
+    ) -> Result<FunFlow> {
         let res = liveness(f, fun_flow, ctx)?;
         // println!("Flow for {} is {res:?}", f.name);
         // f.body.print_image(f.name)?;
@@ -50,7 +51,7 @@ impl BorrowChecker {
         &mut self,
         ctx: &mut Context<'ctx>,
         mut p: Program<'mir, 'ctx>,
-    ) -> Result<Program<'mir, 'ctx>, Diagnostics<'ctx>> {
+    ) -> Result<Program<'mir, 'ctx>> {
         // Bootstrap function flow with one for each function.
         // The flow is empty for all functions except the builtins.
         let mut fun_flow = builtin_flows();
@@ -82,7 +83,7 @@ impl BorrowChecker {
         }
 
         if ctx.reporter.has_errors() {
-            Err(ctx.reporter.flush())
+            Err(anyhow!("found borrow-check errors"))
         } else {
             Ok(p)
         }

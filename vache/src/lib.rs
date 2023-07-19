@@ -65,8 +65,6 @@ use scoped::Scoped;
 pub use steps::{borrow_check, interpret, mir, run, typecheck};
 pub use utils::arena::Arena;
 
-use crate::reporter::Diagnostics;
-
 /// Compiles `p` and puts the output program named `name` in `dest_dir`.
 pub fn compile<'ctx>(
     ctx: &mut Context<'ctx>,
@@ -74,27 +72,17 @@ pub fn compile<'ctx>(
     name: impl Borrow<str>,
     dest_dir: &Path,
 ) -> Result<()> {
-    match typecheck(ctx, p) {
-        Ok(mut checked) => {
-            if let Err(diagnostics) = borrow_check(ctx, mir(&mut checked)?) {
-                diagnostics.display()?;
-                bail!("Compile errors found");
-            }
-            steps::cargo(steps::compile(ctx, checked)?, name.borrow(), dest_dir).unwrap();
-            Ok(())
-        }
-        Err(diagnostics) => {
-            diagnostics.display()?;
-            bail!("Compile errors found");
-        }
-    }
+    let mut checked = typecheck(ctx, p)?;
+    borrow_check(&mut *ctx, mir(&mut checked)?)?;
+    steps::cargo(steps::compile(ctx, checked)?, name.borrow(), dest_dir).unwrap();
+    Ok(())
 }
 
 /// Type and borrow-checks `p`, returning the final typed AST.
 pub fn check_all<'ctx>(
     ctx: &mut Context<'ctx>,
     p: impl Into<ast::Program<'ctx>>,
-) -> Result<tast::Program<'ctx>, Diagnostics<'ctx>> {
+) -> Result<tast::Program<'ctx>> {
     let mut checked = typecheck(ctx, p)?;
     borrow_check(ctx, mir(&mut checked)?)?;
     Ok(checked)
@@ -107,20 +95,10 @@ pub fn execute<'ctx>(
     name: impl Borrow<str>,
     dest_dir: &Path,
 ) -> Result<String> {
-    match typecheck(&mut *ctx, p) {
-        Ok(mut checked) => {
-            if let Err(diagnostics) = borrow_check(&mut *ctx, mir(&mut checked)?) {
-                diagnostics.display()?;
-                bail!("Compile errors found");
-            }
-            let res = steps::run(ctx, checked, name, dest_dir)?;
-            Ok(res)
-        }
-        Err(diagnostics) => {
-            diagnostics.display()?;
-            bail!("Compile errors found");
-        }
-    }
+    let mut checked = typecheck(&mut *ctx, p)?;
+    borrow_check(&mut *ctx, mir(&mut checked)?)?;
+    let res = steps::run(ctx, checked, name, dest_dir)?;
+    Ok(res)
 }
 
 mod steps {
@@ -141,7 +119,6 @@ mod steps {
     use unindent::Unindent;
 
     use super::*;
-    use crate::reporter::Diagnostics;
 
     /// Checks a given program.
     ///
@@ -154,7 +131,7 @@ mod steps {
     pub fn typecheck<'a, 'ctx>(
         ctx: &'a mut Context<'ctx>,
         p: impl Into<ast::Program<'ctx>>,
-    ) -> Result<tast::Program<'ctx>, Diagnostics<'ctx>> {
+    ) -> Result<tast::Program<'ctx>> {
         print!("Type-checking...");
         std::io::stdout().flush()?;
         let start = Instant::now();
@@ -162,7 +139,7 @@ mod steps {
         let mut typer = Typer::new(ctx);
         let res = typer.check(p.into());
         let res = if ctx.reporter.has_errors() {
-            Err(ctx.reporter.flush())
+            Err(anyhow!("found type errors"))
         } else {
             Ok(res)
         };
@@ -181,7 +158,7 @@ mod steps {
     pub fn borrow_check<'a, 'mir, 'ctx>(
         ctx: &'a mut Context<'ctx>,
         p: impl Into<mir::Program<'mir, 'ctx>>,
-    ) -> Result<mir::Program<'mir, 'ctx>, Diagnostics<'ctx>> {
+    ) -> Result<mir::Program<'mir, 'ctx>> {
         print!("Borrow-checking...");
         let p = p.into();
         std::io::stdout().flush()?;

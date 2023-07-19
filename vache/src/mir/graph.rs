@@ -730,15 +730,15 @@ mod tests {
         let mut checked = match typecheck(&mut ctx, crate::examples::while_loop()) {
             Ok(checked) => checked,
             Err(e) => {
-                e.display()?;
-                bail!("Typing errors found");
+                ctx.reporter.display()?;
+                bail!(e);
             }
         };
         let mir = match borrow_check(&mut ctx, mir(&mut checked)?) {
             Ok(mir) => mir,
             Err(e) => {
-                e.display()?;
-                bail!("Borrow errors found");
+                ctx.reporter.display()?;
+                bail!(e);
             }
         };
         eprintln!("MIR: {mir:?}");
@@ -781,15 +781,15 @@ mod tests {
         let mut checked = match typecheck(&mut ctx, crate::examples::simple_if()) {
             Ok(checked) => checked,
             Err(e) => {
-                e.display()?;
-                bail!("Typing errors found");
+                ctx.reporter.display()?;
+                bail!(e);
             }
         };
         let mir = match borrow_check(&mut ctx, mir(&mut checked)?) {
             Ok(mir) => mir,
             Err(e) => {
-                e.display()?;
-                bail!("Borrow errors found");
+                ctx.reporter.display()?;
+                bail!(e);
             }
         };
         eprintln!("MIR: {mir:?}");
@@ -819,15 +819,15 @@ mod tests {
         let mut checked = match typecheck(&mut ctx, crate::examples::simple_if()) {
             Ok(checked) => checked,
             Err(e) => {
-                e.display()?;
-                bail!("Typing errors found");
+                ctx.reporter.display()?;
+                bail!(e);
             }
         };
         let mir = match borrow_check(&mut ctx, mir(&mut checked)?) {
             Ok(mir) => mir,
             Err(e) => {
-                e.display()?;
-                bail!("Borrow errors found");
+                ctx.reporter.display()?;
+                bail!(e);
             }
         };
         eprintln!("MIR: {mir:?}");

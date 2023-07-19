@@ -166,6 +166,11 @@ impl<'ctx> Reporter<'ctx> {
         self.diagnostics.flush()
     }
 
+    /// Displays all the diagnostics to the `stderr` output.
+    pub fn display(&self) -> anyhow::Result<()> {
+        self.diagnostics.display()
+    }
+
     /// Was there any errors so far?
     pub fn has_errors(&self) -> bool {
         self.diagnostics.is_error.load(Ordering::SeqCst)

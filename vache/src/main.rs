@@ -5,7 +5,7 @@
 
 use std::process::Command;
 
-use anyhow::{bail, Context as AnyhowContext};
+use anyhow::{bail, Context as AnyhowContext, Result};
 use clap::{Parser, Subcommand};
 use unindent::Unindent;
 use vache_lib::{
@@ -100,7 +100,7 @@ fn main() -> anyhow::Result<()> {
             };
             let mut context = Context::new(config, &arena);
 
-            let res: Result<_, Diagnostics> = try {
+            let res: Result<_> = try {
                 let program = parse_file(&mut context)?;
                 let mut checked = typecheck(&mut context, program)?;
                 let mir = borrow_check(&mut context, mir(&mut checked)?)?;
@@ -111,11 +111,8 @@ fn main() -> anyhow::Result<()> {
                     println!("* CFG of function `{name}` has been saved to `{name}.png`");
                 }
             };
-            if let Err(diagnostics) = res {
-                diagnostics.display()?;
-                bail!("Compile errors found");
-            }
-            Ok(())
+            context.reporter.display()?;
+            res
         }
         Commands::Check {
             ref filename,
@@ -134,15 +131,12 @@ fn main() -> anyhow::Result<()> {
             };
             let mut context = Context::new(config, &arena);
 
-            let res: Result<_, Diagnostics> = try {
+            let res: Result<_> = try {
                 let program = parse_file(&mut context)?;
                 check_all(&mut context, program)?;
             };
-            if let Err(diagnostics) = res {
-                diagnostics.display()?;
-                bail!("Compile errors found");
-            }
-            Ok(())
+            context.reporter.display()?;
+            res
         }
         Commands::Compile {
             ref filename,
@@ -161,15 +155,12 @@ fn main() -> anyhow::Result<()> {
             };
             let mut context = Context::new(config, &arena);
 
-            let res: Result<_, Diagnostics> = try {
+            let res: Result<_> = try {
                 let program = parse_file(&mut context)?;
                 compile(&mut context, program, "binary", &cur_dir)?;
             };
-            if let Err(diagnostics) = res {
-                diagnostics.display()?;
-                bail!("Compilation failed");
-            }
-            Ok(())
+            context.reporter.display()?;
+            res
         }
         Commands::Run {
             ref filename,
@@ -187,19 +178,19 @@ fn main() -> anyhow::Result<()> {
                 report_invalidations: invalidations,
             };
             let mut context = Context::new(config, &arena);
-            let res: Result<_, Diagnostics> = try {
+            let res: Result<_> = try {
                 let program = parse_file(&mut context)?;
                 execute(&mut context, program, "binary", &cur_dir)?
             };
+            context.reporter.display()?;
             match res {
                 Ok(res) => {
                     println!("--------------------------------");
                     println!("{}", res);
                     Ok(())
                 }
-                Err(diagnostics) => {
-                    diagnostics.display()?;
-                    bail!("Execution failed");
+                Err(err) => {
+                    bail!(err);
                 }
             }
         }
@@ -219,7 +210,7 @@ fn main() -> anyhow::Result<()> {
                 report_invalidations: invalidations,
             };
             let mut context = Context::new(config, &arena);
-            let res: Result<_, Diagnostics> = try {
+            let res: Result<_> = try {
                 // Compile
                 let program = parse_file(&mut context)?;
                 let mut checked = typecheck(&mut context, program)?;
@@ -228,15 +219,15 @@ fn main() -> anyhow::Result<()> {
                 // Interpret
                 interpret(mir).context("interpreter error")?
             };
+            context.reporter.display()?;
             match res {
                 Ok(res) => {
                     println!("--------------------------------");
                     println!("{}", res);
                     Ok(())
                 }
-                Err(diagnostics) => {
-                    diagnostics.display()?;
-                    bail!("Interpretation failed");
+                Err(err) => {
+                    bail!(err);
                 }
             }
         }
