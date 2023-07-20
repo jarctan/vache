@@ -180,8 +180,8 @@ mod steps {
     ///
     /// Under the hood, in charge of allocating a new `MIRer` and launching it
     /// on your program.
-    pub fn mir<'a, 'ctx, 'mir>(
-        ctx: &'a mut Context<'ctx>,
+    pub fn mir<'ctx, 'mir>(
+        ctx: &mut Context<'ctx>,
         p: &'mir mut tast::Program<'ctx>,
     ) -> Result<mir::Program<'mir, 'ctx>> {
         verbose_print!(ctx, "Miring...");
@@ -251,8 +251,8 @@ mod steps {
     }
 
     /// Final stage: compiles the Rust source code down to machine code.
-    pub fn cargo<'ctx>(
-        ctx: &mut Context<'ctx>,
+    pub fn cargo(
+        ctx: &mut Context<'_>,
         source_code: String,
         name: &str,
         dest_dir: &Path,
