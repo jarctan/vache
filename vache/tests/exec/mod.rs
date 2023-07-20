@@ -259,10 +259,11 @@ fn interpret_va(filename: &str) {
         // Parse and type/borrow check
         let program = parse_file(&mut context)?;
         let mut checked = typecheck(&mut context, program)?;
-        let mir = borrow_check(&mut context, mir(&mut checked)?)?;
+        let mired = mir(&mut context, &mut checked)?;
+        let mired = borrow_check(&mut context, mired)?;
 
         // Interpret
-        let res = interpret(mir).context("execution error")?;
+        let res = interpret(mired).context("execution error")?;
 
         ensure!(
             res == expected,

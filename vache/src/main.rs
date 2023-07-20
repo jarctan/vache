@@ -30,6 +30,9 @@ enum Commands {
         /// Report invalidations as warnings.
         #[arg(short, long)]
         invalidations: bool,
+        /// Verbose mode.
+        #[arg(short, long)]
+        verbose: bool,
     },
     /// Type-checks a program.
     Check {
@@ -38,6 +41,9 @@ enum Commands {
         /// Report invalidations as warnings.
         #[arg(short, long)]
         invalidations: bool,
+        /// Verbose mode.
+        #[arg(short, long)]
+        verbose: bool,
     },
     /// Compiles a program.
     Compile {
@@ -46,6 +52,9 @@ enum Commands {
         /// Report invalidations as warnings.
         #[arg(short, long)]
         invalidations: bool,
+        /// Verbose mode.
+        #[arg(short, long)]
+        verbose: bool,
     },
     /// Runs a program.
     Run {
@@ -54,6 +63,9 @@ enum Commands {
         /// Report invalidations as warnings.
         #[arg(short, long)]
         invalidations: bool,
+        /// Verbose mode.
+        #[arg(short, long)]
+        verbose: bool,
     },
     /// Interprets a program.
     Interpret {
@@ -62,6 +74,9 @@ enum Commands {
         /// Report invalidations as warnings.
         #[arg(short, long)]
         invalidations: bool,
+        /// Verbose mode.
+        #[arg(short, long)]
+        verbose: bool,
     },
     /// Gets the addressing modes of all elements of the program.
     Modes {
@@ -70,6 +85,9 @@ enum Commands {
         /// Report invalidations as warnings.
         #[arg(short, long)]
         invalidations: bool,
+        /// Verbose mode.
+        #[arg(short, long)]
+        verbose: bool,
     },
 }
 
@@ -86,6 +104,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Mir {
             ref filename,
             invalidations,
+            verbose,
         } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
@@ -97,16 +116,18 @@ fn main() -> anyhow::Result<()> {
                 input,
                 filename: Some(filename),
                 report_invalidations: invalidations,
+                verbose,
             };
             let mut context = Context::new(config, &arena);
 
             let res: Result<_> = try {
                 let program = parse_file(&mut context)?;
                 let mut checked = typecheck(&mut context, program)?;
-                let mir = borrow_check(&mut context, mir(&mut checked)?)?;
-                println!("{:#?}", mir);
+                let mired = mir(&mut context, &mut checked)?;
+                let mired = borrow_check(&mut context, mired)?;
+                println!("{:#?}", mired);
 
-                for (&name, f) in mir.funs.iter() {
+                for (&name, f) in mired.funs.iter() {
                     f.body.print_image(name)?;
                     println!("* CFG of function `{name}` has been saved to `{name}.png`");
                 }
@@ -117,6 +138,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Check {
             ref filename,
             invalidations,
+            verbose,
         } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
@@ -128,6 +150,7 @@ fn main() -> anyhow::Result<()> {
                 input,
                 filename: Some(filename),
                 report_invalidations: invalidations,
+                verbose,
             };
             let mut context = Context::new(config, &arena);
 
@@ -141,6 +164,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Compile {
             ref filename,
             invalidations,
+            verbose,
         } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
@@ -152,6 +176,7 @@ fn main() -> anyhow::Result<()> {
                 input,
                 filename: Some(filename),
                 report_invalidations: invalidations,
+                verbose,
             };
             let mut context = Context::new(config, &arena);
 
@@ -165,6 +190,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Run {
             ref filename,
             invalidations,
+            verbose,
         } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
@@ -176,6 +202,7 @@ fn main() -> anyhow::Result<()> {
                 input,
                 filename: Some(filename),
                 report_invalidations: invalidations,
+                verbose,
             };
             let mut context = Context::new(config, &arena);
             let res: Result<_> = try {
@@ -197,6 +224,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Interpret {
             ref filename,
             invalidations,
+            verbose,
         } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
@@ -208,16 +236,18 @@ fn main() -> anyhow::Result<()> {
                 input,
                 filename: Some(filename),
                 report_invalidations: invalidations,
+                verbose,
             };
             let mut context = Context::new(config, &arena);
             let res: Result<_> = try {
                 // Compile
                 let program = parse_file(&mut context)?;
                 let mut checked = typecheck(&mut context, program)?;
-                let mir = borrow_check(&mut context, mir(&mut checked)?)?;
+                let mired = mir(&mut context, &mut checked)?;
+                let mired = borrow_check(&mut context, mired)?;
 
                 // Interpret
-                interpret(mir).context("interpreter error")?
+                interpret(mired).context("interpreter error")?
             };
             context.reporter.display()?;
             match res {
@@ -234,6 +264,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Modes {
             ref filename,
             invalidations,
+            verbose,
         } => {
             let arena = Arena::new();
             let cur_dir = std::env::current_dir().context("Current dir not found")?;
@@ -245,6 +276,7 @@ fn main() -> anyhow::Result<()> {
                 input,
                 filename: Some(filename),
                 report_invalidations: invalidations,
+                verbose,
             };
             let mut context = Context::new(config, &arena);
             let res: Result<_, Diagnostics> = try {

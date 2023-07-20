@@ -253,10 +253,10 @@ pub fn parse_rule<'ctx, T: Parsable<'ctx, Pair<'ctx, Rule>>>(
 ///
 /// The source code is in the `config` of the context `ctx`.
 pub fn parse_file<'ctx>(ctx: &mut Context<'ctx>) -> Result<Program<'ctx>> {
-    print!("Parsing...");
+    verbose_print!(ctx, "Parsing...");
     std::io::stdout().flush()?;
     let start = Instant::now();
     let res = parse_rules(ctx, Rule::program);
-    println!("\rParsed file [{:?}]", start.elapsed());
+    verbose_println!(ctx, "\rParsed file [{:?}]", start.elapsed());
     res
 }

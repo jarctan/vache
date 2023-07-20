@@ -9,4 +9,6 @@ pub struct Config<'ctx> {
     pub filename: Option<&'ctx str>,
     /// Do we report invalidations.
     pub report_invalidations: bool,
+    /// Verbose mode.
+    pub verbose: bool,
 }

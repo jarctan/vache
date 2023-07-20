@@ -734,15 +734,16 @@ mod tests {
                 bail!(e);
             }
         };
-        let mir = match borrow_check(&mut ctx, mir(&mut checked)?) {
-            Ok(mir) => mir,
+        let mired = mir(&mut ctx, &mut checked)?;
+        let mired = match borrow_check(&mut ctx, mired) {
+            Ok(mired) => mired,
             Err(e) => {
                 ctx.reporter.display()?;
                 bail!(e);
             }
         };
-        eprintln!("MIR: {mir:?}");
-        let cfg = &mir.funs["main"].body;
+        eprintln!("MIR: {mired:?}");
+        let cfg = &mired.funs["main"].body;
 
         // Check that label of the entry of the loop has two preneighbors: before the
         // loop and the end of the loop.
@@ -785,15 +786,16 @@ mod tests {
                 bail!(e);
             }
         };
-        let mir = match borrow_check(&mut ctx, mir(&mut checked)?) {
-            Ok(mir) => mir,
+        let mired = mir(&mut ctx, &mut checked)?;
+        let mired = match borrow_check(&mut ctx, mired) {
+            Ok(mired) => mired,
             Err(e) => {
                 ctx.reporter.display()?;
                 bail!(e);
             }
         };
-        eprintln!("MIR: {mir:?}");
-        let main_fn = &mir.funs["main"];
+        eprintln!("MIR: {mired:?}");
+        let main_fn = &mired.funs["main"];
         let dominators = main_fn.body.dominators(main_fn.entry_l);
 
         // Dominators of the label _after_ the if statement are only the labels _before_
@@ -823,15 +825,16 @@ mod tests {
                 bail!(e);
             }
         };
-        let mir = match borrow_check(&mut ctx, mir(&mut checked)?) {
-            Ok(mir) => mir,
+        let mired = mir(&mut ctx, &mut checked)?;
+        let mired = match borrow_check(&mut ctx, mired) {
+            Ok(mired) => mired,
             Err(e) => {
                 ctx.reporter.display()?;
                 bail!(e);
             }
         };
-        eprintln!("MIR: {mir:?}");
-        let main_fn = &mir.funs["main"];
+        eprintln!("MIR: {mired:?}");
+        let main_fn = &mired.funs["main"];
         let dominators = main_fn.body.immediate_dominators(main_fn.entry_l);
 
         // The immediate of the label _after_ the if statement can only be the one

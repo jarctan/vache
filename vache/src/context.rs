@@ -53,3 +53,21 @@ impl<'ctx> Context<'ctx> {
         self.reporter.has_errors()
     }
 }
+
+/// Prints to the standard output only if the verbose mode is enabled.
+macro_rules! verbose_print {
+    ($ctx:expr, $($arg:tt)*) => {
+        if $ctx.config.verbose {
+            print!($($arg)*);
+        }
+    };
+}
+
+/// Prints to the standard output only if the verbose mode is enabled.
+macro_rules! verbose_println {
+    ($ctx:expr, $($arg:tt)*) => {
+        if $ctx.config.verbose {
+            println!($($arg)*);
+        }
+    };
+}

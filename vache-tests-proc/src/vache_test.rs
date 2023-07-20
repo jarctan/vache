@@ -53,7 +53,8 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let mut context = ::vache_lib::Context::new(config, &arena);
                 let res: Result<()> = try {
                     let mut checked = ::vache_lib::typecheck(&mut context, p)?;
-                    let mir = ::vache_lib::borrow_check(&mut context, ::vache_lib::mir(&mut checked)?)?;
+                    let mired = ::vache_lib::mir(&mut context, &mut checked)?;
+                    ::vache_lib::borrow_check(&mut context, mired)?;
                     let cur_dir = ::std::env::current_dir().context("Could not get current directory")?;
                     let binary_name = "test-binary";
                     let res = ::vache_lib::run(&mut context, checked, binary_name, &cur_dir).context("Could not run program")?;
@@ -81,8 +82,9 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let mut context = ::vache_lib::Context::new(config, &arena);
                 let res: Result<()> = try {
                     let mut checked = ::vache_lib::typecheck(&mut context, p)?;
-                    let mir = ::vache_lib::borrow_check(&mut context, ::vache_lib::mir(&mut checked)?)?;
-                    let res = ::vache_lib::interpret(mir).context("interpreter error")?;
+                    let mired = ::vache_lib::mir(&mut context, &mut checked)?;
+                    let mired = ::vache_lib::borrow_check(&mut context, mired)?;
+                    let res = ::vache_lib::interpret(mired).context("interpreter error")?;
                     let expected = #expected_output;
                     ::anyhow::ensure!(
                         res == expected,
