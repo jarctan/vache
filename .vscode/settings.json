@@ -16,6 +16,7 @@
         "binop",
         "bitand",
         "bitnot",
+        "builtins",
         "bumpalo",
         "cfgs",
         "clncln",

@@ -260,7 +260,6 @@ fn interpret_va(filename: &str) {
         let program = parse_file(&mut context)?;
         let mut checked = typecheck(&mut context, program)?;
         let mir = borrow_check(&mut context, mir(&mut checked)?)?;
-        eprintln!("MIR: {mir:?}");
 
         // Interpret
         let res = interpret(mir).context("execution error")?;

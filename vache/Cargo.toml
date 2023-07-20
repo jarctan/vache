@@ -1,6 +1,5 @@
 [package]
 name = "vache"
-about = "Compiler for the Vache programming language"
 authors=["Jonathan ARNOULT <jonathan.arnoult@polytechnique.edu>"]
 version = "0.0.4"
 edition = "2021"

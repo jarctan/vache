@@ -476,15 +476,25 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         .collect::<Vec<_>>();
 
                     // Tokenize the arguments and the real name of the function
-                    let args = args.iter().map(|arg| {
-                        // `Var` for pass-by-reference, `Cow` for pass-by-value
-                        let wrapper = if arg.byref() {
-                            Wrapper::Var
-                        } else {
-                            Wrapper::Cow
-                        };
-                        self.visit_arg(arg, wrapper, f_ret_struct)
-                    });
+                    let mut prelude = vec![];
+                    let args = args
+                        .iter()
+                        .enumerate()
+                        .map(|(i, arg)| {
+                            if arg.byref() {
+                                // `Var` for pass-by-reference
+                                self.visit_arg(arg, Wrapper::Var, f_ret_struct)
+                            } else {
+                                // `Cow` for pass-by-value
+                                let arg = self.visit_arg(arg, Wrapper::Cow, f_ret_struct);
+                                let tmp = format_ident!("__n{i}");
+                                prelude.push(quote!(let #tmp = #arg;));
+                                quote!(#tmp)
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    // Tokenize the real name of the function
                     let name = match name.name {
                         "+" => quote!(__Add::add),
                         "-" => quote!(__Sub::sub),
@@ -518,7 +528,10 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                     };
 
                     quote!({
-                        let __res = #name(#(#args),*)?;
+                        let __res = {
+                            #(#prelude)*
+                            #name(#(#args),*)?
+                        };
                         #(#bindings)*
                         #final_res
                     })

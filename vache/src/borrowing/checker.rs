@@ -64,7 +64,7 @@ impl BorrowChecker {
         let mut updated = true;
         while updated {
             updated = false;
-            // Restart with at least the bulitin flows
+            // Restart with at least the builtin flows
             let mut new_fun_flow = builtin_flows();
 
             // For each function, add its flow to the new map

@@ -89,6 +89,7 @@ impl<'mir, 'ctx: 'mir> fmt::Debug for Reference<'mir, 'ctx> {
 }
 
 /// Left-hand side references.
+#[derive(Clone)]
 pub struct LhsRef<'mir, 'ctx: 'mir> {
     /// Pointer into the location designated by this reference.
     pointer: Pointer<'ctx>,
@@ -98,7 +99,7 @@ pub struct LhsRef<'mir, 'ctx: 'mir> {
     /// directly.
     ///
     /// If [`None`], is [`LhsMode::Declaring`] by default.
-    mode: Option<&'mir mut LhsMode>,
+    mode: Option<&'mir LhsMode>,
 }
 
 impl<'mir, 'ctx> LhsRef<'mir, 'ctx> {

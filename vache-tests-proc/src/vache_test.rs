@@ -82,7 +82,6 @@ pub fn vache_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let res: Result<()> = try {
                     let mut checked = ::vache_lib::typecheck(&mut context, p)?;
                     let mir = ::vache_lib::borrow_check(&mut context, ::vache_lib::mir(&mut checked)?)?;
-                    eprintln!("MIR: {:#?}", mir);
                     let res = ::vache_lib::interpret(mir).context("interpreter error")?;
                     let expected = #expected_output;
                     ::anyhow::ensure!(
