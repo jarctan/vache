@@ -160,7 +160,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             self.ctx.emit(
                 Diagnostic::error()
                     .with_code(ITEM_REDEFINED_ERROR)
-                    .with_message(format!("Duplicate definition with the same name `{name}`"))
+                    .with_message(format!("duplicate definition with the same name `{name}`"))
                     .with_labels(vec![
                         span.as_label().with_message("new definition"),
                         span2

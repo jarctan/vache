@@ -9,8 +9,10 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use super::fun_flow::builtin_flows;
-use super::{liveness, FunFlow};
+use super::{liveness, FunFlow, LocTree};
+use crate::codes::*;
 use crate::mir::{Fun, Program};
+use crate::reporter::Diagnostic;
 use crate::Context;
 
 /// The borrow-checker.
@@ -29,6 +31,40 @@ impl BorrowChecker {
         p: Program<'mir, 'ctx>,
     ) -> Result<Program<'mir, 'ctx>> {
         self.visit_program(ctx, p)
+    }
+
+    /// Checks that in-place arguments do not use the same location more than
+    /// once.
+    fn check_in_place_args<'ctx>(&self, f: &Fun<'_, 'ctx>, ctx: &mut Context<'ctx>) -> Result<()> {
+        for (_, instr) in f.body.bfs(f.entry_l, false) {
+            if let crate::mir::InstrKind::Call { args, .. } = &instr.kind {
+                let mut places = LocTree::default();
+                for arg in args {
+                    if let Some(assigned) = arg.mutated_place() {
+                        let loc = assigned.root();
+                        if let Some(other_spans) = places.insert(loc, instr.span) {
+                            let mut labels =
+                                vec![instr.span.as_label().with_message("first mutable use")];
+                            labels.extend(
+                                other_spans
+                                    .into_iter()
+                                    .map(|s| s.as_label().with_message("other mutable use")),
+                            );
+                            ctx.reporter.emit(
+                                Diagnostic::error()
+                                    .with_code(DOUBLE_MUT_USE)
+                                    .with_message(format!(
+                                        "cannot use the same location `{loc}` as mutable more than once at a time"
+                                    ))
+                                    .with_labels(labels),
+                            );
+                            bail!("Borrow-check errors");
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Borrow-checks a function.
@@ -57,6 +93,11 @@ impl BorrowChecker {
         let mut fun_flow = builtin_flows();
         for name in p.funs.keys() {
             fun_flow.insert(name, FunFlow::default());
+        }
+
+        // First, check the correctness of in-place variables.
+        for f in p.funs.values() {
+            self.check_in_place_args(f, ctx)?;
         }
 
         // Compute the fixpoint

@@ -49,5 +49,7 @@ pub const UNUSED_RESULT: &str = "E0022";
 pub const SAME_SCOPE_SWAP_ERROR: &str = "E0023";
 /// Error for reserved identifiers.
 pub const RESERVED_IDENT: &str = "E0024";
+/// Error for double mutable use of the same location.
+pub const DOUBLE_MUT_USE: &str = "E0025";
 /// Temporary: empty match error.
 pub const EMPTY_MATCH_ERROR: &str = "E0101";

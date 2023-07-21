@@ -185,26 +185,57 @@ impl<'ctx, T> LocTree<'ctx, T> {
 
     /// Mutably gets the node at a given location. If the path does not exist,
     /// creates one.
-    ///
-    /// # Panics
-    /// Panics if the location cannot be created.
     pub fn get_node_mut_or_insert<'a>(
         &'a mut self,
         loc: Loc<'ctx>,
-    ) -> &'a mut LocTreeNode<'ctx, T> {
-        match loc {
-            VarL(var) => self.0.entry(var.as_str()).or_insert(LocTreeNode {
-                loc,
-                kind: default(),
+    ) -> (&'a mut LocTreeNode<'ctx, T>, bool) {
+        let mut inserted = false;
+        let node = match loc {
+            VarL(var) => self.0.entry(var.as_str()).or_insert_with(|| {
+                inserted = true;
+                LocTreeNode {
+                    loc,
+                    kind: default(),
+                }
             }),
             FieldL(strukt, field) => {
-                let node = self.get_node_mut_or_insert(*strukt);
+                let (node, inserted2) = self.get_node_mut_or_insert(*strukt);
+                inserted |= inserted2;
                 match node.kind {
                     AtomL(_) => node,
-                    CompoundL(ref mut fields) => fields.entry(field).or_insert(LocTreeNode {
-                        kind: default(),
-                        loc,
+                    CompoundL(ref mut fields) => fields.entry(field).or_insert_with(|| {
+                        inserted = true;
+                        LocTreeNode {
+                            kind: default(),
+                            loc,
+                        }
                     }),
+                }
+            }
+        };
+        (node, inserted)
+    }
+
+    /// Mutably gets the node at a given location. If the path does not exist,
+    /// creates one.
+    pub fn insert<'a>(&'a mut self, loc: Loc<'ctx>, t: T) -> Option<LocTreeNode<'ctx, T>> {
+        let new = LocTreeNode {
+            kind: AtomL(t),
+            loc,
+        };
+        match loc {
+            VarL(var) => self.0.insert(var.as_str(), new),
+            FieldL(strukt, field) => {
+                let (node, inserted) = self.get_node_mut_or_insert(*strukt);
+                match node.kind {
+                    AtomL(_) => {
+                        if inserted {
+                            None
+                        } else {
+                            Some(std::mem::replace(node, new))
+                        }
+                    }
+                    CompoundL(ref mut fields) => fields.insert(field, new),
                 }
             }
         }
@@ -216,8 +247,8 @@ impl<'ctx, T> LocTree<'ctx, T> {
         // In which case, we create an empty entry when retrieving that location from
         // the tree. Hence the `get_node_mut_or_insert` instead of
         // `get_node_mut`.
-        let pa: *mut _ = self.get_node_mut_or_insert(loc1);
-        let pb: *mut _ = self.get_node_mut_or_insert(loc2);
+        let pa: *mut _ = self.get_node_mut_or_insert(loc1).0;
+        let pb: *mut _ = self.get_node_mut_or_insert(loc2).0;
         unsafe {
             std::ptr::swap(pa, pb);
         }
@@ -228,7 +259,7 @@ impl<'ctx, T: Default> LocTree<'ctx, T> {
     /// Mutably gets the node _value_ at a given location. If the path does not
     /// exist, creates one.
     pub fn get_mut_or_insert(&mut self, loc: Loc<'ctx>) -> &mut T {
-        let node = self.get_node_mut_or_insert(loc);
+        let node = self.get_node_mut_or_insert(loc).0;
         match node.kind {
             AtomL(ref mut t) => t,
             CompoundL(ref s) if s.is_empty() => {
@@ -460,11 +491,42 @@ impl<'ctx, L: Into<Loc<'ctx>>, I: IntoIterator<Item = L>> Sub<I> for LocTree<'ct
     }
 }
 
-impl<'ctx> Add<Loc<'ctx>> for LocTree<'ctx, ()> {
+/// Iterator over the values of a `LocTree`.
+pub struct LocTreeNodeIntoIter<'ctx, T> {
+    /// Stack of nodes to visit next.
+    stack: Vec<LocTreeNode<'ctx, T>>,
+}
+
+impl<'ctx, T> Iterator for LocTreeNodeIntoIter<'ctx, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(node) = self.stack.pop() {
+            match node.kind {
+                AtomL(t) => return Some(t),
+                CompoundL(map) => {
+                    self.stack.extend(map.into_values());
+                }
+            }
+        }
+        None
+    }
+}
+
+impl<'ctx, T> IntoIterator for LocTreeNode<'ctx, T> {
+    type IntoIter = LocTreeNodeIntoIter<'ctx, T>;
+    type Item = T;
+
+    fn into_iter(self) -> Self::IntoIter {
+        LocTreeNodeIntoIter { stack: vec![self] }
+    }
+}
+
+impl<'ctx, T: Default> Add<Loc<'ctx>> for LocTree<'ctx, T> {
     type Output = Self;
 
     fn add(mut self, loc: Loc<'ctx>) -> Self {
-        self.get_node_mut_or_insert(loc);
+        self.insert(loc, T::default());
         self
     }
 }

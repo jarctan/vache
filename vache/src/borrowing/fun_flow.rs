@@ -49,6 +49,15 @@ impl FunFlow {
         }
     }
 
+    /// Applies the flow to a list of borrows, returning the map of borrows for
+    /// each argument, and for the result.
+    ///
+    /// Input: a list of borrows for each argument, in the order of the
+    /// arguments.
+    ///
+    /// Output:
+    /// * a map of borrows for each argument, in the order of the arguments.
+    /// * the borrows for the result.
     pub(super) fn apply<'ctx>(
         &self,
         borrows: Vec<Borrows<'ctx>>,

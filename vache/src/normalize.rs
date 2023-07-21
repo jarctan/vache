@@ -1,4 +1,7 @@
-//! Typing.
+//! Normalizing the code, lifting function arguments so that we get an ANF AST.
+//!
+//! This is crucial to explicit the order of evaluation, and, therefore, the
+//! order of borrows and clones.
 
 use std::collections::HashMap;
 use std::default::default;
