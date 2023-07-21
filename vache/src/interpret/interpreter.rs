@@ -515,10 +515,35 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
         match &arg.kind {
             ArgKind::Standard(r) => self.visit_reference(r, stratum),
             ArgKind::InPlace(r) => {
+                // In place in the interpreter is just an argument kind for which we are
+                // guaranteed that it's mutably borrowed
                 debug_assert_eq!(r.mode(), Mode::MutBorrowed);
                 self.visit_reference(r, stratum)
             }
-            ArgKind::Binding(_, _) => todo!(),
+            ArgKind::Binding(e, ptr) => {
+                // Retrieve the value of the expression
+                let val_ref = self.visit_reference(e, stratum);
+                // Depending on the lhs mode...
+                match ptr.mode() {
+                    LhsMode::Declaring => {
+                        // ... declare a new variable into that value reference
+                        if let VarP(var) = ptr.place() {
+                            self.add_var(var, val_ref);
+                        } else {
+                            panic!(
+                                "interpreter error: can only declare variables. Consider removing the declare mode"
+                            );
+                        }
+                    }
+                    // ... or if we are assigning, get the value out and set the lhs to it
+                    LhsMode::Assigning => {
+                        let value = self.retrieve_value(val_ref);
+                        self.set_at_ptr(ptr.as_ptr(), value);
+                    }
+                };
+                // In any case, return the value reference of the lhs
+                self.get_ptr(ptr.as_ptr())
+            }
         }
     }
 
