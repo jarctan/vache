@@ -12,9 +12,7 @@ pub enum Mode {
     ///
     /// Shallow borrow = simply a `&mut`, not a clone of the `Cow` contents.
     SBorrowed,
-    /// Have a (shallow) mutable reference onto that value.
-    ///
-    /// Shallow borrow = simply a `&mut`, not a clone of the `Cow` contents.
+    /// Have a mutable reference onto that value.
     MutBorrowed,
     /// Have a (shallow) mutable reference onto that value.
     ///

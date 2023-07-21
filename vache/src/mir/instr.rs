@@ -89,7 +89,11 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
                 boxed(lhs.chain(args.iter().flat_map(Arg::mutated_ptr)))
             }
             InstrKind::Assign(lhs, rval) => {
-                boxed([lhs.as_ptr()].into_iter().chain(rval.mut_vars_ptrs()))
+                debug_assert!(
+                    rval.mut_vars_ptrs().next().is_none(),
+                    "No mutable pointers are allowed in the rvalue"
+                );
+                boxed(std::iter::once(lhs.as_ptr()))
             }
             InstrKind::PhantomUse(r) => {
                 if r.mode().is_mutable() {
