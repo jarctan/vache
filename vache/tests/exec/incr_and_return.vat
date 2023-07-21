@@ -1,0 +1,16 @@
+fn incr(@a: int) -> int {
+    a = a + 1;
+    a
+}
+fn main() {
+    var a = 12;
+    var b = incr(@a);
+    debug(a, b);
+}
+################################
+13 13
+################################
+2:9:2:10:Moved
+3:5:3:6:Cloned // Should be cloned because the orignal reference a can get modified
+8:11:8:12:Moved
+8:14:8:15:Moved

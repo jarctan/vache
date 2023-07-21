@@ -254,16 +254,24 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
         };
 
         // Introduce new function parameters name
-        // This is a trick so that the inner body to introduce borrows onto the function
-        // parameters:
-
+        // This is a trick so that the inner body thinks that
+        // * passed-by-value are always passed by reference
+        // * we can track the flow of function parameters using the loan flow analysis,
+        //   wo reinventing the wheel
+        // We don't do it for in-place arguments, since these will get mutated
         let params = f
             .params
             .iter()
-            .map(|param| FunParam {
-                var: self.fresh_vardef(param.ty(), param.span),
-                byref: param.byref,
-                span: param.span,
+            .map(|param| {
+                if !param.byref {
+                    FunParam {
+                        var: self.fresh_vardef(param.ty(), param.span),
+                        byref: param.byref,
+                        span: param.span,
+                    }
+                } else {
+                    *param
+                }
             })
             .collect_vec();
 
@@ -294,29 +302,30 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
             });
         let entry_l = self.visit_stmts(f.body, ret_l, ret_l, None);
         self.pop_scope();
-        let entry_l =
-            f.params
-                .iter()
-                .zip(params.iter())
-                .fold(entry_l, |entry_l, (old_param, new_param)| {
-                    self.insert(
-                        self.instr(
-                            InstrKind::Assign(
-                                LhsRef::declare(Pointer::from_var(
-                                    self.arena,
-                                    old_param.name(),
-                                    old_param.span,
-                                )),
-                                RValue::Place(Reference::new(
-                                    Pointer::from_var(self.arena, new_param.name(), new_param.span),
-                                    self.arena.alloc_mut(Mode::SBorrowed),
-                                )),
-                            ),
-                            old_param.span,
+        let entry_l = f
+            .params
+            .iter()
+            .filter(|p| !p.byref)
+            .zip(params.iter().filter(|p| !p.byref))
+            .fold(entry_l, |entry_l, (old_param, new_param)| {
+                self.insert(
+                    self.instr(
+                        InstrKind::Assign(
+                            LhsRef::declare(Pointer::from_var(
+                                self.arena,
+                                old_param.name(),
+                                old_param.span,
+                            )),
+                            RValue::Place(Reference::new(
+                                Pointer::from_var(self.arena, new_param.name(), new_param.span),
+                                self.arena.alloc_mut(Mode::SBorrowed),
+                            )),
                         ),
-                        [(DefaultB, entry_l)],
-                    )
-                });
+                        old_param.span,
+                    ),
+                    [(DefaultB, entry_l)],
+                )
+            });
         self.pop_scope();
 
         let body = std::mem::take(&mut self.cfg);

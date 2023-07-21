@@ -127,7 +127,8 @@ pub(super) fn builtin_flows<'ctx>() -> HashMap<&'ctx str, FunFlow> {
 }
 
 impl<'mir, 'ctx> Instr<'mir, 'ctx> {
-    /// Flow.
+    /// Applies a function flow to the algorithm, returning the maps of pointers
+    /// to references these pointers will borrow from in that instruction.
     pub fn flow<'a>(
         &'a self,
         fun_flow: &'a HashMap<&'ctx str, FunFlow>,

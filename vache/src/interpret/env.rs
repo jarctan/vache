@@ -139,7 +139,7 @@ impl fmt::Debug for Env<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Env")
             .field("stratum", &self.stratum)
-            .field("values", &self.slab)
+            .field("values", &self.slab.iter().collect::<HashMap<_, _>>())
             .field("vars", &self.var_env)
             .finish()
     }

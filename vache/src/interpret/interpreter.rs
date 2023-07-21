@@ -507,7 +507,10 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
     pub fn visit_arg(&mut self, arg: &Arg<'mir, 'ctx>, stratum: Stratum) -> ValueRef {
         match &arg.kind {
             ArgKind::Standard(r) => self.visit_reference(r, stratum),
-            ArgKind::InPlace(_) => todo!(),
+            ArgKind::InPlace(r) => {
+                debug_assert_eq!(r.mode(), Mode::MutBorrowed);
+                self.visit_reference(r, stratum)
+            }
             ArgKind::Binding(_, _) => todo!(),
         }
     }
@@ -603,7 +606,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                             self.add_var(var, val_ref);
                         } else {
                             panic!(
-                                "Can only declare variables. Consider removing the declare mode"
+                                "interpreter error: can only declare variables. Consider removing the declare mode"
                             );
                         }
                     }

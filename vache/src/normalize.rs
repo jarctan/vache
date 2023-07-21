@@ -585,7 +585,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
         for stmt in &mut b.stmts {
             self.visit_stmt(stmt, &mut stmts, ret_ptr);
         }
-        let reference = self.visit_expr(&mut stmts, &mut b.ret, to, Some(Mode::Moved), ret_ptr);
+        let reference = self.visit_expr(&mut stmts, &mut b.ret, to, Some(Mode::Borrowed), ret_ptr);
         self.pop_scope();
         (reference, stmts)
     }
@@ -657,7 +657,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 todo!()
             }
             tast::StmtKind::ExprS(e) => {
-                self.visit_expr(stmts, e, None, Some(Mode::Moved), ret_ptr);
+                self.visit_expr(stmts, e, None, Some(Mode::Borrowed), ret_ptr);
             }
             tast::StmtKind::HoleS => panic!("Normalization should not be run on a code with holes"),
             tast::StmtKind::BreakS => stmts.push(Stmt::new(BreakS, s.span)),
@@ -665,7 +665,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
             tast::StmtKind::ReturnS(ret) => {
                 // Put the result into the return pointer
                 let ret_ref = LhsRef::declare(ret_ptr);
-                self.visit_expr(stmts, ret, Some(ret_ref), Some(Mode::Moved), ret_ptr);
+                self.visit_expr(stmts, ret, Some(ret_ref), Some(Mode::Borrowed), ret_ptr);
                 stmts.push(Stmt::new(ReturnS, s.span));
             }
         }

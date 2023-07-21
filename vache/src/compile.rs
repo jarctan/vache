@@ -801,7 +801,8 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             __Ret::ok(__res?, #ret_struct_name { #(#ret_vars: #ret_vars.try_to_cow().ok()),* })
         }};
 
-        if params.is_empty() {
+        if params.is_empty() && f.body.ret.ty == UnitT {
+            // Do not show lifetimes in the function signature if we have no reason to
             quote! {
                 #ret_struct
                 pub fn #name<#(#ty_params),*>(#(#params),*) -> #full_ret_ty #body
