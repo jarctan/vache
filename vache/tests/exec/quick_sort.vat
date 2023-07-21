@@ -1,0 +1,38 @@
+fn partition(@array: [int], start: int, end: int) -> int {
+    var pivot = array[end];
+    
+    var i = start - 1;
+    
+    var j = start;
+    while j < end {
+        if array[j] <= pivot {
+            i = i + 1;
+            array[i] <-> array[j];
+        }
+        j = j + 1;
+    }
+
+    array[i + 1] <-> array[end];
+
+    i + 1
+}
+ 
+fn _quick_sort(@array: [int], start: int, end: int) {
+    if start < end {
+        var pivot = partition(@array, start, end);
+        _quick_sort(@array, start, pivot - 1);
+        _quick_sort(@array, pivot + 1, end);
+    }
+}
+
+fn quick_sort(@array: [int]) {
+    _quick_sort(@array, 0, len(array) - 1);
+}
+
+fn main() {
+    var array = [7, 5, 3, 12, 42, 9, 2, 1];
+    quick_sort(@array);
+    debug(array);
+}
+################################
+[1, 2, 3, 5, 7, 9, 12, 42]

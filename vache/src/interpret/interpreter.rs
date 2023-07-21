@@ -231,6 +231,13 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
             "&&" => self.bool_binop(|x, y| BoolV(*x && *y), args, stratum),
             "||" => self.bool_binop(|x, y| BoolV(*x || *y), args, stratum),
             "!" => self.bool_unop(|x| BoolV(!x), args, stratum),
+            "len" => {
+                assert!(args.len() == 1);
+                match self.get_value(args[0]) {
+                    ArrayV(array) => Some(self.add_value(IntV(array.len().into()), stratum)),
+                    _ => None,
+                }
+            }
             "assert" => self.bool_unop(
                 |x| {
                     assert!(x, "Assertion failed");
