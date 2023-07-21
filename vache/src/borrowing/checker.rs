@@ -7,6 +7,8 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use itertools::Itertools;
+use ordinal::Ordinal;
 
 use super::fun_flow::builtin_flows;
 use super::{liveness, FunFlow, LocTree};
@@ -42,14 +44,15 @@ impl BorrowChecker {
                 for arg in args {
                     if let Some(assigned) = arg.mutated_place() {
                         let loc = assigned.root();
-                        if let Some(other_spans) = places.insert(loc, instr.span) {
-                            let mut labels =
-                                vec![instr.span.as_label().with_message("first mutable use")];
-                            labels.extend(
-                                other_spans
-                                    .into_iter()
-                                    .map(|s| s.as_label().with_message("other mutable use")),
-                            );
+                        if let Some(other_spans) = places.insert(loc, arg.span) {
+                            let labels = other_spans
+                                .into_iter()
+                                .chain(std::iter::once(arg.span))
+                                .enumerate()
+                                .map(|(i, s)| {
+                                    s.as_label().with_message(format!("{} mutable use", Ordinal(i + 1)))
+                                })
+                                .collect_vec();
                             ctx.reporter.emit(
                                 Diagnostic::error()
                                     .with_code(DOUBLE_MUT_USE)

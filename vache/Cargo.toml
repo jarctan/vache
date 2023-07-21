@@ -37,6 +37,7 @@ itertools = "0.10.5"
 double-ended-peekable = "0.0.2"
 crossbeam-queue = "0.3.8"
 colosseum = "0.2.2"
+ordinal = "0.3.1"
 
 [dev-dependencies]
 vache-tests-proc = { path = "../vache-tests-proc" }

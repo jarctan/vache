@@ -17,8 +17,8 @@ use Value::*;
 use super::env::Env;
 use super::value::{Value, ValueRef};
 use crate::mir::{
-    Arg, Branch, CfgI, CfgLabel, Fun, InstrKind, LhsMode, Mode, Place, Pointer, RValue, Reference,
-    Struct, Varname,
+    Arg, ArgKind, Branch, CfgI, CfgLabel, Fun, InstrKind, LhsMode, Mode, Place, Pointer, RValue,
+    Reference, Struct, Varname,
 };
 use crate::tast::Stratum;
 
@@ -505,10 +505,10 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
 
     /// Visits a function argument, optionally choosing to clone the value.
     pub fn visit_arg(&mut self, arg: &Arg<'mir, 'ctx>, stratum: Stratum) -> ValueRef {
-        match arg {
-            Arg::Standard(r) => self.visit_reference(r, stratum),
-            Arg::InPlace(_) => todo!(),
-            Arg::Binding(_, _) => todo!(),
+        match &arg.kind {
+            ArgKind::Standard(r) => self.visit_reference(r, stratum),
+            ArgKind::InPlace(_) => todo!(),
+            ArgKind::Binding(_, _) => todo!(),
         }
     }
 

@@ -532,19 +532,17 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
         mode: Option<Mode>,
         ret_ptr: Pointer<'ctx>,
     ) -> Arg<'mir, 'ctx> {
-        match &mut arg.kind {
+        let kind = match &mut arg.kind {
             tast::ArgKind::Standard(e) => {
                 // Lift the argument in a fresh variable
                 let vardef = self.fresh_vardef(e.ty, e.span);
                 let to = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
                 let to = LhsRef::declare(to);
 
-                let arg = Arg::Standard(self.visit_expr(stmts, e, Some(to), mode, ret_ptr));
-
-                arg
+                ArgKind::Standard(self.visit_expr(stmts, e, Some(to), mode, ret_ptr))
             }
             tast::ArgKind::InPlace(p) => {
-                Arg::InPlace(self.visit_rhs_place(stmts, p, None, ret_ptr))
+                ArgKind::InPlace(self.visit_rhs_place(stmts, p, None, ret_ptr))
             }
             tast::ArgKind::Binding(e, p) => {
                 // Lift the argument in a fresh variable
@@ -554,7 +552,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 let e = self.visit_expr(stmts, e, Some(to), mode, ret_ptr);
 
                 let (p, translation) = self.visit_lhs_place(stmts, p, ret_ptr);
-                let arg = Arg::Binding(e, p);
+                let arg = ArgKind::Binding(e, p);
 
                 // Register the translation, if any, after computing the argument.
                 if let Some(translation) = translation {
@@ -563,6 +561,10 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
 
                 arg
             }
+        };
+        Arg {
+            kind,
+            span: arg.span,
         }
     }
 

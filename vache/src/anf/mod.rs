@@ -15,7 +15,7 @@ pub mod reference;
 pub mod rvalue;
 pub mod stmt;
 
-pub use arg::Arg;
+pub use arg::{Arg, ArgKind};
 pub use block::Block;
 pub use branch::Branch;
 pub use fun::Fun;
