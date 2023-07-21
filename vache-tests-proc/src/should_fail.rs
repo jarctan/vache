@@ -51,6 +51,7 @@ pub fn should_fail(attr: TokenStream, item: TokenStream) -> TokenStream {
         fn #name() -> ::anyhow::Result<()> {
             use ::anyhow::Context as AnyhowContext;
             use ::std::collections::HashSet;
+            use ::itertools::Itertools;
             let p: ::vache_lib::ast::Program = #program;
             let arena = ::vache_lib::Arena::new();
             let config = ::vache_lib::config::Config { input: "", ..::std::default::Default::default() };
@@ -58,7 +59,7 @@ pub fn should_fail(attr: TokenStream, item: TokenStream) -> TokenStream {
             match ::vache_lib::typecheck(&mut context, p) {
                 Err(_) => {
                     let diagnostics = context.reporter.flush();
-                    let codes = diagnostics.into_iter().flat_map(|diag| diag.code).collect::<Vec<String>>();
+                    let codes = diagnostics.into_iter().flat_map(|diag| diag.code).collect_vec();
                     let codes = codes.iter().map(|code| code.as_str()).collect::<HashSet<&str>>();
                     let expected = [#expected_errors].into_iter().collect::<HashSet<&str>>();
                     if codes == expected {

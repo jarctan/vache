@@ -2,6 +2,7 @@
 
 use std::default::default;
 
+use itertools::Itertools;
 use num_traits::{One, ToPrimitive, Zero};
 use proc_macro2::TokenStream;
 use string_builder::Builder as StringBuilder;
@@ -473,7 +474,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                             let place = self.visit_lhs_place(to, f_ret_struct);
                             quote!(#place = __res.1.a.unwrap();)
                         })
-                        .collect::<Vec<_>>();
+                        .collect_vec();
 
                     // Tokenize the arguments and the real name of the function
                     let mut prelude = vec![];
@@ -492,7 +493,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                                 quote!(#tmp)
                             }
                         })
-                        .collect::<Vec<_>>();
+                        .collect_vec();
 
                     // Tokenize the real name of the function
                     let name = match name.name {

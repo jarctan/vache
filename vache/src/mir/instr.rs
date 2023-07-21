@@ -3,6 +3,8 @@
 
 use std::ops::{Deref, DerefMut};
 
+use itertools::Itertools;
+
 use super::*;
 use crate::utils::boxed;
 
@@ -148,7 +150,7 @@ impl<'mir, 'ctx> InstrKind<'mir, 'ctx> {
         let els = self
             .references_mut()
             .filter(|reference| reference.as_ptr() == *to_find)
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         assert_eq!(
             els.len(),

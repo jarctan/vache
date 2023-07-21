@@ -5,6 +5,8 @@ use std::default::default;
 use std::fmt;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
+use itertools::Itertools;
+
 use super::*;
 use crate::Arena;
 
@@ -93,7 +95,7 @@ impl<'ctx> AddAssign<&TySubst<'ctx>> for TySubst<'ctx> {
             rhs.subst
                 .iter()
                 .map(|(var, ty)| (*var, ty.subst(self.arena, self)))
-                .collect::<Vec<_>>(),
+                .collect_vec(),
         );
     }
 }

@@ -6,6 +6,8 @@ use std::fmt;
 use std::iter::Extend;
 use std::iter::Sum;
 
+use itertools::Itertools;
+
 use super::{Borrow, BorrowCnt, Borrows, InvalidationReason, Invalidations, Loan, LocTree};
 use crate::mir::{CfgLabel, Loc, Mode, Place, Reference};
 use crate::utils::Set;
@@ -57,7 +59,7 @@ impl<'ctx> Ledger<'ctx> {
             }
             Mode::Moved => {
                 // All current loans will get invalidated
-                for loan in self.loans(*reference.loc()).collect::<Vec<_>>() {
+                for loan in self.loans(*reference.loc()).collect_vec() {
                     self.invalidations
                         .insert(loan, InvalidationReason::Moved(reference.as_ptr()));
                 }

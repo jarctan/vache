@@ -75,7 +75,7 @@ impl<'ctx> Ty<'ctx> {
                         items
                             .into_iter()
                             .map(|item| item.unwrap_or_else(|x| x))
-                            .collect::<Vec<_>>(),
+                            .collect_vec(),
                     );
                     Ok(TupleT(items))
                 } else {

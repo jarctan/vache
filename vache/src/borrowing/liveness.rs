@@ -206,7 +206,7 @@ pub fn liveness<'ctx>(
         .postorder(f.entry_l)
         .rev()
         .map(|(label, _)| label)
-        .collect::<Vec<_>>();
+        .collect_vec();
 
     let loan_flow: Result<LoanFlow> = loop {
         // Compute the var analysis first
@@ -296,7 +296,7 @@ pub fn liveness<'ctx>(
         // same instruction.
         for (label, instr) in f.body.bfs_mut(f.entry_l, false) {
             // Get all the mutated places of the instruction
-            let mutated_places = instr.mutated_places().collect::<Vec<_>>();
+            let mutated_places = instr.mutated_places().collect_vec();
             // The borrows at the entry of the instruction.
             let borrows_in = &loan_flow[&label].ins;
             // Compute the mapping of places, and the list of borrows made on that place
@@ -385,13 +385,13 @@ pub fn liveness<'ctx>(
     // First, the flow of the returned value
     let ret_flow = if let Some(ret_v) = f.ret_v {
         let borrows = loan_flow[&f.ret_l].ins.borrows(*ret_v.place());
-        let borrowed_vars = borrows.map(|b| b.borrowed_loc().root()).collect::<Vec<_>>();
+        let borrowed_vars = borrows.map(|b| b.borrowed_loc().root()).collect_vec();
         f.params
             .iter()
             .enumerate()
             .filter(|(_, p)| borrowed_vars.contains(&p.var.name()))
             .map(|(i, _)| i)
-            .collect::<Vec<_>>()
+            .collect_vec()
     } else {
         vec![]
     };
@@ -400,7 +400,7 @@ pub fn liveness<'ctx>(
     let mut args_flow = HashMap::new();
     for (i, p) in f.params.iter().enumerate().filter(|(_, p)| p.byref) {
         let borrows = loan_flow[&f.ret_l].ins.borrows(p.var);
-        let borrowed_vars = borrows.map(|b| b.borrowed_loc().root()).collect::<Vec<_>>();
+        let borrowed_vars = borrows.map(|b| b.borrowed_loc().root()).collect_vec();
         args_flow.insert(
             i,
             f.params
@@ -408,7 +408,7 @@ pub fn liveness<'ctx>(
                 .enumerate()
                 .filter(|(_, p)| borrowed_vars.contains(&p.var.name()))
                 .map(|(i, _)| i)
-                .collect::<Vec<_>>(),
+                .collect_vec(),
         );
     }
 
@@ -464,14 +464,11 @@ mod tests {
 
         // At the end of L0, we still need y
         assert_eq!(
-            analysis[&l[0]].outs.get_all_locs().collect::<Vec<_>>(),
+            analysis[&l[0]].outs.get_all_locs().collect_vec(),
             [y.into()]
         );
 
         // At the start of L1, we still need y
-        assert_eq!(
-            analysis[&l[1]].ins.get_all_locs().collect::<Vec<_>>(),
-            [y.into()]
-        );
+        assert_eq!(analysis[&l[1]].ins.get_all_locs().collect_vec(), [y.into()]);
     }
 }

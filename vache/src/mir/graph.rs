@@ -683,6 +683,7 @@ impl<'ctx, 'a, N, E> DoubleEndedIterator for PostOrder<'ctx, 'a, N, E> {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
+    use itertools::Itertools;
 
     use super::*;
     use crate::*;
@@ -694,8 +695,8 @@ mod tests {
         let l = cfg.add_block([1, 1, 2, 3, 5, 8, 13], ());
         for i in 0..6 {
             assert_eq!(
-                cfg.node_map[&l[i]].outs.values().collect::<Vec<_>>(),
-                cfg.node_map[&l[i + 1]].ins.keys().collect::<Vec<_>>()
+                cfg.node_map[&l[i]].outs.values().collect_vec(),
+                cfg.node_map[&l[i + 1]].ins.keys().collect_vec()
             );
         }
     }
@@ -714,8 +715,8 @@ mod tests {
         }
         for i in 0..3 {
             assert_eq!(
-                cfg.node_map[&l[i]].outs.values().collect::<Vec<_>>(),
-                cfg.node_map[&l[(i + 1) % 3]].ins.keys().collect::<Vec<_>>()
+                cfg.node_map[&l[i]].outs.values().collect_vec(),
+                cfg.node_map[&l[(i + 1) % 3]].ins.keys().collect_vec()
             );
         }
     }

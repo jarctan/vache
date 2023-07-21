@@ -2,6 +2,7 @@
 
 use std::default::default;
 
+use itertools::Itertools;
 use Branch::*;
 
 use crate::anf;
@@ -264,7 +265,7 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
                 byref: param.byref,
                 span: param.span,
             })
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         // Internal scope of the body of the function
         self.push_scope();

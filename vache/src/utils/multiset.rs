@@ -206,6 +206,8 @@ impl<K: fmt::Debug> fmt::Debug for MultiSet<K> {
 
 #[cfg(test)]
 mod tests {
+    use itertools::Itertools;
+
     use super::*;
 
     #[test]
@@ -215,7 +217,7 @@ mod tests {
         borrow_cnt.insert(2);
         borrow_cnt.insert(1);
         println!("{:?}", borrow_cnt);
-        let res = borrow_cnt.into_iter().collect::<Vec<_>>();
+        let res = borrow_cnt.into_iter().collect_vec();
         assert_eq!(res.len(), 3, "expected 3 elements, found {res:?}");
     }
 

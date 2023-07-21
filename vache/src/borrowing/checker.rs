@@ -50,7 +50,8 @@ impl BorrowChecker {
                                 .chain(std::iter::once(arg.span))
                                 .enumerate()
                                 .map(|(i, s)| {
-                                    s.as_label().with_message(format!("{} mutable use", Ordinal(i + 1)))
+                                    s.as_label()
+                                        .with_message(format!("{} mutable use", Ordinal(i + 1)))
                                 })
                                 .collect_vec();
                             ctx.reporter.emit(

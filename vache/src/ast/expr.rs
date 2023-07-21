@@ -557,7 +557,7 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                             .filter(|pair| !matches!(pair.as_rule(), Rule::pipe | Rule::farw))
                             .array_chunks()
                             .map(|[pat, expr]| (ctx.parse(pat), ctx.parse(expr)))
-                            .collect::<Vec<_>>();
+                            .collect_vec();
                         MatchE(boxed(matched), branches)
                     }
                     rule => panic!("parser internal error: expected expression, found {rule:?}"),
@@ -742,7 +742,7 @@ mod tests {
                     .unwrap()
                     .as_str()
                     .to_owned())
-                .collect::<Vec<String>>(),
+                .collect_vec(),
             ["a", "b", "c"]
         );
     }
@@ -754,7 +754,7 @@ mod tests {
         assert!(items
             .iter()
             .map(|arg| arg.as_integer().unwrap())
-            .collect::<Vec<&BigInt>>()
+            .collect_vec()
             .is_empty());
     }
 
@@ -766,7 +766,7 @@ mod tests {
             items
                 .iter()
                 .map(|arg| arg.as_integer().unwrap())
-                .collect::<Vec<&BigInt>>(),
+                .collect_vec(),
             [&BigInt::from(1), &2.into(), &3.into(), &4.into(), &5.into()]
         );
     }

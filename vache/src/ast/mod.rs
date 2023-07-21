@@ -154,7 +154,7 @@ fn parse_pairs<'ctx>(ctx: &mut Context<'ctx>, rule: Rule) -> Result<Pairs<'ctx, 
                             .iter()
                             .map(pretty_print_rule)
                             .unique()
-                            .collect::<Vec<_>>();
+                            .collect_vec();
                         let len = positives.len();
                         if len > 1 {
                             notes.push(format!(
@@ -171,7 +171,7 @@ fn parse_pairs<'ctx>(ctx: &mut Context<'ctx>, rule: Rule) -> Result<Pairs<'ctx, 
                             .iter()
                             .map(pretty_print_rule)
                             .unique()
-                            .collect::<Vec<_>>();
+                            .collect_vec();
                         let len = negatives.len();
                         if len > 1 {
                             notes.push(format!(

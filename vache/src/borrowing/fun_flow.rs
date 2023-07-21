@@ -6,6 +6,8 @@
 use std::collections::HashMap;
 use std::default::default;
 
+use itertools::Itertools;
+
 use super::Borrows;
 use crate::mir::{Instr, InstrKind, Pointer, Reference};
 
@@ -132,7 +134,7 @@ impl<'mir, 'ctx> Instr<'mir, 'ctx> {
     ) -> HashMap<Pointer<'ctx>, Vec<&'a Reference<'mir, 'ctx>>> {
         match &self.kind {
             InstrKind::Noop => HashMap::new(),
-            InstrKind::Assign(lhs, rhs) => [(lhs.as_ptr(), rhs.references().collect::<Vec<_>>())]
+            InstrKind::Assign(lhs, rhs) => [(lhs.as_ptr(), rhs.references().collect_vec())]
                 .into_iter()
                 .collect(),
             InstrKind::Call {
@@ -156,11 +158,7 @@ impl<'mir, 'ctx> Instr<'mir, 'ctx> {
                         let boxed: Vec<&Reference> = flow
                             .args
                             .get(&i)
-                            .map(|deps| {
-                                deps.iter()
-                                    .map(|&i| args[i].reference())
-                                    .collect::<Vec<_>>()
-                            })
+                            .map(|deps| deps.iter().map(|&i| args[i].reference()).collect_vec())
                             .unwrap_or_default();
 
                         res.insert(mutated, boxed);
@@ -171,10 +169,7 @@ impl<'mir, 'ctx> Instr<'mir, 'ctx> {
                 if let Some(destination) = destination {
                     res.insert(
                         destination.as_ptr(),
-                        flow.ret
-                            .iter()
-                            .map(|&i| args[i].reference())
-                            .collect::<Vec<_>>(),
+                        flow.ret.iter().map(|&i| args[i].reference()).collect_vec(),
                     );
                 }
 
