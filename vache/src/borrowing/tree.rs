@@ -253,6 +253,11 @@ impl<'ctx, T> LocTree<'ctx, T> {
             std::ptr::swap(pa, pb);
         }
     }
+
+    /// Is the tree empty?
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl<'ctx, T: Default> LocTree<'ctx, T> {
@@ -528,5 +533,15 @@ impl<'ctx, T: Default> Add<Loc<'ctx>> for LocTree<'ctx, T> {
     fn add(mut self, loc: Loc<'ctx>) -> Self {
         self.insert(loc, T::default());
         self
+    }
+}
+
+impl<'ctx, T: Default> FromIterator<Loc<'ctx>> for LocTree<'ctx, T> {
+    fn from_iter<I: IntoIterator<Item = Loc<'ctx>>>(iter: I) -> Self {
+        let mut res = LocTree::default();
+        for loc in iter {
+            res.insert(loc, T::default());
+        }
+        res
     }
 }

@@ -10,15 +10,13 @@ use std::hash::Hash;
 use codespan_reporting::diagnostic::Diagnostic;
 
 use super::Loan;
-use crate::mir::{Loc, Pointer, Span};
+use crate::mir::{Loc, Span};
 use crate::utils::boxed;
 use crate::utils::Set;
 
 /// Reasons for invalidating a loan.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InvalidationReason<'ctx> {
-    /// Borrow on a variable that is moved.
-    Moved(Pointer<'ctx>),
     /// Borrow on a variable that goes out of scope.
     OutOfScope(Loc<'ctx>),
     /// Borrow still live when borrowed variable is mutated.
@@ -31,12 +29,6 @@ impl<'ctx> InvalidationReason<'ctx> {
     /// Turns the invalidation reason into a compiler diagnostic.
     pub(crate) fn to_diagnostic(&self, loan: Loan<'ctx>) -> Diagnostic<()> {
         match self {
-            InvalidationReason::Moved(ptr) => Diagnostic::warning()
-                .with_message("invalidated borrow")
-                .with_labels(vec![
-                    loan.span.as_label(),
-                    ptr.span.as_secondary_label().with_message("is moved here"),
-                ]),
             InvalidationReason::OutOfScope(loc) => Diagnostic::warning()
                 .with_message("invalidated borrow")
                 .with_labels(vec![loan.span.as_label()])

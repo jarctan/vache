@@ -235,24 +235,21 @@ pub fn liveness<'ctx>(
                             // We cannot move if the location is still active after that
                             // instruction, or if some part of the
                             // location is used by some __other__ pointer in the same instruction.
-                            // instruction For example, for `debug(a,
-                            // a)`, we will see that we cannot move the first
-                            // `a`, since it is used by a reference after that first `a`
-                            // To do that, we compute the set of locations that cannot be moved for
-                            // each reference in our `references`.
+                            // instruction For example, for `debug(a,a)`, we will see that we cannot
+                            // move the first `a`, since it is used by a reference after that first
+                            // `a` To do that, we compute the set of locations that cannot be moved
+                            // for each reference in our `references`.
                             if !var_outs.contains(loc)
                                 && !ptrs
                                     .iter()
-                                    .filter(|ptr| ptr.id != reference.id)
+                                    .filter(|ptr| ptr.span != reference.span)
                                     .any(|ptr| loc <= ptr.loc)
                             {
-                                // Move only if we have no more borrows into ourselves (except the
-                                // one we're about to free)
-                                // Otherwise don't, since this move would trigger
-                                // invalidations/clones
-                                // for all these borrows
-                                let loans =
-                                    borrows_in.loans(*loc).filter(|b| b.ptr.id != reference.id);
+                                // Move only if we have no more loans into ourselves (except our own
+                                // loan into ourselves).
+                                let loans = borrows_in
+                                    .loans(*loc)
+                                    .filter(|b| b.ptr.span != reference.span);
                                 if loans.count() == 0 {
                                     updated = true;
                                     reference.set_mode(Mode::Moved);
@@ -300,7 +297,9 @@ pub fn liveness<'ctx>(
             // The borrows at the entry of the instruction.
             let borrows_in = &loan_flow[&label].ins;
             // Compute the mapping of places, and the list of borrows made on that place
-            // that are used within the instruction.
+            // that are used within the instruction. It's fine to do it for places and not
+            // locations, since here we can know precisely what place is being
+            // mutated.
             let mut refs: HashMap<_, Vec<_>> = HashMap::new();
             for r in instr.references() {
                 for b in borrows_in.borrows(r.place()) {

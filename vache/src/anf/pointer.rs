@@ -2,23 +2,15 @@
 //! into places.
 
 use std::fmt;
-use std::sync::atomic::AtomicU64;
 
 use super::{Loc, Place, Reference, Span, Varname};
 use crate::Arena;
-
-/// Fresh label counter.
-///
-/// Global to avoid any confusion between label names.
-pub static LABEL_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Pointer.
 ///
 /// Pointer are higher-level variables that can point into a value.
 #[derive(PartialEq, Eq, Copy, Clone, Hash)]
 pub struct Pointer<'ctx> {
-    /// Pointer id. Kind of a variable name.
-    pub(crate) id: u64,
     /// Location where resides the pointer.
     pub(crate) place: &'ctx Place<'ctx>,
     /// Location pointed at by the pointer.
@@ -30,14 +22,8 @@ pub struct Pointer<'ctx> {
 impl<'ctx> Pointer<'ctx> {
     /// Creates a new pointer.
     pub fn new(arena: &'ctx Arena<'ctx>, place: &'ctx Place<'ctx>, span: Span) -> Self {
-        let id = LABEL_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let loc = arena.alloc(place.root());
-        Self {
-            id,
-            place,
-            loc,
-            span,
-        }
+        Self { place, loc, span }
     }
 
     /// Gets the place of the pointer.
@@ -57,7 +43,7 @@ impl<'ctx> Pointer<'ctx> {
 
 impl fmt::Debug for Pointer<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "点{}|{:?}", self.id, self.place)
+        write!(f, "{:?}", self.place)
     }
 }
 

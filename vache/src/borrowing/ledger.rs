@@ -58,12 +58,6 @@ impl<'ctx> Ledger<'ctx> {
                 }]
             }
             Mode::Moved => {
-                // All current loans will get invalidated
-                for loan in self.loans(*reference.loc()).collect_vec() {
-                    self.invalidations
-                        .insert(loan, InvalidationReason::Moved(reference.as_ptr()));
-                }
-
                 // You take their place, so you take all their borrows!
                 // We remove the loans from that place
                 let borrows = self
@@ -75,6 +69,7 @@ impl<'ctx> Ledger<'ctx> {
                     })
                     .collect();
 
+                // All current loans will get invalidated
                 self.flush_loc(*reference.loc(), true);
 
                 borrows
@@ -99,8 +94,8 @@ impl<'ctx> Ledger<'ctx> {
     fn flush_loc(&mut self, loc: impl Into<Loc<'ctx>>, force: bool) -> Set<Borrow<'ctx>> {
         let loc = loc.into();
 
-        // Get back our borrows
-        //
+        // Get back our borrows, but filter out those that are about us (they are not
+        // getting invalidated, since we're flushing all the the location at once!)
         let borrows: Borrows = self
             .borrows
             .remove(loc)
@@ -146,24 +141,20 @@ impl<'ctx> Ledger<'ctx> {
 
     /// Simultaneous removal of several locations from the ledger.
     pub fn flush_locs(&mut self, locs: impl Iterator<Item = Loc<'ctx>>, force: bool) {
-        let locs: Set<_> = locs.collect();
+        let locs_vec = locs.unique().collect_vec();
+        let locs: LocTree<_> = locs_vec.iter().copied().collect();
+
         if locs.is_empty() {
             return;
         }
-        /*#[cfg(not(test))]
-        println!(
-            "Flushing {:?}{}",
-            locs,
-            if force { " forcefully" } else { "" }
-        );*/
 
         // First, remove all the borrows of the locations to flush
         // We store at the same time the locations we really want to remove from the
         // ledger: these are those that have at least one borrow active. Those
         // that are well-behaved and have no borrow left can stay longer without
         // problems, allowing borrowers of that location not to be invalidated
-        let mut to_clean: Set<_> = default();
-        for loc in locs.iter() {
+        let mut to_clean: Vec<_> = default();
+        for loc in locs_vec.iter() {
             let borrows: Borrows = self
                 .borrows
                 .remove(loc)
@@ -173,9 +164,7 @@ impl<'ctx> Ledger<'ctx> {
                 .collect();
 
             if !borrows.is_empty() {
-                /*#[cfg(not(test))]
-                println!("{loc:?} has borrows {borrows:?}, so must scheduled for cleanup");*/
-                to_clean.insert(*loc);
+                to_clean.push(*loc);
             }
 
             for borrow in borrows.iter() {
@@ -193,7 +182,11 @@ impl<'ctx> Ledger<'ctx> {
         // We need to do that in a second step because we don't want to add as
         // invalidated loans loans that were made by locations that are being
         // flushed at the same time as the loaner!
-        for loc in if force { locs.iter() } else { to_clean.iter() } {
+        for loc in if force {
+            locs_vec.iter()
+        } else {
+            to_clean.iter()
+        } {
             let removed_loans = self
                 .loans
                 .remove(loc)
@@ -201,16 +194,9 @@ impl<'ctx> Ledger<'ctx> {
                 .unwrap_or_default();
             let removed_loans = removed_loans
                 .into_iter()
-                .filter(|loan| !locs.contains(&loan.borrower))
+                .filter(|loan| !locs.contains(loan.borrower))
                 .map(Loan::from)
                 .map(|loan| (loan, vec![InvalidationReason::OutOfScope(*loc)]));
-            /*if !removed_loans.is_empty() {
-                #[cfg(not(test))]
-                println!(
-                    "Invalidated by out of scope of {loc:?}: {:?} (only {locs:?} allowed)",
-                    removed_loans
-                );
-            }*/
             self.invalidations.extend(removed_loans);
         }
     }

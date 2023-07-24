@@ -8,7 +8,6 @@ use std::default::default;
 
 use itertools::Itertools;
 
-use super::Borrows;
 use crate::mir::{Instr, InstrKind, Pointer, Reference};
 
 /// Argument number.
@@ -49,38 +48,6 @@ impl FunFlow {
             args: default(),
             ret: deps.into_iter().collect(),
         }
-    }
-
-    /// Applies the flow to a list of borrows, returning the map of borrows for
-    /// each argument, and for the result.
-    ///
-    /// Input: a list of borrows for each argument, in the order of the
-    /// arguments.
-    ///
-    /// Output:
-    /// * a map of borrows for each argument, in the order of the arguments.
-    /// * the borrows for the result.
-    pub(super) fn apply<'ctx>(
-        &self,
-        borrows: Vec<Borrows<'ctx>>,
-    ) -> (HashMap<ArgNb, Borrows<'ctx>>, Borrows<'ctx>) {
-        (
-            self.args
-                .iter()
-                .map(|(&arg_id, deps)| {
-                    (
-                        arg_id,
-                        deps.iter()
-                            .flat_map(|&dep| borrows[dep].iter().copied())
-                            .collect(),
-                    )
-                })
-                .collect(),
-            self.ret
-                .iter()
-                .flat_map(|&dep| borrows[dep].iter().copied())
-                .collect(),
-        )
     }
 }
 
