@@ -11,7 +11,7 @@ use itertools::Itertools;
 use ordinal::Ordinal;
 
 use super::fun_flow::builtin_flows;
-use super::{liveness, FunFlow, LocTree};
+use super::{liveness, var_liveness, FunFlow, LocTree, VarFlow};
 use crate::codes::*;
 use crate::mir::{Fun, Program};
 use crate::reporter::Diagnostic;
@@ -79,8 +79,9 @@ impl BorrowChecker {
         f: &mut Fun<'_, 'ctx>,
         ctx: &mut Context<'ctx>,
         fun_flow: &HashMap<&'ctx str, FunFlow>,
+        var_flow: &VarFlow<'ctx>,
     ) -> Result<FunFlow> {
-        let res = liveness(f, fun_flow, ctx)?;
+        let res = liveness(f, fun_flow, var_flow, ctx)?;
         // println!("Flow for {} is {res:?}", f.name);
         // f.body.print_image(f.name)?;
         Ok(res)
@@ -104,6 +105,13 @@ impl BorrowChecker {
             self.check_in_place_args(f, ctx)?;
         }
 
+        // Compute the variable flow.
+        let var_flows: HashMap<&str, VarFlow> = p
+            .funs
+            .iter()
+            .map(|(&name, f)| (name, var_liveness(&f.body, f.entry_l)))
+            .collect();
+
         // Compute the fixpoint
         // Iterate until all function signatures are stabilized
         let mut updated = true;
@@ -114,7 +122,7 @@ impl BorrowChecker {
 
             // For each function, add its flow to the new map
             for (&name, f) in &mut p.funs {
-                let new_flow = self.visit_fun(f, ctx, &fun_flow)?;
+                let new_flow = self.visit_fun(f, ctx, &fun_flow, &var_flows[name])?;
                 // If the flow is updated, we'll need to do a new iteration of the `while` loop
                 if new_flow != fun_flow[name] {
                     updated = true;

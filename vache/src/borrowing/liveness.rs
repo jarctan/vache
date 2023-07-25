@@ -13,7 +13,7 @@ use crate::utils::Set;
 use crate::Context;
 
 /// Variable flow.
-type VarFlow<'ctx> = Cfg<'ctx, Flow<LocTree<'ctx, ()>>>;
+pub type VarFlow<'ctx> = Cfg<'ctx, Flow<LocTree<'ctx, ()>>>;
 /// Loan flow.
 type LoanFlow<'ctx> = Cfg<'ctx, Flow<Ledger<'ctx>>>;
 
@@ -198,6 +198,7 @@ fn loan_liveness<'ctx>(
 pub fn liveness<'ctx>(
     f: &mut Fun<'_, 'ctx>,
     fun_flow: &HashMap<&'ctx str, FunFlow>,
+    var_flow: &VarFlow<'ctx>,
     ctx: &mut Context<'ctx>,
 ) -> Result<FunFlow> {
     // We compute the natural ordering of the labels of the CFG, once and for all.
@@ -209,9 +210,6 @@ pub fn liveness<'ctx>(
         .collect_vec();
 
     let loan_flow: Result<LoanFlow> = loop {
-        // Compute the var analysis first
-        let var_flow = var_liveness(&f.body, f.entry_l);
-
         // Loop until there is no change in moves.
         // Note: `loan_flow` is mutable because we flush its invalidations after
         let mut loan_flow = loop {

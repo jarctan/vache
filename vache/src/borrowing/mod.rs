@@ -18,5 +18,5 @@ use flow::Flow;
 use fun_flow::FunFlow;
 use invalidation::{InvalidationReason, Invalidations};
 use ledger::Ledger;
-use liveness::liveness;
+use liveness::{liveness, var_liveness, VarFlow};
 use tree::LocTree;
