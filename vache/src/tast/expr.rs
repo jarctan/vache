@@ -82,6 +82,8 @@ pub enum ExprKind<'ctx> {
     UnitE,
     /// A boolean.
     BoolE(bool),
+    /// Machine integer.
+    UsizeE(u64),
     /// An unbounded integer.
     IntegerE(BigInt),
     /// A string.
@@ -137,7 +139,7 @@ impl<'ctx> ExprKind<'ctx> {
     /// Applies a [`TySubst`] to `self`.
     pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         match self {
-            prim @ (UnitE | BoolE(_) | IntegerE(_) | StringE(_) | HoleE) => prim,
+            prim @ (UnitE | BoolE(_) | UsizeE(_) | IntegerE(_) | StringE(_) | HoleE) => prim,
             PlaceE(place) => PlaceE(place.subst_ty(arena, subst)),
             RangeE(box e1, box e2) => RangeE(
                 boxed(e1.subst_ty(arena, subst)),
@@ -200,7 +202,7 @@ impl<'ctx> ExprKind<'ctx> {
     /// Returns the free type variables in `self`.
     pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         match self {
-            UnitE | BoolE(_) | IntegerE(_) | StringE(_) | HoleE => default(),
+            UnitE | BoolE(_) | IntegerE(_) | UsizeE(_) | StringE(_) | HoleE => default(),
             PlaceE(place) => place.free_ty_vars(),
             RangeE(e1, e2) => e1.free_ty_vars() + e2.free_ty_vars(),
             StructE { name: _, fields } => fields.iter().map(|(_, e)| e.free_ty_vars()).sum(),

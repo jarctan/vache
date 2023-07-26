@@ -93,6 +93,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
         match value {
             UninitV => unreachable!(),
             UnitV => "()".to_string(),
+            UsizeV(i) => format!("{i}"),
             IntV(i) => format!("{i}"),
             StrV(s) => format!("{s}"),
             BoolV(b) => format!("{b}"),
@@ -153,6 +154,8 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
             (UnitV, _) | (_, UnitV) => false,
             (BoolV(x), BoolV(y)) => x == y,
             (BoolV(_), _) | (_, BoolV(_)) => false,
+            (UsizeV(x), UsizeV(y)) => x == y,
+            (UsizeV(_), _) | (_, UsizeV(_)) => false,
             (StrV(x), StrV(y)) => x == y,
             (StrV(_), _) | (_, StrV(_)) => false,
             (IntV(x), IntV(y)) => x == y,
@@ -440,6 +443,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
         let new_value = match value {
             UninitV => unreachable!(),
             UnitV => UnitV,
+            UsizeV(i) => UsizeV(*i),
             IntV(i) => IntV(i.clone()),
             StrV(s) => StrV(s.clone()),
             BoolV(b) => BoolV(*b),
@@ -570,6 +574,7 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
             RValue::Unit => self.add_value(UnitV, stratum),
             RValue::Bool(b) => self.add_value(BoolV(*b), stratum),
             RValue::Integer(i) => self.add_value(IntV((*i).clone()), stratum),
+            RValue::Usize(i) => self.add_value(UsizeV(*i), stratum),
             RValue::String(s) => self.add_value(StrV(s.to_string()), stratum),
             RValue::Place(place) => self.visit_reference(place, stratum),
             RValue::Struct { name, fields } => {

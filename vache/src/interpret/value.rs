@@ -13,6 +13,8 @@ pub enum Value<'ctx> {
     UninitV,
     /// Unit value.
     UnitV,
+    /// Machine integer value.
+    UsizeV(u64),
     /// Integer value.
     IntV(num_bigint::BigInt),
     /// String value.
@@ -50,6 +52,7 @@ impl fmt::Debug for Value<'_> {
             UninitV => write!(f, "!"),
             UnitV => write!(f, "()"),
             IntV(i) => fmt::Display::fmt(i, f),
+            UsizeV(i) => fmt::Display::fmt(i, f),
             StrV(s) => write!(f, "\"{s}\""),
             BoolV(b) => fmt::Display::fmt(b, f),
             RangeV(start, end) => write!(f, "{start:?}..{end:?}"),

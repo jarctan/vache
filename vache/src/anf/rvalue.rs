@@ -15,6 +15,8 @@ pub enum RValue<'mir, 'ctx> {
     Unit,
     /// A boolean.
     Bool(bool),
+    /// Machine integer.
+    Usize(u64),
     /// An unbounded integer.
     Integer(&'mir BigInt),
     /// A string.
@@ -62,9 +64,11 @@ impl<'mir, 'ctx> RValue<'mir, 'ctx> {
                 variant: _,
                 args,
             } => boxed(args.iter_mut()),
-            RValue::Unit | RValue::Bool(..) | RValue::Integer(..) | RValue::String(..) => {
-                boxed(std::iter::empty())
-            }
+            RValue::Unit
+            | RValue::Bool(..)
+            | RValue::Usize(..)
+            | RValue::Integer(..)
+            | RValue::String(..) => boxed(std::iter::empty()),
         }
     }
 
@@ -81,9 +85,11 @@ impl<'mir, 'ctx> RValue<'mir, 'ctx> {
                 variant: _,
                 args,
             } => boxed(args.iter()),
-            RValue::Unit | RValue::Bool(..) | RValue::Integer(..) | RValue::String(..) => {
-                boxed(std::iter::empty())
-            }
+            RValue::Unit
+            | RValue::Bool(..)
+            | RValue::Usize(..)
+            | RValue::Integer(..)
+            | RValue::String(..) => boxed(std::iter::empty()),
         }
     }
 
@@ -106,6 +112,7 @@ impl<'mir, 'ctx> fmt::Debug for RValue<'mir, 'ctx> {
         match self {
             Unit => write!(f, "()"),
             Bool(b) => write!(f, "{b}"),
+            Usize(i) => write!(f, "{i}"),
             Integer(i) => write!(f, "{i}"),
             String(s) => write!(f, "\"{s}\""),
             Place(place) => write!(f, "{place:?}"),

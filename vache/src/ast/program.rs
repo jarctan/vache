@@ -4,7 +4,7 @@ use std::default::default;
 
 use pest::iterators::Pairs;
 
-use super::{Context, Enum, Fun, Parsable, Struct};
+use super::{Context, Enum, Fun, Parsable, Struct, Trait};
 use crate::grammar::*;
 
 /// A program: a collection of:
@@ -18,15 +18,23 @@ pub struct Program<'ctx> {
     pub structs: Vec<Struct<'ctx>>,
     /// List of enumerations defined in the program.
     pub enums: Vec<Enum<'ctx>>,
+    /// List of traits defined in the program.
+    pub traits: Vec<Trait<'ctx>>,
 }
 
 impl<'ctx> Program<'ctx> {
     /// Builds a program listing out of a list of structures and a list of
     /// functions.
-    pub fn new(structs: Vec<Struct<'ctx>>, enums: Vec<Enum<'ctx>>, funs: Vec<Fun<'ctx>>) -> Self {
+    pub fn new(
+        structs: Vec<Struct<'ctx>>,
+        enums: Vec<Enum<'ctx>>,
+        traits: Vec<Trait<'ctx>>,
+        funs: Vec<Fun<'ctx>>,
+    ) -> Self {
         Self {
             funs,
             structs,
+            traits,
             enums,
         }
     }
@@ -49,6 +57,7 @@ impl<'ctx> Parsable<'ctx, Pairs<'ctx, Rule>> for Program<'ctx> {
         let mut funs: Vec<_> = default();
         let mut structs: Vec<_> = default();
         let mut enums: Vec<_> = default();
+        let mut traits: Vec<_> = default();
 
         for pair in pairs {
             match pair.as_rule() {
@@ -64,6 +73,10 @@ impl<'ctx> Parsable<'ctx, Pairs<'ctx, Rule>> for Program<'ctx> {
                     let e: Enum = ctx.parse(pair);
                     enums.push(e);
                 }
+                Rule::trait_def => {
+                    let t: Trait = ctx.parse(pair);
+                    traits.push(t);
+                }
                 _ => unreachable!(),
             }
         }
@@ -71,6 +84,7 @@ impl<'ctx> Parsable<'ctx, Pairs<'ctx, Rule>> for Program<'ctx> {
         Program {
             funs,
             structs,
+            traits,
             enums,
         }
     }

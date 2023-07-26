@@ -21,6 +21,7 @@ fn mutual_structs() -> Result<()> {
             ),
         ],
         default(),
+        default(),
         vec![Fun {
             name: "main",
             ..default()

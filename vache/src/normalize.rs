@@ -55,6 +55,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
             structs,
             enums,
             arena,
+            traits,
         } = p;
 
         let mut normalizer = Self {
@@ -373,6 +374,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
         match &mut e.kind {
             tast::ExprKind::UnitE => self.visit_value(stmts, RValue::Unit, e.ty, e.span, to),
             tast::ExprKind::BoolE(b) => self.visit_value(stmts, RValue::Bool(*b), e.ty, e.span, to),
+            tast::ExprKind::UsizeE(i) => self.visit_value(stmts, RValue::Usize(*i), e.ty, e.span, to),
             tast::ExprKind::IntegerE(i) => self.visit_value(stmts, RValue::Integer(i), e.ty, e.span, to),
             tast::ExprKind::StringE(s) => self.visit_value(stmts, RValue::String(s), e.ty, e.span, to),
             tast::ExprKind::RangeE(start, end) => {

@@ -77,6 +77,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             UnitT => quote!(()),
             BoolT => quote!(#wrapper<#lft bool>),
             IntT => quote!(#wrapper<#lft __Integer>),
+            UsizeT => quote!(#wrapper<#lft u64>),
             StrT => quote!(#wrapper<#lft __String>),
             StructT(name) => {
                 let name = format_ident!("{}", name);
@@ -406,6 +407,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         match &expr.kind {
             UnitE => quote!(()),
             BoolE(b) => quote!(#wrapper_tkn::owned(#b)),
+            UsizeE(i) => quote!(#wrapper_tkn::owned(#i)),
             IntegerE(i) => {
                 // Special shortcuts for zero and one because they are so common
                 if i.is_zero() {
@@ -821,6 +823,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             funs,
             structs,
             enums,
+            traits,
             arena: _,
         } = p;
         let funs: Vec<TokenStream> = funs.into_values().map(|f| self.visit_fun(f)).collect();

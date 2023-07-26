@@ -9,7 +9,7 @@ use codespan_reporting::term::Config as TermConfig;
 use colosseum::sync;
 
 use crate::anf::{Loc, Place};
-use crate::ast::{Enum, FunSig, Mode, Namespace, Struct, Ty};
+use crate::ast::{Enum, FunSig, Mode, Namespace, Struct, Trait, Ty};
 
 /// Can be stored in and retrieved from our arena.
 pub trait Arenable<'ctx> {
@@ -63,8 +63,10 @@ arenable_elements!(
     FunSig: FunSig<'ctx>,
     Struct: Struct<'ctx>,
     Enum: Enum<'ctx>,
+    Trait: Trait<'ctx>,
     HashMapStruct: HashMap<&'ctx str, Struct<'ctx>>,
     HashMapEnum: HashMap<&'ctx str, Enum<'ctx>>,
+    HashMapTrait: HashMap<&'ctx str, Trait<'ctx>>,
     Loc: Loc<'ctx>,
     Mode: Mode
 );

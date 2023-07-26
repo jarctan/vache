@@ -13,6 +13,7 @@ pub fn get_field_and_mutate<'ctx>() -> Program<'ctx> {
             [("name", strT()), ("age", intT()), ("country", strT())],
         )],
         default(),
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![

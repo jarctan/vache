@@ -15,6 +15,7 @@ fn simple_structure() -> Result<()> {
     test(Program::new(
         vec![person_struct()],
         default(),
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![
@@ -41,6 +42,7 @@ fn simple_structure() -> Result<()> {
 fn access_unknown_field() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         default(),
         vec![Fun {
             name: "main",
@@ -69,6 +71,7 @@ fn missing_field() -> Program {
     Program::new(
         vec![person_struct()],
         default(),
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![declare(
@@ -85,6 +88,7 @@ fn missing_field() -> Program {
 fn extra_field() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         default(),
         vec![Fun {
             name: "main",
@@ -110,6 +114,7 @@ fn extra_field() -> Program {
 fn type_mismatch() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         default(),
         vec![Fun {
             name: "main",

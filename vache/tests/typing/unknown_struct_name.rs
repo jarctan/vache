@@ -24,6 +24,7 @@ fn unknown_struct_in_field() -> Program {
             ],
         )],
         default(),
+        default(),
         vec![Fun {
             name: "main",
             ..default()
@@ -36,6 +37,7 @@ fn unknown_struct_in_field() -> Program {
 fn unknown_struct_in_params() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         default(),
         vec![
             Fun {
@@ -60,6 +62,7 @@ fn unknown_struct_in_params() -> Program {
 fn unknown_struct_in_declare() -> Program {
     Program::new(
         vec![person_struct()],
+        default(),
         default(),
         vec![Fun {
             name: "main",

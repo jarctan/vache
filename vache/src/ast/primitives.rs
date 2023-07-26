@@ -38,6 +38,15 @@ impl<'ctx> Parsable<'ctx, Pair<'_, Rule>> for BigInt {
     }
 }
 
+impl<'ctx> Parsable<'ctx, Pair<'_, Rule>> for u64 {
+    fn parse(pair: Pair<Rule>, _ctx: &Context) -> Self {
+        debug_assert!(pair.as_rule() == Rule::integer);
+
+        let value = pair.as_str().replace('_', "");
+        value.parse::<u64>().unwrap()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

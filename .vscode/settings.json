@@ -63,6 +63,7 @@
         "termcolor",
         "thiserror",
         "Tpng",
+        "trayt",
         "typecheck",
         "typer",
         "tyuse",

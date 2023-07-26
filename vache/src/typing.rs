@@ -12,7 +12,7 @@ use PlaceKind::*;
 use StmtKind::*;
 use Ty::*;
 
-use crate::ast::fun::{binop_bool_sig, binop_gen_sig, binop_int_sig, unop_bool_sig};
+use crate::ast::fun_sig::{binop_gen_sig, binop_sig, unop_bool_sig};
 use crate::codes::*;
 use crate::reporter::Diagnostic;
 use crate::tast::place::LhsPlace;
@@ -27,11 +27,13 @@ pub(crate) struct Typer<'t, 'ctx> {
     /// Compilation context.
     ctx: &'t mut Context<'ctx>,
     /// Map between function names and their definitions.
-    fun_env: HashMap<&'ctx str, &'ctx ast::FunSig<'ctx>>,
+    fun_env: HashMap<&'ctx str, ast::FunSig<'ctx>>,
     /// Map between `struct` names and their definitions.
-    struct_env: HashMap<&'ctx str, &'ctx Struct<'ctx>>,
+    struct_env: HashMap<&'ctx str, Struct<'ctx>>,
     /// Map between `enum` names and their definitions.
-    enum_env: HashMap<&'ctx str, &'ctx Enum<'ctx>>,
+    enum_env: HashMap<&'ctx str, Enum<'ctx>>,
+    /// Map between `trait` names and their definitions.
+    trait_env: HashMap<&'ctx str, Trait<'ctx>>,
     /// The typing environment stack.
     env: Scoped<Varname<'ctx>, ast::VarDef<'ctx>>,
     /// The typing environment stack.
@@ -48,18 +50,20 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ctx,
             fun_env: default(),
             struct_env: default(),
+            trait_env: default(),
             enum_env: default(),
             env: default(),
             generic_types: default(),
         };
 
         // Add builtin function signatures.
-        typer.add_fun(binop_int_sig("+", IntT));
-        typer.add_fun(binop_int_sig("-", IntT));
-        typer.add_fun(binop_int_sig("*", IntT));
-        typer.add_fun(binop_int_sig("/", IntT));
-        typer.add_fun(binop_int_sig("%", IntT));
+        typer.add_fun(binop_sig("+", IntT, IntT));
+        typer.add_fun(binop_sig("-", IntT, IntT));
+        typer.add_fun(binop_sig("*", IntT, IntT));
+        typer.add_fun(binop_sig("/", IntT, IntT));
+        typer.add_fun(binop_sig("%", IntT, IntT));
         typer.add_fun(binop_gen_sig("==", TyVar::Named("T"), BoolT));
+        typer.add_fun(binop_gen_sig("!=", TyVar::Named("T"), BoolT));
         let array_t = ArrayT(typer.ctx.alloc(VarT(TyVar::Named("T"))));
         typer.add_fun(ast::FunSig {
             name: "push",
@@ -68,7 +72,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 ast::ref_param("array", array_t),
                 ast::param("el", VarT(TyVar::Named("T"))),
             ],
-            ret_ty: UnitT,
+            ret_ty: UnitT.into(),
             span: default(),
         });
         typer.add_fun(ast::FunSig {
@@ -78,24 +82,23 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 ast::ref_param("x", VarT(TyVar::Named("T"))),
                 ast::ref_param("y", VarT(TyVar::Named("T"))),
             ],
-            ret_ty: UnitT,
+            ret_ty: UnitT.into(),
             span: default(),
         });
         typer.add_fun(ast::FunSig {
             name: "len",
             ty_params: vec![TyVar::Named("T")],
             params: vec![ast::param("x", VarT(TyVar::Named("T")))],
-            ret_ty: IntT,
+            ret_ty: IntT.into(),
             span: default(),
         });
-        typer.add_fun(binop_int_sig("rand", IntT));
-        typer.add_fun(binop_int_sig("<=", BoolT));
-        typer.add_fun(binop_int_sig("<", BoolT));
-        typer.add_fun(binop_int_sig(">=", BoolT));
-        typer.add_fun(binop_int_sig(">", BoolT));
-        typer.add_fun(binop_int_sig("!=", BoolT));
-        typer.add_fun(binop_bool_sig("&&", BoolT));
-        typer.add_fun(binop_bool_sig("||", BoolT));
+        typer.add_fun(binop_sig("rand", IntT, IntT));
+        typer.add_fun(binop_sig("<=", IntT, BoolT));
+        typer.add_fun(binop_sig("<", IntT, BoolT));
+        typer.add_fun(binop_sig(">=", IntT, BoolT));
+        typer.add_fun(binop_sig(">", IntT, BoolT));
+        typer.add_fun(binop_sig("&&", BoolT, BoolT));
+        typer.add_fun(binop_sig("||", BoolT, BoolT));
         typer.add_fun(unop_bool_sig("!", BoolT));
         typer.add_fun(unop_bool_sig("assert", UnitT));
 
@@ -175,21 +178,28 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
     fn add_fun(&mut self, fun_def: impl Into<ast::FunSig<'ctx>>) {
         let fun_def = fun_def.into();
         self.check_already_declared(fun_def.name, fun_def.span);
-        self.fun_env.insert(fun_def.name, self.ctx.alloc(fun_def));
+        self.fun_env.insert(fun_def.name, fun_def);
     }
 
     /// Declares a new structure in the context.
     fn add_struct(&mut self, strukt: impl Into<Struct<'ctx>>) {
         let strukt = strukt.into();
         self.check_already_declared(strukt.name, strukt.span);
-        self.struct_env.insert(strukt.name, self.ctx.alloc(strukt));
+        self.struct_env.insert(strukt.name, strukt);
     }
 
     /// Declares a new enum in the context.
     fn add_enum(&mut self, enun: impl Into<Enum<'ctx>>) {
         let enun = enun.into();
         self.check_already_declared(enun.name, enun.span);
-        self.enum_env.insert(enun.name, self.ctx.alloc(enun));
+        self.enum_env.insert(enun.name, enun);
+    }
+
+    /// Declares a new enum in the context.
+    fn add_trait(&mut self, trayt: impl Into<Trait<'ctx>>) {
+        let trayt = trayt.into();
+        self.check_already_declared(trayt.name, trayt.span);
+        self.trait_env.insert(trayt.name, trayt);
     }
 
     /// Returns the current stratum/scope id.
@@ -283,7 +293,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 let s = self.visit_expr(s, ret_ty, in_loop);
                 match s.ty {
                     StructT(strukt) => {
-                        let strukt = self.struct_env[strukt];
+                        let strukt = &self.struct_env[strukt];
                         // Check that the field we want to access exists
                         let ty = match strukt.get_field(field) {
                             Some(ty) => ty,
@@ -415,7 +425,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ast::PlaceKind::FieldP(box s, field) => {
                 let s = self.visit_expr(s, ret_ty, in_loop);
                 if let StructT(strukt) = &s.ty {
-                    let strukt = self.struct_env[strukt];
+                    let strukt = &self.struct_env[strukt];
                     // Check that the field we want to access exists
                     let ty = match strukt.get_field(field) {
                         Some(ty) => ty,
@@ -566,6 +576,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
         if let Some(enun) = self.enum_env.get(&root) && let Some(variant) = path.next()
         && let Some(params) = enun.variants.get(variant) && path.next().is_none() {
+            // If we have a enumeration variant
             if args.len() != params.len() {
                 self.ctx.emit(
                     Diagnostic::error()
@@ -626,9 +637,28 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             }
 
             Expr::new(VariantE { enun: root, variant, args: new_args }, EnumT(enun.name), self.current_stratum(), span)
-        } else if let Some(&fun) = self.fun_env.get(root) {
-            let fun = fun.clone().instantiate_tys(self.ctx.arena, span);
-            let name = root;
+        } else {
+            // Otherwise, we'll try to find a function call
+            let fun = if let Some(fun) = self.fun_env.get(root) {
+                fun
+            } else if let Some(trayt) = self.trait_env.get(root) {
+             if let Some(method) = path.next() && let Some(method) = trayt.methods.get(method) {
+                // Function call in a trait
+                method
+             } else {
+                panic!()
+             }
+            } else {
+                self.ctx.emit(
+                    Diagnostic::error()
+                        .with_code(NOT_CALLABLE_ERROR)
+                        .with_message(
+                            format!("{} is not a callable identifier", root))
+                        .with_labels(vec![namespaced.span.as_label()])
+                );
+                return Expr::hole(namespaced.span);
+            }.clone().instantiate_tys(self.ctx.arena, span);
+            let name = fun.name;
             // Check the number of arguments.
             if args.len() != fun.params.len() {
                 self.ctx.emit(
@@ -697,15 +727,6 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 self.current_stratum(),
                 span,
             )
-        } else {
-            self.ctx.emit(
-                Diagnostic::error()
-                    .with_code(NOT_CALLABLE_ERROR)
-                    .with_message(
-                        format!("{} is not a callable identifier", root))
-                    .with_labels(vec![namespaced.span.as_label()])
-            );
-            Expr::hole(namespaced.span)
         }
     }
 
@@ -721,6 +742,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             ast::ExprKind::IntegerE(i) => {
                 Expr::new(IntegerE(i), IntT, self.current_stratum(), span)
             }
+            ast::ExprKind::UsizeE(i) => Expr::new(UsizeE(i), UsizeT, self.current_stratum(), span),
             ast::ExprKind::StringE(s) => Expr::new(StringE(s), StrT, self.current_stratum(), span),
             ast::ExprKind::NamespacedE(namespaced) => self.visit_call(namespaced, vec![], span),
             ast::ExprKind::PlaceE(place) => {
@@ -785,7 +807,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                                 Some(place) => place,
                                 None => return Expr::hole(span),
                             };
-                            if from.ty != to.ty {
+                            if !from.ty.unify(&to.ty, &mut self.subst) {
                                 self.ctx.emit(
                                     Diagnostic::error()
                                         .with_code(TYPE_MISMATCH_ERROR)
@@ -829,7 +851,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
 
                 // If and else branches must be of the same type
-                if iftrue.ret.ty != iffalse.ret.ty {
+                if !iftrue.ret.ty.unify(&iffalse.ret.ty, &mut self.subst) {
                     self.ctx.emit(
                         Diagnostic::error()
                             .with_code(TYPE_MISMATCH_ERROR)
@@ -909,7 +931,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     for (fname, Expr { ty, span, .. }) in &fields {
                         let expected = strukt.get_field(*fname).unwrap(); // Ok because we checked just before our declaration matches the structure
                                                                           // fields.
-                        if expected != *ty {
+                        if !expected.unify(ty, &mut self.subst) {
                             self.ctx.emit(
                                 Diagnostic::error()
                                     .with_code(TYPE_MISMATCH_ERROR)
@@ -1053,7 +1075,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                         Some(pat) => pat,
                         None => return Expr::hole(span),
                     };
-                    if pat.ty != matched.ty {
+                    if !pat.ty.unify(&matched.ty, &mut self.subst) {
                         self.ctx.emit(
                             Diagnostic::error()
                                 .with_code(TYPE_MISMATCH_ERROR)
@@ -1087,7 +1109,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                     // Check that all branches have the same type
                     for (_, expr) in &new_branches {
-                        if expr.ty != ty {
+                        if !expr.ty.unify(&ty, &mut self.subst) {
                             self.ctx.emit(
                                 Diagnostic::error()
                                     .with_code(TYPE_MISMATCH_ERROR)
@@ -1197,7 +1219,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
                 ast::StmtKind::WhileS { cond, body } => {
                     let cond = self.visit_expr(cond, ret_ty, in_loop);
-                    if cond.ty != BoolT {
+                    if !cond.ty.unify(&BoolT, &mut self.subst) {
                         self.ctx.emit(
                             Diagnostic::error()
                                 .with_code(TYPE_MISMATCH_ERROR)
@@ -1213,7 +1235,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     }
 
                     let body = self.visit_block(body, ret_ty, true);
-                    if body.ret.ty != UnitT {
+                    if !body.ret.ty.unify(&UnitT, &mut self.subst) {
                         self.ctx.emit(
                             Diagnostic::error()
                                 .with_message("body of expression should not return anything")
@@ -1310,7 +1332,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                 }
                 ast::StmtKind::ReturnS(ret) => {
                     let ret = self.visit_expr(ret, ret_ty, in_loop);
-                    if ret_ty.kind != ret.ty {
+                    if !ret_ty.unify(&ret.ty, &mut self.subst) {
                         self.ctx.emit(
                             Diagnostic::error()
                                 .with_code(TYPE_MISMATCH_ERROR)
@@ -1408,7 +1430,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
         let body = self.visit_block(f.body, f.ret_ty, false);
         let body_ty = &body.ret.ty;
-        if body_ty != &f.ret_ty {
+
+        if !body_ty.unify(&f.ret_ty, &mut self.subst) {
             self.ctx.emit(
                 Diagnostic::error()
                     .with_code(TYPE_MISMATCH_ERROR)
@@ -1451,6 +1474,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         let ast::Program {
             funs,
             structs,
+            traits,
             enums,
         } = p;
 
@@ -1492,16 +1516,12 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         }
 
         // Note: order is important.
-        // We must visit structures first.
-        let structs: HashMap<_, _> = structs
-            .into_iter()
-            .map(|s| (s.name, self.visit_struct(s)))
-            .collect();
+        // We must visit structures and enums first.
+        structs.into_iter().for_each(|s| self.add_struct(s));
 
-        let enums: HashMap<_, _> = enums
-            .into_iter()
-            .map(|e| (e.name, self.visit_enum(e)))
-            .collect();
+        enums.into_iter().for_each(|e| self.add_enum(e));
+
+        traits.into_iter().for_each(|t| self.add_trait(t));
 
         let funs: HashMap<_, _> = funs
             .into_iter()
@@ -1535,13 +1555,17 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         }
 
         // Finally, apply type inference substitutions recursively.
-        let structs = structs
+        let structs = std::mem::take(&mut self.struct_env)
             .into_iter()
             .map(|(name, s)| (name, s.subst_ty(self.ctx.arena, &self.subst)))
             .collect();
-        let enums = enums
+        let enums = std::mem::take(&mut self.enum_env)
             .into_iter()
             .map(|(name, e)| (name, e.subst_ty(self.ctx.arena, &self.subst)))
+            .collect();
+        let traits: HashMap<_, _> = std::mem::take(&mut self.trait_env)
+            .into_iter()
+            .map(|(name, t)| (name, t.subst_ty(self.ctx.arena, &self.subst)))
             .collect();
         let funs: HashMap<_, _> = funs
             .into_iter()
@@ -1552,6 +1576,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             arena: self.ctx.arena,
             structs: self.ctx.alloc(structs),
             enums: self.ctx.alloc(enums),
+            traits: self.ctx.alloc(traits),
             funs,
         };
 
@@ -1576,28 +1601,6 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         }
 
         p
-    }
-
-    /// Type-checks a structure.
-    fn visit_struct(&mut self, strukt: ast::Struct<'ctx>) -> Struct<'ctx> {
-        // TODO: do not return Struct in this function. Nor should we return
-        // Fun in `visit_fun`. We should just append them to the context and retrieve
-        // them all only at the end, in one go. This would avoid this
-        // disgraceful clone.
-        self.add_struct(strukt.clone());
-
-        strukt
-    }
-
-    /// Type-checks a enumeration.
-    fn visit_enum(&mut self, enun: ast::Enum<'ctx>) -> Enum<'ctx> {
-        // TODO: do not return Struct in this function. Nor should we return
-        // Fun in `visit_fun`. We should just append them to the context and retrieve
-        // them all only at the end, in one go. This would avoid this
-        // disgraceful clone.
-        self.add_enum(enun.clone());
-
-        enun
     }
 
     /// Visits a pattern.
@@ -1625,6 +1628,7 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
                     None
                 }
             },
+            ast::ExprKind::UsizeE(_) => unimplemented!(),
             ast::ExprKind::StringE(s) => Some(Pat::new(StringM(s), IntT, span)),
             ast::ExprKind::PlaceE(place) => {
                 if let ast::PlaceKind::VarP(v) = place.kind {
@@ -1665,6 +1669,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
                 if let Some(enun) = self.enum_env.get(&root) && let Some(variant) = path.next()
                 && let Some(params) = enun.variants.get(variant) && path.next().is_none() {
+                    // Clone params, we don't have much choice here
+                    let params = params.to_vec();
                     if args.len() != params.len() {
                         self.ctx.emit(
                             Diagnostic::error()

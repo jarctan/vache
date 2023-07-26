@@ -1,8 +1,10 @@
-program = _{ SOI ~ (fun | struct_def | enum_def)* ~ &EOI }
+program = _{ SOI ~ (fun | struct_def | enum_def | trait_def)* ~ &EOI }
 
 fun = { fn_kw ~ ident ~ (lt ~ (ident ~ (cma ~ ident)* ~ cma?)? ~ gt)? ~ params ~ (arw ~ ty)? ~ block }
 
-params = { lp ~ (param ~ (cma ~ param)*)? ~ rp }
+params = { lp ~ ((param | self_param) ~ (cma ~ param)*)? ~ rp }
+
+self_param = { self_kw }
 
 param = { as_mut? ~ vardef }
 
@@ -11,6 +13,10 @@ struct_def = { struct_kw ~ ident ~ (lt ~ (ident ~ (cma ~ ident)* ~ cma?)? ~ gt)?
 enum_def = { enum_kw ~ ident ~ (lt ~ (ident ~ (cma ~ ident)* ~ cma?)? ~ gt)? ~ lcb ~ (variant_def ~ (cma ~ variant_def)* ~ cma?)? ~ rcb }
 
 variant_def = { ident ~ (lp ~ ty ~ (cma ~ ty)* ~ rp)? }
+
+trait_def = { trait_kw ~ ident ~ (lt ~ (ident ~ (cma ~ ident)* ~ cma?)? ~ gt)? ~ lcb ~ method_sig* ~ rcb }
+
+method_sig = { fn_kw ~ ident ~ (lt ~ (ident ~ (cma ~ ident)* ~ cma?)? ~ gt)? ~ params ~ (arw ~ ty)? ~ sc }
 
 block = { lcb ~ (!(expr ~ rcb) ~ stmt)* ~ expr? ~ rcb }
 
@@ -51,7 +57,7 @@ binop = { prefix* ~ (with_postfix | primitive) ~ (infix ~ prefix* ~ (with_postfi
 with_postfix = { primitive ~ (field_postfix | index_postfix | call_postfix | range_postfix)+ }
 
 primitive           =  { struct_instance | primitive_wo_struct }
-primitive_wo_struct = _{ array | unit | integer | boolean | string | namespaced | tuple | subexpr | ident }
+primitive_wo_struct = _{ array | unit | integer_wrapper | boolean | string | namespaced | tuple | subexpr | ident }
 
 tuple = { lp ~ expr ~ cma ~ (expr ~ (cma ~ expr)* ~ cma?)? ~ rp }
 
@@ -80,7 +86,11 @@ range_postfix = { rg ~ expr }
 
 struct_instance = { ident ~ lcb ~ (ident ~ cln ~ expr ~ (cma ~ ident ~ cln ~ expr)* ~ cma?)? ~ rcb }
 
+integer_wrapper = { integer ~ integer_suffix }
+
 integer = @{ '0'..'9' ~ ('0'..'9' | "_")* }
+
+integer_suffix = @{ "u" | "n" | "" }
 
 boolean = @{ "true" | "false" }
 
@@ -103,7 +113,7 @@ str_ty = { "str" }
 
 int_ty = { "int" }
 
-keyword = { var_kw | struct_kw | if_kw | else_kw | while_kw | for_kw | in_kw | bool_ty | str_ty | int_ty | fn_kw | match_kw | break_kw | return_kw | continue_kw | loop_kw }
+keyword = { var_kw | struct_kw | trait_kw | self_kw | if_kw | else_kw | while_kw | for_kw | in_kw | bool_ty | str_ty | int_ty | fn_kw | match_kw | break_kw | return_kw | continue_kw | loop_kw }
 
 prefix = { bang }
 // Do not match swap keyword, that unfortunately starts with the same
@@ -171,7 +181,9 @@ if_kw       = { "if" }
 else_kw     = { "else" }
 match_kw    = { "match" }
 var_kw      = { "var" }
+self_kw     = { "self" }
 struct_kw   = { "struct" }
+trait_kw    = { "trait" }
 enum_kw     = { "enum" }
 rg          = { ".." }
 fn_kw       = { "fn" }

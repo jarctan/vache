@@ -105,7 +105,7 @@ impl BorrowChecker {
             self.check_in_place_args(f, ctx)?;
         }
 
-        // Compute the variable flow.
+        // Compute the variable flow once and for all.
         let var_flows: HashMap<&str, VarFlow> = p
             .funs
             .iter()

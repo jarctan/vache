@@ -9,56 +9,42 @@ use itertools::Itertools;
 use pest::iterators::Pair;
 
 use super::{Context, Parsable};
-use super::{Span, Ty, TySubst, TyUse, TyVar, VarDef};
+use super::{FunSig, Span, TySubst, TyVar};
 use crate::grammar::*;
 use crate::utils::Set;
 use crate::Arena;
 
-/// A C-like `struct`.
-#[derive(Clone)]
-pub struct Struct<'ctx> {
-    /// Name of the structure.
+pub struct Trait<'ctx> {
     pub name: &'ctx str,
-    /// Type parameters.
     pub ty_params: Vec<TyVar<'ctx>>,
-    /// The ordered of fields names in the code, if we ever need that order
-    /// in the backend.
-    pub fields_order: Vec<&'ctx str>,
-    /// Map of field names and their types.
-    pub fields: HashMap<&'ctx str, TyUse<'ctx>>,
-    /// Code span.
+    pub methods: HashMap<&'ctx str, FunSig<'ctx>>,
     pub span: Span,
 }
 
 /// Shortcut to create a `struct` directly.
-pub fn struct_def<'ctx>(
+pub fn trait_def<'ctx>(
     name: &'ctx str,
-    fields: impl IntoIterator<Item = (&'ctx str, TyUse<'ctx>)>,
-) -> Struct<'ctx> {
-    let mut new_fields = HashMap::new();
-    let mut fields_order = vec![];
+    methods: impl IntoIterator<Item = (&'ctx str, FunSig<'ctx>)>,
+) -> Trait<'ctx> {
+    let mut methods = methods
+        .into_iter()
+        .map(|(name, method)| (name, method))
+        .collect::<HashMap<_, _>>();
 
-    for (name, ty) in fields {
-        new_fields.insert(name, ty);
-        fields_order.push(name);
-    }
-
-    Struct {
+    Trait {
         name,
-        ty_params: vec![],
-        fields_order,
-        fields: new_fields,
+        methods,
         span: default(),
+        ty_params: default(),
     }
 }
 
-impl fmt::Debug for Struct<'_> {
+impl fmt::Debug for Trait<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
             name,
-            fields_order: _,
             ty_params,
-            fields,
+            methods,
             span: _,
         } = self; // So that if we add a new field, we don;'t forget it here
 
@@ -72,14 +58,14 @@ impl fmt::Debug for Struct<'_> {
         };
 
         let mut res = f.debug_struct(&name);
-        fields
+        methods
             .iter()
             .fold(&mut res, |res, (name, ty)| res.field(name, ty));
         res.finish()
     }
 }
 
-impl<'ctx> Struct<'ctx> {
+impl<'ctx> Trait<'ctx> {
     /// Applies a [`TySubst`] to `self`.
     pub(crate) fn subst_ty(self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Self {
         // Type parameters of the function should be removed from the substitution we
@@ -88,42 +74,40 @@ impl<'ctx> Struct<'ctx> {
 
         Self {
             name: self.name,
-            fields_order: self.fields_order,
             ty_params: self.ty_params,
-            fields: self
-                .fields
+            methods: self
+                .methods
                 .into_iter()
-                .map(|(name, ty)| (name, ty.subst(arena, &subst)))
+                .map(|(name, method)| (name, method.subst_ty(arena, &subst)))
                 .collect(),
             span: self.span,
         }
     }
 
-    /// Gets the type of a field in the structure.
-    pub fn get_field(&self, field: impl Borrow<str>) -> Option<Ty<'ctx>> {
-        self.fields.get(field.borrow()).map(|ty| ty.kind)
+    /// Gets the type of a method in the structure.
+    pub fn get_method<'a>(&'a self, field: impl Borrow<str>) -> Option<&'a FunSig<'ctx>> {
+        self.methods.get(field.borrow())
     }
 
     /// Returns the free type variables in `self`.
     pub(crate) fn free_ty_vars(&self) -> Set<TyVar<'ctx>> {
         let Self {
             name: _,
-            fields_order: _,
-            fields,
             ty_params,
+            methods,
             span: _,
         } = self;
-        fields.values().map(TyUse::free_ty_vars).sum::<Set<_>>() - ty_params.iter()
+        methods.values().map(|x| x.free_ty_vars()).sum::<Set<_>>() - ty_params.iter()
     }
 }
 
-impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Struct<'ctx> {
+impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Trait<'ctx> {
     fn parse(pair: Pair<'ctx, Rule>, ctx: &Context<'ctx>) -> Self {
-        debug_assert!(matches!(pair.as_rule(), Rule::struct_def));
+        debug_assert!(matches!(pair.as_rule(), Rule::trait_def));
 
         let span = Span::from(pair.as_span());
         let mut pairs = pair.into_inner().peekable();
-        consume!(pairs, Rule::struct_kw);
+        consume!(pairs, Rule::trait_kw);
         let name = consume!(pairs).as_str();
 
         // Parse optional type parameters
@@ -140,25 +124,21 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Struct<'ctx> {
             }
         }
 
-        // Parse fields
+        // Parse methods
         consume!(pairs, Rule::lcb);
         consume_back!(pairs, Rule::rcb);
 
-        let mut fields = HashMap::new();
-        let mut fields_order = vec![];
+        let methods = pairs
+            .map(|pair| {
+                let method: FunSig = ctx.parse(pair);
+                (method.name, method)
+            })
+            .collect();
 
-        for field in pairs.filter(|field| !matches!(field.as_rule(), Rule::cma | Rule::rcb)) {
-            let vardef: VarDef = ctx.parse(field);
-            let name = vardef.name.as_str();
-            fields.insert(name, vardef.ty);
-            fields_order.push(name);
-        }
-
-        Struct {
+        Trait {
             name,
-            fields_order,
             ty_params,
-            fields,
+            methods,
             span,
         }
     }

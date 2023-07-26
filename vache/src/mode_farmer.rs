@@ -122,7 +122,7 @@ impl<'a, 'ctx> ModeFarmer<'a, 'ctx> {
     /// Collects referencing modes in an expression.
     fn visit_expr(&mut self, e: &Expr<'ctx>) {
         match &e.kind {
-            UnitE | BoolE(_) | IntegerE(_) | StringE(_) => (),
+            UnitE | BoolE(_) | IntegerE(_) | UsizeE(_) | StringE(_) => (),
             PlaceE(place) => self.visit_place(place),
             RangeE(box e1, box e2) => {
                 self.visit_expr(e1);

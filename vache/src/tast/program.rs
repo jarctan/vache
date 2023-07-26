@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use super::{Enum, Fun, Struct, TyVar};
+use super::{Enum, Fun, Struct, Trait, TyVar};
 use crate::utils::Set;
 use crate::Arena;
 
@@ -21,6 +21,8 @@ pub struct Program<'ctx> {
     /// Collection of enumerations defined in the program, indexed by their
     /// names.
     pub enums: &'ctx HashMap<&'ctx str, Enum<'ctx>>,
+    /// List of traits defined in the program.
+    pub traits: &'ctx HashMap<&'ctx str, Trait<'ctx>>,
 }
 
 impl<'ctx> Program<'ctx> {
@@ -31,10 +33,12 @@ impl<'ctx> Program<'ctx> {
             funs,
             structs,
             enums,
+            traits,
         } = self;
         funs.values().map(Fun::free_ty_vars).sum::<Set<_>>()
             + structs.values().map(Struct::free_ty_vars).sum::<Set<_>>()
             + enums.values().map(Enum::free_ty_vars).sum::<Set<_>>()
+            + traits.values().map(Trait::free_ty_vars).sum::<Set<_>>()
     }
 }
 
@@ -45,11 +49,13 @@ impl<'ctx> fmt::Debug for Program<'ctx> {
             structs,
             enums,
             arena: _,
+            traits,
         } = self; // So that if we add a new field, we don;'t forget it here
 
         f.debug_struct("Program")
             .field("Functions", &funs.values())
             .field("Structures", &structs.values())
+            .field("Traits", &traits.values())
             .field("Enumerations", &enums.values())
             .finish()
     }

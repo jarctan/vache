@@ -10,6 +10,7 @@ pub fn change_field<'ctx>() -> Program<'ctx> {
             [("name", strT()), ("age", intT()), ("country", strT())],
         )],
         default(),
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![

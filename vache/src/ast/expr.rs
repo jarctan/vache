@@ -76,6 +76,8 @@ pub enum ExprKind<'ctx> {
     BoolE(bool),
     /// An unbounded integer.
     IntegerE(BigInt),
+    /// A machine integer.
+    UsizeE(u64),
     /// A string.
     StringE(&'ctx str),
     /// A variable.
@@ -170,6 +172,18 @@ impl<'ctx> Expr<'ctx> {
     pub fn as_integer(&self) -> Option<&BigInt> {
         if let IntegerE(ref i) = &self.kind {
             Some(i)
+        } else {
+            None
+        }
+    }
+
+    /// Sees this expression as a machine integer.
+    ///
+    /// # Errors
+    /// Returns `None` if the expression is not a machine integer.
+    pub fn as_usize(&self) -> Option<u64> {
+        if let UsizeE(ref i) = &self.kind {
+            Some(*i)
         } else {
             None
         }
@@ -428,7 +442,16 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Expr<'ctx> {
                 let pair = pair.into_inner().next().unwrap();
                 match pair.as_rule() {
                     Rule::unit => UnitE,
-                    Rule::integer => IntegerE(ctx.parse(pair)),
+                    Rule::integer_wrapper => {
+                        let mut pairs = pair.into_inner();
+                        let integer = consume!(pairs, Rule::integer);
+                        let suffix = consume!(pairs, Rule::integer_suffix);
+                        match suffix.as_str() {
+                            "u" => UsizeE(ctx.parse(integer)),
+                            "" => IntegerE(ctx.parse(integer)),
+                            _ => panic!("internal parser error, unexpected suffix"),
+                        }
+                    }
                     Rule::boolean => BoolE(ctx.parse(pair)),
                     Rule::string => StringE(ctx.parse(pair)),
                     Rule::ident => PlaceE(Place::new(VarP(ctx.parse(pair)), span, default())),

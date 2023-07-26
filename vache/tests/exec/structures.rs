@@ -12,6 +12,7 @@ fn simple_field_access() -> Program {
     Program::new(
         vec![person_struct()],
         default(),
+        default(),
         vec![Fun {
             name: "main",
             body: stmts(vec![

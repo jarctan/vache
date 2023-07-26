@@ -22,6 +22,8 @@ pub enum Ty<'ctx> {
     BoolT,
     /// An unbounded integer.
     IntT,
+    /// Machine integer.
+    UsizeT,
     /// The string type.
     StrT,
     /// Structures.
@@ -60,7 +62,9 @@ impl<'ctx> Ty<'ctx> {
     ///   change, NO substitution has been made/could be applied.
     fn _subst(&self, arena: &'ctx Arena<'ctx>, subst: &TySubst<'ctx>) -> Result<Self, Self> {
         match *self {
-            self_ty @ (UnitT | BoolT | IntT | StrT | StructT(_) | EnumT(_)) => Err(self_ty),
+            self_ty @ (UnitT | BoolT | IntT | UsizeT | StrT | StructT(_) | EnumT(_)) => {
+                Err(self_ty)
+            }
             self_ty @ VarT(v) => {
                 if let Some(to) = subst.get(v) {
                     Ok(to)
@@ -102,7 +106,7 @@ impl<'ctx> Ty<'ctx> {
     /// Returns the free type variables in `self`.
     pub fn free_vars(&self) -> Set<TyVar<'ctx>> {
         match *self {
-            UnitT | BoolT | IntT | StrT => default(),
+            UnitT | BoolT | UsizeT | IntT | StrT => default(),
             StructT(_) | EnumT(_) => default(),
             VarT(v) => [v].into_iter().collect(),
             ArrayT(array) => array.free_vars(),
@@ -114,7 +118,7 @@ impl<'ctx> Ty<'ctx> {
     /// Does this type variable occur in this type?
     pub fn occurs(&self, var: TyVar<'ctx>) -> bool {
         match *self {
-            UnitT | BoolT | IntT | StrT => false,
+            UnitT | BoolT | UsizeT | IntT | StrT => false,
             StructT(_) | EnumT(_) => false,
             VarT(v) => v == var,
             ArrayT(array) => array.occurs(var),
@@ -149,7 +153,7 @@ impl<'ctx> Ty<'ctx> {
     pub fn unify(&self, other: &Self, subst: &mut TySubst<'ctx>) -> bool {
         // Convoluted way of pattern matching, but this way we will get a compile
         // error if we add a new variant but forget to handle it here.
-        match (*self, *other) {
+        let res = match (*self, *other) {
             // If we have a type variable, first check if there is a substitution for it
             (VarT(name), ty) | (ty, VarT(name)) if let Some(mapped) = subst.get(name) => {
                 mapped.unify(&ty, subst)
@@ -173,6 +177,8 @@ impl<'ctx> Ty<'ctx> {
             (BoolT, _) => false,
             (IntT, IntT) => true,
             (IntT, _) => false,
+            (UsizeT, UsizeT) => true,
+            (UsizeT, _) => false,
             (StrT, StrT) => true,
             (StrT, _) => false,
             (ArrayT(inner1), ArrayT(inner2)) => inner1.unify(inner2, subst),
@@ -194,7 +200,8 @@ impl<'ctx> Ty<'ctx> {
             (StructT(..), _) => false,
             (EnumT(name1), EnumT(name2)) => name1 == name2,
             (EnumT(..), _) => false,
-        }
+        };
+        res
     }
 }
 
@@ -208,7 +215,7 @@ impl Ty<'_> {
     /// Is this type [`Copy`] in Rust (if bitwise copy is sufficient).
     pub fn copyable(&self) -> bool {
         match self {
-            UnitT | BoolT => true,
+            UnitT | BoolT | UsizeT => true,
             IntT | StrT | StructT(_) | EnumT(_) | ArrayT(_) | IterT(_) => false,
             // Tuple is copy only if all items are copy
             TupleT(items) => items.iter().all(|item| item.copyable()),
@@ -227,6 +234,7 @@ impl fmt::Display for Ty<'_> {
             UnitT => write!(f, "()"),
             BoolT => write!(f, "bool"),
             IntT => write!(f, "int"),
+            UsizeT => write!(f, "index"),
             StrT => write!(f, "str"),
             StructT(s) => write!(f, "{s}"),
             EnumT(e) => write!(f, "{e}"),

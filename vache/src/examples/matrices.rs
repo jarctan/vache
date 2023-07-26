@@ -8,7 +8,8 @@ use super::*;
 /// consume when modifying.
 pub fn simple_matrix_modify_consume() -> impl Into<Program<'static>> {
     Program::new(
-        vec![],
+        default(),
+        default(),
         default(),
         vec![Fun {
             name: "main",
@@ -29,6 +30,7 @@ pub fn simple_matrix_modify_consume() -> impl Into<Program<'static>> {
 pub fn simple_matrix_modify() -> impl Into<Program<'static>> {
     Program::new(
         vec![],
+        default(),
         default(),
         vec![Fun {
             name: "main",

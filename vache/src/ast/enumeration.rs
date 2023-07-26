@@ -123,16 +123,24 @@ impl<'ctx> Parsable<'ctx, Pair<'ctx, Rule>> for Enum<'ctx> {
 
         // Parse variants
         consume!(pairs, Rule::lcb);
+        consume_back!(pairs, Rule::rcb);
         let variants = pairs
-            .filter(|arg| !matches!(arg.as_rule(), Rule::cma | Rule::rcb))
+            .filter(|arg| !matches!(arg.as_rule(), Rule::cma))
             .map(|variant| {
                 debug_assert!(matches!(variant.as_rule(), Rule::variant_def));
                 let mut pairs = variant.into_inner();
                 let name = consume!(pairs).as_str();
-                let args: Vec<_> = pairs
-                    .filter(|arg| !matches!(arg.as_rule(), Rule::lp | Rule::rp | Rule::cma))
-                    .map(|arg| ctx.parse(arg))
-                    .collect();
+
+                // Parse optional parenthesis and arguments
+                let args = if consume_opt!(pairs, Rule::lp).is_some() {
+                    consume_back!(pairs, Rule::rp);
+                    pairs
+                        .filter(|arg| !matches!(arg.as_rule(), Rule::lp | Rule::cma))
+                        .map(|arg| ctx.parse(arg))
+                        .collect_vec()
+                } else {
+                    vec![]
+                };
                 (name, args)
             })
             .collect();
