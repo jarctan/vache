@@ -30,6 +30,6 @@ pub use var::vardef;
 pub use var::{VarDef, VarUse};
 
 pub use crate::ast::{
-    Enum, LineCol, LineColSpan, Mode, Namespaced, Span, Struct, Trait, Ty, TySubst, TyUse, TyVar,
-    Varname,
+    Enum, FunSig, LineCol, LineColSpan, Mode, Namespaced, Span, Struct, Trait, Ty, TySubst, TyUse,
+    TyVar, Varname,
 };

@@ -11,7 +11,7 @@ pub fn functions() -> TokenStream {
         // implemented by the user
         pub(crate) trait __PartialEq<Rhs = Self>
         where
-            Self: Clone,
+            Self: ::std::clone::Clone,
         {
             fn eq<'b>(
                 x: Cow<'b, Self>,

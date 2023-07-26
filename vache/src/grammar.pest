@@ -113,9 +113,9 @@ str_ty = { "str" }
 
 int_ty = { "int" }
 
-keyword = { var_kw | struct_kw | trait_kw | self_kw | if_kw | else_kw | while_kw | for_kw | in_kw | bool_ty | str_ty | int_ty | fn_kw | match_kw | break_kw | return_kw | continue_kw | loop_kw }
+keyword = { var_kw | struct_kw | trait_kw | self_kw | if_kw | else_kw | while_kw | for_kw | in_kw | bool_ty | str_ty | int_ty | fn_kw | match_kw | break_kw | return_kw | continue_kw | loop_kw | not_in | not }
 
-prefix = { bang }
+prefix = { bang | not }
 // Do not match swap keyword, that unfortunately starts with the same
 infix = { !swap_kw ~ (add | sub | mul | div | rem | pow | le | lt | ge | gt | eqq | neq | and | or | not_in) }
 

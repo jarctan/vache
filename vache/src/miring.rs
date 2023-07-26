@@ -347,6 +347,7 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
             funs,
             structs,
             enums,
+            traits,
         } = p;
 
         // Note: order is important.
@@ -358,6 +359,7 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
                 .collect(),
             structs,
             enums,
+            traits,
         }
     }
 }

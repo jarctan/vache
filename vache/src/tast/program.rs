@@ -21,7 +21,7 @@ pub struct Program<'ctx> {
     /// Collection of enumerations defined in the program, indexed by their
     /// names.
     pub enums: &'ctx HashMap<&'ctx str, Enum<'ctx>>,
-    /// List of traits defined in the program.
+    /// Collection of traits defined in the program, indexed by their names.
     pub traits: &'ctx HashMap<&'ctx str, Trait<'ctx>>,
 }
 

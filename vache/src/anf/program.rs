@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use super::{Enum, Fun, Struct};
+use super::{Enum, Fun, Struct, Trait};
 
 /// A program: a collection of:
 /// * structures
@@ -16,4 +16,6 @@ pub struct Program<'mir, 'ctx> {
     /// Collection of enumerations defined in the program, indexed by their
     /// names.
     pub enums: &'ctx HashMap<&'ctx str, Enum<'ctx>>,
+    /// Collection of traits defined in the program, indexed by their names.
+    pub traits: &'ctx HashMap<&'ctx str, Trait<'ctx>>,
 }

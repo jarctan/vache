@@ -14,8 +14,9 @@ use Ty::*;
 
 use crate::lft_name_gen::LftGenerator;
 use crate::tast::{
-    Arg, ArgKind, Block, Enum, Expr, ExprKind, Fun, LhsMode, LhsPlace, LineCol, Mode, Pat, PatKind,
-    Place, PlaceKind, Program, Stmt, StmtKind, Struct, Ty, TyVar, Varname,
+    Arg, ArgKind, Block, Enum, Expr, ExprKind, Fun, FunSig, LhsMode, LhsPlace, LineCol, Mode,
+    Namespaced, Pat, PatKind, Place, PlaceKind, Program, Stmt, StmtKind, Struct, Trait, Ty, TyVar,
+    Varname,
 };
 use crate::Context;
 
@@ -314,7 +315,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     }
 
     /// Compiles a struct.
-    fn visit_struct(&mut self, strukt: &Struct) -> TokenStream {
+    fn visit_struct(&mut self, strukt: &Struct<'ctx>) -> TokenStream {
         let name = format_ident!("{}", strukt.name);
 
         let ty_params = strukt.ty_params.iter().map(|param| match param {
@@ -352,7 +353,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     }
 
     /// Compiles an `enum`.
-    fn visit_enum(&mut self, enun: &Enum) -> TokenStream {
+    fn visit_enum(&mut self, enun: &Enum<'ctx>) -> TokenStream {
         let name = format_ident!("{}", enun.name);
 
         // Generate one lifetime for our structure.
@@ -392,6 +393,38 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             #[derive(Debug, Clone)]
             pub enum #name<#a, #(#ty_params_w_bounds,)*> {
                 #variants
+            }
+        )
+    }
+
+    /// Compiles a struct.
+    fn visit_trait(&mut self, trayt: &Trait<'ctx>) -> TokenStream {
+        let name = format_ident!("{}", trayt.name);
+
+        let ty_params = trayt.ty_params.iter().map(|param| match param {
+            TyVar::Named(name) => {
+                let name = format_ident!("{}", name);
+                quote!(#name: ::std::fmt::Debug + ::std::clone::Clone)
+            }
+            TyVar::Gen(..) => unreachable!(),
+        });
+
+        let (structs, methods): (Vec<_>, Vec<_>) = trayt
+            .methods
+            .values()
+            .map(|fun_sig| {
+                self.visit_fun_sig(
+                    fun_sig,
+                    false,
+                    format_ident!("__{}__{}Ret", trayt.name, fun_sig.name),
+                )
+            })
+            .unzip();
+
+        quote!(
+            #(#structs)*
+            pub trait #name<#(#ty_params,)*> where Self: ::std::clone::Clone {
+                #(#methods)*
             }
         )
     }
@@ -518,7 +551,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                         "push" => quote!(__Vec::push),
                         "len" => quote!(__Vec::len),
                         _ => {
-                            let ident = format_ident!("{}", name.name);
+                            let ident = self.visit_namespaced(name);
                             quote!(#ident)
                         }
                     };
@@ -717,6 +750,104 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         }
     }
 
+    /// Compiles a function signature.
+    /// I.e., `fn test(x: T) -> T;`.
+    ///
+    /// * `mut_params`: mutable parameters
+    /// * `ret_struct_name`: name of the structure to hold the result of the
+    ///   in-place parameters
+    ///
+    /// Returns:
+    /// * the structure to hold the result of the in-place parameters
+    /// * the function signature
+    fn visit_fun_sig(
+        &mut self,
+        f: &FunSig<'ctx>,
+        mut_params: bool,
+        ret_struct_name: syn::Ident,
+    ) -> (TokenStream, TokenStream) {
+        let name = format_ident!("{}", f.name);
+
+        let ty_params = f.ty_params.iter().map(|param| match param {
+            TyVar::Named(name) => {
+                let name = format_ident!("{}", name);
+                quote!(#name: ::std::fmt::Debug + ::std::clone::Clone)
+            }
+            TyVar::Gen(..) => unreachable!(),
+        });
+
+        // Generate two lifetimes for our structure.
+        let mut lft_generator = LftGenerator::new();
+        let a = lft_generator.generate();
+        let b = lft_generator.generate();
+
+        // Tokenize all the parameters
+        let params: Vec<TokenStream> = f
+            .params
+            .iter()
+            .map(|param| {
+                let name = format_ident!("{}", param.var.name().as_str());
+                // `Var` for pass-by-reference, `Cow` for pass-by-value
+                let ty = if param.byref {
+                    Self::translate_type(&param.ty(), &[&a, &b], Wrapper::Var)
+                } else {
+                    Self::translate_type(&param.ty(), &[&b], Wrapper::Cow)
+                };
+                if mut_params {
+                    quote!(mut #name: #ty)
+                } else {
+                    quote!(#name: #ty)
+                }
+            })
+            .collect();
+
+        // Tokenize the user-facing return type of the function
+        let ret_ty = match f.ret_ty.kind {
+            UnitT => quote!(()),
+            ty => Self::translate_type(&ty, &[&b], Wrapper::Cow), /* DO NOT add a `Var` on the
+                                                                   * return
+                                                                   * type!! */
+        };
+
+        // Get the list of in-place parameters
+        let ret_params: Vec<_> = f.params.iter().filter(|param| param.byref).collect();
+        // Their type
+        let ret_params_ty: Vec<_> = ret_params
+            .iter()
+            .map(|param| Self::translate_type(&param.ty(), &[&b], Wrapper::Cow))
+            .collect();
+        // Their name
+        let ret_vars: Vec<_> = ret_params
+            .iter()
+            .map(|param| format_ident!("{}", param.var.name().as_str()))
+            .collect();
+
+        // Create a tailored structure to hold the result of the in-place parameters
+        let ret_struct_full_name = if ret_vars.is_empty() {
+            quote!(#ret_struct_name)
+        } else {
+            quote!(#ret_struct_name<#b>)
+        };
+        let ret_struct_fields = ret_vars
+            .iter()
+            .zip(ret_params_ty.iter())
+            .map(|(name, ty)| quote!(#name: Option<#ty>));
+        let ret_struct = quote! {
+            pub struct #ret_struct_full_name {
+                #(#ret_struct_fields),*
+            }
+        };
+
+        // Thanks to that struct, we now know what the full return type of the function
+        // is
+        let full_ret_ty = quote!(__Result<__Ret<#ret_ty, #ret_struct_full_name>>);
+
+        (
+            quote!(#ret_struct),
+            quote!(fn #name<#(#ty_params,)* #a, #b>(#(#params),*) -> #full_ret_ty;),
+        )
+    }
+
     /// Compiles a function.
     fn visit_fun(&mut self, f: Fun<'ctx>) -> TokenStream {
         let name = format_ident!("{}", f.name);
@@ -829,10 +960,20 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
         let funs: Vec<TokenStream> = funs.into_values().map(|f| self.visit_fun(f)).collect();
         let structs: Vec<TokenStream> = structs.values().map(|s| self.visit_struct(s)).collect();
         let enums: Vec<TokenStream> = enums.values().map(|s| self.visit_enum(s)).collect();
+        let traits: Vec<TokenStream> = traits.values().map(|t| self.visit_trait(t)).collect();
         quote! {
             #(#structs)*
             #(#enums)*
+            #(#traits)*
             #(#funs)*
         }
+    }
+
+    /// Visit a namespaced element.
+    fn visit_namespaced(&self, namespaced: &Namespaced<'ctx>) -> TokenStream {
+        namespaced.path().fold(quote!(self), |quote, name| {
+            let name = format_ident!("{}", name);
+            quote!(#quote::#name)
+        })
     }
 }

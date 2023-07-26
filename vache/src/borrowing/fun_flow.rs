@@ -8,7 +8,7 @@ use std::default::default;
 
 use itertools::Itertools;
 
-use crate::mir::{Instr, InstrKind, Pointer, Reference};
+use crate::mir::{FunSig, Instr, InstrKind, Pointer, Reference};
 
 /// Argument number.
 type ArgNb = usize;
@@ -48,6 +48,23 @@ impl FunFlow {
             args: default(),
             ret: deps.into_iter().collect(),
         }
+    }
+
+    /// Return the maximal (worse-case) flow possible for a given function
+    /// signature.
+    pub fn maximal(f: &FunSig<'_>) -> Self {
+        let len = f.params.len();
+        // The maximal flow is:
+        // * the return value depends on all the arguments
+        // * each by-reference argument depends on all the other arguments
+        Self::new(
+            f.params
+                .iter()
+                .enumerate()
+                .filter(|(_, arg)| arg.byref)
+                .map(|(i, _)| (i, (0..len).filter(move |&j| i != j))),
+            0..len,
+        )
     }
 }
 

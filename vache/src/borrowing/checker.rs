@@ -100,6 +100,12 @@ impl BorrowChecker {
             fun_flow.insert(name, FunFlow::default());
         }
 
+        for t in p.traits.values() {
+            for (name, m) in &t.methods {
+                fun_flow.insert(name, FunFlow::maximal(m));
+            }
+        }
+
         // First, check the correctness of in-place variables.
         for f in p.funs.values() {
             self.check_in_place_args(f, ctx)?;

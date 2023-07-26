@@ -73,6 +73,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 .collect(),
             structs,
             enums,
+            traits,
         }
     }
 

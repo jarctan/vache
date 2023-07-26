@@ -214,7 +214,7 @@ pub fn liveness<'ctx>(
         // Note: `loan_flow` is mutable because we flush its invalidations after
         let mut loan_flow = loop {
             // Now, compute loan analysis
-            let loan_flow = loan_liveness(f, &var_flow, fun_flow);
+            let loan_flow = loan_liveness(f, var_flow, fun_flow);
 
             let mut updated = false;
             // Check last variable use and replace with a move

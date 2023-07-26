@@ -14,10 +14,15 @@ use crate::grammar::*;
 use crate::utils::Set;
 use crate::Arena;
 
+/// Rust-like traits.
 pub struct Trait<'ctx> {
+    /// Trait name.
     pub name: &'ctx str,
+    /// Type parameters for the trait.
     pub ty_params: Vec<TyVar<'ctx>>,
+    /// (Required) methods.
     pub methods: HashMap<&'ctx str, FunSig<'ctx>>,
+    /// Span in the source code.
     pub span: Span,
 }
 
@@ -26,7 +31,7 @@ pub fn trait_def<'ctx>(
     name: &'ctx str,
     methods: impl IntoIterator<Item = (&'ctx str, FunSig<'ctx>)>,
 ) -> Trait<'ctx> {
-    let mut methods = methods
+    let methods = methods
         .into_iter()
         .map(|(name, method)| (name, method))
         .collect::<HashMap<_, _>>();
