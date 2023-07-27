@@ -9,7 +9,7 @@ use std::iter::Sum;
 use itertools::Itertools;
 
 use super::{Borrow, BorrowCnt, Borrows, InvalidationReason, Invalidations, Loan, LocTree};
-use crate::mir::{CfgLabel, Loc, Mode, Place, Reference};
+use crate::mir::{CfgLabel, Loc, Mode, Place, Reference, Span};
 use crate::utils::Set;
 
 /// A loan ledger.
@@ -44,54 +44,64 @@ impl<'ctx> Ledger<'ctx> {
     /// the borrow of `reference` at CFG label `label`.
     pub fn borrow<'mir>(
         &mut self,
-        reference: &Reference<'mir, 'ctx>,
+        references: &Vec<&Reference<'mir, 'ctx>>,
         label: CfgLabel,
-    ) -> Vec<Loan<'ctx>> {
-        let span = reference.as_ptr().span;
-        match reference.mode() {
-            Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed | Mode::SMutBorrowed => {
-                // You clone their loans + the loan into the borrowed pointer
-                vec![Loan {
-                    ptr: reference.as_ptr(),
-                    label,
-                    span,
-                }]
-            }
-            Mode::Moved => {
-                // You take their place, so you take all their borrows!
-                // We remove the loans from that place
-                let borrows = self
-                    .borrows(reference.place())
-                    .map(move |borrow| Loan {
+    ) -> (Vec<Loan<'ctx>>, Set<Loc<'ctx>>) {
+        let mut flushed = Set::new();
+        let mut loans = vec![];
+
+        for reference in references {
+            let span = reference.as_ptr().span;
+            match reference.mode() {
+                Mode::Borrowed | Mode::SBorrowed | Mode::MutBorrowed | Mode::SMutBorrowed => {
+                    // You clone their loans + the loan into the borrowed pointer
+                    loans.push(Loan {
+                        ptr: reference.as_ptr(),
+                        label,
+                        span,
+                    });
+                }
+                Mode::Moved => {
+                    // You take their place, so you take all their borrows!
+                    // We remove the loans from that place
+                    loans.extend(self.borrows(reference.place()).map(move |borrow| Loan {
                         label: borrow.label,
                         span: borrow.span,
                         ptr: borrow.ptr,
-                    })
-                    .collect();
+                    }));
 
-                // All current loans will get invalidated
-                self.flush_loc(*reference.loc(), true);
-
-                borrows
+                    flushed.insert(*reference.loc());
+                }
+                Mode::Cloned => (),
             }
-            Mode::Cloned => vec![],
         }
+
+        // All moved are invalidated
+        (loans, flushed)
     }
 
     /// Removes a place from the tracked locations in the ledger.
     ///
     /// Is a no-op if the place is not a location, but only part of it.
-    pub fn flush_place(&mut self, place: impl Into<Place<'ctx>>, force: bool) {
+    pub fn flush_place(&mut self, place: impl Into<Place<'ctx>>, span: Span, force: bool) {
         let place = place.into();
         if let Ok(loc) = Loc::try_from(place) {
-            self.flush_loc(loc, force);
+            self.flush_loc(loc, span, force);
         }
     }
 
     /// Removes a location from the tracked locations in the ledger.
     ///
     /// Returns the borrows that have been removed as a consequence.
-    fn flush_loc(&mut self, loc: impl Into<Loc<'ctx>>, force: bool) -> Set<Borrow<'ctx>> {
+    ///
+    /// Span is an extra annotation to say where the loc is being flushed. Only
+    /// used for reporting.
+    fn flush_loc(
+        &mut self,
+        loc: impl Into<Loc<'ctx>>,
+        span: Span,
+        force: bool,
+    ) -> Set<Borrow<'ctx>> {
         let loc = loc.into();
 
         // Get back our borrows, but filter out those that are about us (they are not
@@ -128,7 +138,7 @@ impl<'ctx> Ledger<'ctx> {
                 .unwrap_or_default()
                 .into_iter()
                 .map(Loan::from)
-                .map(|loan| (loan, vec![InvalidationReason::OutOfScope(loc)]));
+                .map(|loan| (loan, vec![InvalidationReason::OutOfScope(loc, span)]));
             /*if !removed_loans.is_empty() {
                 #[cfg(not(test))]
                 println!("Invalidated ici with {:?}", removed_loans);
@@ -140,8 +150,16 @@ impl<'ctx> Ledger<'ctx> {
     }
 
     /// Simultaneous removal of several locations from the ledger.
-    pub fn flush_locs(&mut self, locs: impl Iterator<Item = Loc<'ctx>>, force: bool) {
-        let locs_vec = locs.unique().collect_vec();
+    ///
+    /// Span is an extra annotation to say where the loc is being flushed. Only
+    /// used for reporting.
+    pub fn flush_locs(
+        &mut self,
+        locs: impl IntoIterator<Item = Loc<'ctx>>,
+        span: Span,
+        force: bool,
+    ) {
+        let locs_vec = locs.into_iter().unique().collect_vec();
         let locs: LocTree<_> = locs_vec.iter().copied().collect();
 
         if locs.is_empty() {
@@ -196,18 +214,26 @@ impl<'ctx> Ledger<'ctx> {
                 .into_iter()
                 .filter(|loan| !locs.contains(loan.borrower))
                 .map(Loan::from)
-                .map(|loan| (loan, vec![InvalidationReason::OutOfScope(*loc)]));
+                .map(|loan| (loan, vec![InvalidationReason::OutOfScope(*loc, span)]));
             self.invalidations.extend(removed_loans);
         }
     }
 
     /// Records the updated borrows of a place in the ledger.
-    pub fn set_borrows(&mut self, place: impl Into<Place<'ctx>>, borrows: Borrows<'ctx>) {
+    ///
+    /// Span is an extra annotation to say where the loc is being flushed. Only
+    /// used for reporting.
+    pub fn set_borrows(
+        &mut self,
+        place: impl Into<Place<'ctx>>,
+        borrows: Borrows<'ctx>,
+        span: Span,
+    ) {
         let place = place.into();
         let loc = place.root();
 
         // First, flush the place.
-        self.flush_place(place, true);
+        self.flush_place(place, span, true);
 
         // Register on the loaner side
         for &borrow in &borrows {

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use itertools::Itertools;
 
-use super::{Borrows, Flow, FunFlow, InvalidationReason, Invalidations, Ledger, Loan, LocTree};
+use super::{Flow, FunFlow, InvalidationReason, Invalidations, Ledger, Loan, LocTree};
 use crate::codes::BORROW_ERROR;
 use crate::mir::{Cfg, CfgI, CfgLabel, Fun, InstrKind, Loc, Mode};
 use crate::reporter::Diagnostic;
@@ -137,15 +137,16 @@ fn loan_liveness<'ctx>(
                     let flow = instr.flow(fun_flow);
 
                     for (assigned, refs) in flow {
-                        let borrows: Borrows = refs
-                            .iter()
-                            .flat_map(|reference| outs.borrow(reference, label))
+                        let (loans, flushed) = outs.borrow(&refs, label);
+                        let borrows = loans
+                            .into_iter()
                             .map(|loan| loan.into_borrow(*assigned.loc()))
                             .collect();
+                        outs.flush_locs(flushed, assigned.span, true);
                         if var_flow[&label].outs.contains(assigned.loc()) {
-                            outs.set_borrows(assigned.place(), borrows);
+                            outs.set_borrows(assigned.place(), borrows, assigned.span);
                         } else {
-                            outs.flush_place(assigned.place(), true);
+                            outs.flush_place(assigned.place(), assigned.span, true);
                         }
                     }
                 }
@@ -153,7 +154,7 @@ fn loan_liveness<'ctx>(
 
             // Optionally remove locations that go out of scope at the end of this
             // instruction
-            outs.flush_locs(out_of_scope[&label].get_all_locs(), false);
+            outs.flush_locs(out_of_scope[&label].get_all_locs(), instr.span, false);
 
             // Remove locations that can really be destroyed at the end of this instruction
             // To do so, compute the worst case stratum after that instruction, that is the
@@ -169,7 +170,7 @@ fn loan_liveness<'ctx>(
             // and our stratum (included)
             for stm in successor_stm.higher()..=instr.scope {
                 if let Some(set) = f.strata.get(&stm) {
-                    outs.flush_locs(set.iter().map(Loc::from), true);
+                    outs.flush_locs(set.iter().map(Loc::from), instr.span, true);
                 }
             }
 
@@ -218,7 +219,7 @@ pub fn liveness<'ctx>(
 
             let mut updated = false;
             // Check last variable use and replace with a move
-            for (label, instr) in f.body.bfs_mut(f.entry_l, false) {
+            'moveLoop: for (label, instr) in f.body.bfs_mut(f.entry_l, false) {
                 let var_outs = &var_flow[&label].outs;
                 let borrows_in = &loan_flow[&label].ins;
 
@@ -251,6 +252,7 @@ pub fn liveness<'ctx>(
                                 if loans.count() == 0 {
                                     updated = true;
                                     reference.set_mode(Mode::Moved);
+                                    break 'moveLoop;
                                 }
                             }
                         }

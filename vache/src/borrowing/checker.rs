@@ -81,9 +81,9 @@ impl BorrowChecker {
         fun_flow: &HashMap<&'ctx str, FunFlow>,
         var_flow: &VarFlow<'ctx>,
     ) -> Result<FunFlow> {
+        // println!("{:?}", f.strata);
         let res = liveness(f, fun_flow, var_flow, ctx)?;
         // println!("Flow for {} is {res:?}", f.name);
-        // f.body.print_image(f.name)?;
         Ok(res)
     }
 
@@ -96,7 +96,8 @@ impl BorrowChecker {
         // Bootstrap function flow with one for each function.
         // The flow is empty for all functions except the builtins.
         let mut fun_flow = builtin_flows();
-        for name in p.funs.keys() {
+        for (&name, f) in &p.funs {
+            // f.body.print_image(name)?;
             fun_flow.insert(name, FunFlow::default());
         }
 

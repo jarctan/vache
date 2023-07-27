@@ -18,7 +18,7 @@ use crate::utils::Set;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InvalidationReason<'ctx> {
     /// Borrow on a variable that goes out of scope.
-    OutOfScope(Loc<'ctx>),
+    OutOfScope(Loc<'ctx>, Span),
     /// Borrow still live when borrowed variable is mutated.
     MutationWithLiveBorrow {
         /// Span of the mutation.
@@ -29,9 +29,9 @@ impl<'ctx> InvalidationReason<'ctx> {
     /// Turns the invalidation reason into a compiler diagnostic.
     pub(crate) fn to_diagnostic(&self, loan: Loan<'ctx>) -> Diagnostic<()> {
         match self {
-            InvalidationReason::OutOfScope(loc) => Diagnostic::warning()
+            InvalidationReason::OutOfScope(loc, span) => Diagnostic::warning()
                 .with_message("invalidated borrow")
-                .with_labels(vec![loan.span.as_label()])
+                .with_labels(vec![loan.span.as_label().with_message("borrow here"), span.as_secondary_label().with_message(format!("but {loc:?} goes out of scope here"))])
                 .with_notes(vec![format!(
                     "reason: borrow is still live when the value of the {loc:?} goes out of scope"
                 )]),

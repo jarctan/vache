@@ -1,12 +1,12 @@
 fn main() {
     var n = 12;
     var res = n + n;
-    debug(res, n);
+    debug(n, res);
 }
 ################################
 24 12
 ################################
-3:15:3:16:Cloned
-3:19:3:20:Cloned
-4:11:4:14:Moved
-4:16:4:17:Moved
+3:15:3:16:Borrowed
+3:19:3:20:Borrowed
+4:11:4:12:Borrowed
+4:14:4:17:Moved
