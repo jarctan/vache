@@ -641,12 +641,19 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
             // Otherwise, we'll try to find a function call
             let fun = if let Some(fun) = self.fun_env.get(root) {
                 fun
-            } else if let Some(trayt) = self.trait_env.get(root) {
-             if let Some(method) = path.next() && let Some(method) = trayt.methods.get(method) {
+            } else if let Some(trayt) = self.trait_env.get(root) && let Some(method) = path.next() {
+             if let Some(method) = trayt.methods.get(method) {
                 // Function call in a trait
                 method
              } else {
-                panic!()
+                self.ctx.emit(
+                    Diagnostic::error()
+                        .with_code(NOT_CALLABLE_ERROR)
+                        .with_message(
+                            format!("no method `{}` in trait `{}`", method, trayt.name))
+                        .with_labels(vec![namespaced.span.as_label()])
+                );
+                return Expr::hole(namespaced.span);
              }
             } else {
                 self.ctx.emit(
