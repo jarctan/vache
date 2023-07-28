@@ -1,5 +1,7 @@
 //! Defining [`Branch`]es, which are discriminants that orient the control flow.
 
+use std::fmt;
+
 /// Branch/discriminant.
 ///
 /// A branch is label that indicates the conditions to follow that path/jump to
@@ -23,4 +25,17 @@ pub enum Branch<'ctx> {
     /// Default, always branch.
     #[default]
     DefaultB,
+}
+
+impl<'ctx> fmt::Display for Branch<'ctx> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Branch::BoolB(true) => write!(f, "true"),
+            Branch::BoolB(false) => write!(f, "false"),
+            Branch::UnitB => write!(f, "()"),
+            Branch::IntB(i) => write!(f, "{}", i),
+            Branch::StrB(s) => write!(f, "{}", s),
+            Branch::DefaultB => write!(f, "_"),
+        }
+    }
 }

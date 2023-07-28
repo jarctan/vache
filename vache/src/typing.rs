@@ -574,8 +574,8 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
         let mut path = namespaced.path();
         let root = path.next().unwrap(); // Namespaced necessarily starts with something
 
-        if let Some(enun) = self.enum_env.get(&root) && let Some(variant) = path.next()
-        && let Some(params) = enun.variants.get(variant) && path.next().is_none() {
+        if let Some(enun) = self.enum_env.get(&root) && let Some(variant) = path.next() {
+            if let Some(params) = enun.variants.get(variant) && path.next().is_none() {
             // If we have a enumeration variant
             if args.len() != params.len() {
                 self.ctx.emit(
@@ -638,6 +638,17 @@ impl<'t, 'ctx> Typer<'t, 'ctx> {
 
             Expr::new(VariantE { enun: root, variant, args: new_args }, EnumT(enun.name), self.current_stratum(), span)
         } else {
+            self.ctx.emit(
+                Diagnostic::error()
+                    .with_code(VARIANT_NOT_FOUND_ERROR)
+                    .with_message(
+                        format!("no variant `{}` in enumeration `{}`", variant, enun.name))
+                    .with_labels(vec![namespaced.span.as_label()])
+                    .with_labels(vec![enun.span.as_secondary_label().with_message("enumeration is defined here")]),
+            );
+            return Expr::hole(namespaced.span);
+        }
+     } else {
             // Otherwise, we'll try to find a function call
             let fun = if let Some(fun) = self.fun_env.get(root) {
                 fun

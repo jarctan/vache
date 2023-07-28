@@ -405,6 +405,13 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                         .expect("Runtime error: array index is too big");
                     Some(elems[elem])
                 }
+                // For variants, it is the index in the argument list, starting from 1
+                VariantV { args, .. } => {
+                    let elem = field
+                        .parse::<usize>()
+                        .expect("Runtime error: array index is too big");
+                    Some(args[elem - 1])
+                }
                 _ => panic!(),
             },
             IndexP(array, index) => match (self.get_ptr_value(array), self.get_ptr_value(index)) {
@@ -697,13 +704,16 @@ impl<'a, 'mir, 'ctx> Interpreter<'a, 'mir, 'ctx> {
                 args: _,
                 destination: None,
             } => todo!(),
-            InstrKind::Branch(cond) => {
-                if self.get_ptr_value(cond).truth() {
-                    BoolB(true)
-                } else {
-                    BoolB(false)
-                }
-            }
+            InstrKind::Branch(cond) => match self.get_ptr_value(cond) {
+                BoolV(true) => BoolB(true),
+                BoolV(false) => BoolB(false),
+                VariantV {
+                    enun: _,
+                    variant,
+                    args: _,
+                } => StrB(variant),
+                _ => panic!("runtime error: condition should be a boolean"),
+            },
             // Do nothing: it was a marker instruction for the liveness analysis.
             InstrKind::PhantomUse(_) => DefaultB,
         };

@@ -69,7 +69,7 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
     ) -> CfgLabel {
         let from = self.cfg.add_node(instr);
         for (b, to) in branches {
-            self.cfg.add_edge(from, to, b, ());
+            self.cfg.add_edge(from, to, b);
         }
         from
     }
@@ -86,7 +86,7 @@ impl<'mir, 'ctx> MIRer<'mir, 'ctx> {
     ) {
         self.cfg[&label] = instr;
         for (b, to) in branches {
-            self.cfg.add_edge(label, to, b, ());
+            self.cfg.add_edge(label, to, b);
         }
     }
 

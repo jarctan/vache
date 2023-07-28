@@ -603,13 +603,16 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             MatchE(box matched, branches) => {
                 let matched = self.visit_expr(matched, Wrapper::Cow, f_ret_struct);
                 let branches = branches.iter().map(|(pattern, branch)| {
-                    let pattern = self.visit_pattern(pattern);
+                    let (pattern, intros) = self.visit_pattern(pattern);
                     let branch = self.visit_expr(branch, wrapper, f_ret_struct);
-                    quote!(| #pattern => #branch)
+                    quote!(| #pattern => {
+                        #intros
+                        #branch
+                    })
                 });
 
                 quote! {
-                    match &*#matched {
+                    match &**#matched {
                         #(#branches)*
                         _ => ::anyhow::bail!("Matching failed"),
                     }
@@ -642,20 +645,26 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
     }
 
     /// Compiles a pattern.
+    ///
+    /// Returns the compiled pattern and the necessary introductions in the
+    /// branch.
+    ///
+    /// These introductions are a workaround so that the items of a matched
+    /// elements be `Cow` and not `&Cow` (and mutable Cow in particular).
     #[allow(clippy::only_used_in_recursion)]
-    fn visit_pattern(&mut self, pat: &Pat<'ctx>) -> TokenStream {
+    fn visit_pattern(&mut self, pat: &Pat<'ctx>) -> (TokenStream, TokenStream) {
         match &pat.kind {
-            BoolM(b) => quote!(#b),
+            BoolM(b) => (quote!(#b), quote!()),
             IntegerM(i) => {
                 let i = i
                     .to_u128()
                     .expect("Integer {i} is too big to be represented in source code");
-                quote!(#i)
+                (quote!(#i), quote!())
             }
-            StringM(s) => quote!(#s),
+            StringM(s) => (quote!(#s), quote!()),
             IdentM(i) => {
                 let i = format_ident!("{}", i.name().as_str());
-                quote!(#i)
+                (quote!(#i), quote!(let mut #i = Cow::clone(&#i);))
             }
             VariantM {
                 enun,
@@ -664,8 +673,9 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
             } => {
                 let enun = format_ident!("{enun}");
                 let variant = format_ident!("{variant}");
-                let args = args.iter().map(|arg| self.visit_pattern(arg));
-                quote!(#enun::#variant(#(#args)*))
+                let (args, intros): (Vec<_>, Vec<_>) =
+                    args.iter().map(|arg| self.visit_pattern(arg)).unzip();
+                (quote!(#enun::#variant(#(#args)*)), quote!(#(#intros)*))
             }
         }
     }

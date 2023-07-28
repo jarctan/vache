@@ -51,5 +51,7 @@ pub const SAME_SCOPE_SWAP_ERROR: &str = "E0023";
 pub const RESERVED_IDENT: &str = "E0024";
 /// Error for double mutable use of the same location.
 pub const DOUBLE_MUT_USE: &str = "E0025";
+/// Error for variant not found.
+pub const VARIANT_NOT_FOUND_ERROR: &str = "E0026";
 /// Temporary: empty match error.
 pub const EMPTY_MATCH_ERROR: &str = "E0101";

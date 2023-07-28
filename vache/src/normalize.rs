@@ -454,7 +454,7 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 Reference::new_moved(to_ptr)
             }
             tast::ExprKind::IfE(box cond, box iftrue, box iffalse) => {
-                // The switch variable
+                // The condition
                 let cond = self.visit_expr(stmts, cond, None, Some(Mode::SBorrowed), ret_ptr);
 
                 // Destination
@@ -474,36 +474,38 @@ impl<'mir, 'ctx> Normalizer<'mir, 'ctx> {
                 debug_assert_eq!(iftrue_ptr, iffalse_ptr, "both branches should have the same return pointer");
                 iftrue_ptr
             }
-            tast::ExprKind::MatchE(box matched, _branches) => {
+            tast::ExprKind::MatchE(box matched, branches) => {
                 match matched.ty {
                     Ty::UnitT => todo!(),
                     Ty::BoolT => todo!(),
                     Ty::IntT => todo!(),
                     Ty::StrT => todo!(),
                     Ty::EnumT(_) => {
-                        /*// The switch variable
-                        let matched = self.visit_expr(stmts, matched, Some(Mode::SBorrowed), ret_ptr);
-                        let dest_def = self.fresh_vardef(e.ty, e.span);
-                        let destination = Pointer::new(self.arena, self.arena.alloc(dest_def.name().into()), e.span);
+                        // The matched variable
+                        let matched = self.visit_expr(stmts, matched, None, Some(Mode::SBorrowed), ret_ptr);
+                        // Destination
+                        let to = to.unwrap_or_else(|| {
+                            let vardef = self.fresh_vardef(e.ty, e.span);
+                            let ptr = Pointer::new(self.arena, self.arena.alloc(vardef.name().into()), e.span);
+                            LhsRef::declare(ptr)
+                        });
+
+                        let final_ptr = Reference::new_moved(to.as_ptr());
 
                         // Visit the branches, compute the discriminant
                         let branches: HashMap<Branch, _> = branches.iter_mut().map(|(pattern, expr)| {
                             let mut branch_stmts = vec![];
                             self.push_scope();
                             self.introduce_pat_vars(pattern, matched.as_ptr());
-                            self.visit_expr(&mut branch_stmts,expr,  Some(Mode::Moved),ret_ptr);
+                            self.visit_expr(&mut branch_stmts,expr,  Some(to.clone()), Some(Mode::Moved),ret_ptr);
                             self.pop_scope();
                             (pattern.discriminant(), branch_stmts)
                         }).collect();
 
-                        // Destination
-                        stmts.push(Stmt::new(DeclareS(dest_def), e.span));
-
-                        // If condition
+                        // Match
                         stmts.push(Stmt::new(MatchS(matched, branches), e.span));
 
-                        Reference::new_moved(destination)*/
-                        todo!()
+                        final_ptr
                     },
                     Ty::TupleT(_) => todo!(),
                     _ => unreachable!()

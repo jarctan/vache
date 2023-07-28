@@ -27,7 +27,7 @@ type LoanFlow<'ctx> = Cfg<'ctx, Flow<Ledger<'ctx>>>;
 /// CFG.
 pub fn var_liveness<'ctx>(cfg: &CfgI<'_, 'ctx>, entry_l: CfgLabel) -> VarFlow<'ctx> {
     // Bootstrap with empty environments.
-    let mut var_flow: VarFlow = cfg.map_ref(|_, _| Flow::default(), |_| ());
+    let mut var_flow: VarFlow = cfg.map_ref(|_, _| Flow::default());
 
     // Compute the fixpoint, iteratively.
     let mut updated = true;
@@ -86,10 +86,9 @@ fn loan_liveness<'ctx>(
     var_flow: &VarFlow<'ctx>,
     fun_flow: &HashMap<&'ctx str, FunFlow>,
 ) -> LoanFlow<'ctx> {
-    let out_of_scope: Cfg<LocTree<()>> =
-        var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs, |_| ());
+    let out_of_scope: Cfg<LocTree<()>> = var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs);
 
-    let mut loan_flow: LoanFlow = f.body.map_ref(|_, _| Flow::default(), |_| ());
+    let mut loan_flow: LoanFlow = f.body.map_ref(|_, _| Flow::default());
 
     // Compute the fixpoint, iteratively.
     let mut updated = true;
@@ -442,17 +441,14 @@ mod tests {
         let mut y_mode = default();
 
         // CFG
-        let l = cfg.add_block(
-            [
-                instr(InstrKind::Assign(y_ref, RValue::Integer(&forty_two)), stm),
-                instr(
-                    InstrKind::Assign(x_ref, RValue::Place(Reference::new(y_ptr, &mut y_mode))),
-                    stm,
-                ),
-                instr(InstrKind::Noop, stm),
-            ],
-            (),
-        );
+        let l = cfg.add_block([
+            instr(InstrKind::Assign(y_ref, RValue::Integer(&forty_two)), stm),
+            instr(
+                InstrKind::Assign(x_ref, RValue::Place(Reference::new(y_ptr, &mut y_mode))),
+                stm,
+            ),
+            instr(InstrKind::Noop, stm),
+        ]);
 
         let analysis = var_liveness(&cfg, l[0]);
 

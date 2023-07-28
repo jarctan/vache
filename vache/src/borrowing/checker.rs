@@ -96,7 +96,7 @@ impl BorrowChecker {
         // Bootstrap function flow with one for each function.
         // The flow is empty for all functions except the builtins.
         let mut fun_flow = builtin_flows();
-        for (&name, f) in &p.funs {
+        for name in p.funs.keys() {
             // f.body.print_image(name)?;
             fun_flow.insert(name, FunFlow::default());
         }

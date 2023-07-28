@@ -1,0 +1,26 @@
+enum FruitCnt {
+    Apple(int),
+    Banana(int),
+    Pear(int),
+    Orange(int),
+}
+
+fn main() {
+    var cnt: FruitCnt = FruitCnt::Apple(15);
+    var daily_intake = match cnt {
+        FruitCnt::Apple(x) => {
+            x * 5
+        }
+        | FruitCnt::Banana(x) => {
+            x * 2
+        }
+        | FruitCnt::Pear(x) => {
+            x * 3
+        }
+    };
+    debug(daily_intake);
+}
+################################
+75
+################################
+12:13:12:14:Moved

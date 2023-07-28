@@ -87,17 +87,6 @@ impl fmt::Debug for Value<'_> {
     }
 }
 
-impl Value<'_> {
-    /// Truthiness of the value.
-    pub fn truth(&self) -> bool {
-        if let BoolV(b) = self {
-            *b
-        } else {
-            panic!("Runtime error: Requesting the truth value of something which is not a boolean")
-        }
-    }
-}
-
 /// A reference to a value.
 #[derive(Clone, Copy)]
 pub struct ValueRef {
