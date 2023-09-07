@@ -17,7 +17,7 @@ lazy_static! {
     /// Terminal configuration.
     static ref TERM_CONFIG: term::Config = term::Config::default();
     /// Standard stream handle.
-    static ref STD_STREAM: StandardStream = StandardStream::stderr(ColorChoice::Always);
+    static ref STD_STREAM: StandardStream = StandardStream::stderr(ColorChoice::Auto);
     /// Dummy file descriptor for internal compiler errors.
     static ref DUMMY_FILE_FOR_INTERNAL_ERRORS: SimpleFile<&'static str, &'static str> =
         SimpleFile::new("internal error", "");
