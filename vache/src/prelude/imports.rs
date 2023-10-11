@@ -8,10 +8,9 @@ pub fn imports() -> TokenStream {
         use ::std::borrow::Borrow as __Borrow;
         use ::std::borrow::BorrowMut as __BorrowMut;
         use ::std::mem::MaybeUninit as __MaybeUninit;
-        use ::num_traits::ToPrimitive as __ToPrimitive;
         use ::anyhow::Context as __AnyhowContext;
-        use ::num_traits::Zero as __Zero;
-        use ::num_traits::One as __One;
+        use ::malachite::num::basic::traits::Zero as __Zero;
+        use ::malachite::num::basic::traits::One as __One;
         use ::rand::Rng as __RandRng;
         use ::rand::distributions::uniform::UniformSampler as __RandUniformSampler;
     )

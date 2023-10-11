@@ -310,13 +310,19 @@ mod steps {
         name = \"{binary_name}\"
         version = \"1.0.0\"
         edition = \"2021\"
+
+        [profile.release]
+        lto = true
         
         [dependencies]
         rand = \"0.8.5\"
-        num-bigint = {{ version = \"0.4.3\", features = [\"rand\"] }}
-        num-traits = \"0.2.15\"
         thiserror = \"1.0.40\"
         anyhow = \"1.0.71\"
+
+        [dependencies.malachite]
+        version = \"0.3.0\"
+        default-features = false
+        features = [\"naturals_and_integers\"]
         
         [workspace]"
             )

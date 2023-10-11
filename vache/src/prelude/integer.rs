@@ -9,44 +9,37 @@ use proc_macro2::TokenStream;
 pub fn integer() -> TokenStream {
     quote!(
         #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-        pub struct __Integer(::num_bigint::BigInt);
-
-        impl ::num_traits::ToPrimitive for __Integer {
-            #[inline(always)]
-            fn to_i64(&self) -> Option<i64> {
-                self.0.to_i64()
-            }
-
-            #[inline(always)]
-            fn to_u64(&self) -> Option<u64> {
-                self.0.to_u64()
-            }
-        }
+        pub struct __Integer(::malachite::Integer);
 
         impl __Integer {
             #[inline(always)]
-            fn zero() -> Self {
-                Self(__Zero::zero())
+            const fn zero() -> Self {
+                Self(__Zero::ZERO)
             }
 
             #[inline(always)]
-            fn one() -> Self {
-                Self(__One::one())
+            const fn one() -> Self {
+                Self(__One::ONE)
+            }
+
+            #[inline(always)]
+            fn to_usize(&self) -> Option<usize> {
+                (&self.0).try_into().ok()
             }
         }
 
         impl ::std::iter::Step for __Integer {
             #[inline(always)]
             fn steps_between(start: &Self, end: &Self) -> Option<usize> {
-                start.0.checked_sub(&end.0)?.try_into().ok()
+                usize::try_from(&(&start.0 - &end.0)).ok()
             }
             #[inline(always)]
             fn forward_checked(start: Self, count: usize) -> Option<Self> {
-                Some(Self(start.0.checked_add(&count.into())?))
+                Some(Self(start.0 + ::malachite::Integer::from(count)))
             }
             #[inline(always)]
             fn backward_checked(start: Self, count: usize) -> Option<Self> {
-                Some(Self(start.0.checked_sub(&count.into())?))
+                Some(Self(start.0 - ::malachite::Integer::from(count)))
             }
         }
 
@@ -198,14 +191,14 @@ pub fn integer() -> TokenStream {
         impl ::std::fmt::Display for __Integer {
             #[inline(always)]
             fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                <::num_bigint::BigInt as ::std::fmt::Display>::fmt(&self.0, f)
+                <::malachite::Integer as ::std::fmt::Display>::fmt(&self.0, f)
             }
         }
 
         impl ::std::fmt::Debug for __Integer {
             #[inline(always)]
             fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                <::num_bigint::BigInt as ::std::fmt::Debug>::fmt(&self.0, f)
+                <::malachite::Integer as ::std::fmt::Debug>::fmt(&self.0, f)
             }
         }
 
@@ -222,10 +215,14 @@ pub fn integer() -> TokenStream {
             start: Cow<'b, __Integer>,
             end: Cow<'b, __Integer>,
         ) -> __Result<__Ret<Cow<'b, __Integer>, __noRet>> {
-            let mut rng = ::rand::thread_rng();
-            let range = ::num_bigint::UniformBigInt::new(&start.0, &end.0);
+            let seed = rand::random();
+            let res = ::malachite::integer::random::uniform_random_integer_range(
+                ::malachite::random::Seed::from_bytes(seed),
+                start.into_owned().0,
+                end.into_owned().0,
+            ).next().context("Could not generate any random integer")?;
 
-            __Ret::ok(Cow::Owned(__Integer(range.sample(&mut rng))), __noRet {})
+            __Ret::ok(Cow::Owned(__Integer(res)), __noRet {})
         }
     )
 }

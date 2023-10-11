@@ -149,7 +149,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
                 let array = self.visit_expr(array, Wrapper::Cow, f_ret_struct);
                 let index = self.visit_expr(index, Wrapper::Cow, f_ret_struct);
-                let index = quote!((#index).to_usize().unwrap());
+                let index = quote!((#index).to_usize().context(#codespan)?);
                 match place.mode {
                     LhsMode::Assigning => quote!(*(#array).get_mut(#index).context(#codespan)?),
                     LhsMode::Declaring => unreachable!(),
@@ -215,7 +215,7 @@ impl<'c, 'ctx: 'c> Compiler<'c, 'ctx> {
                 let codespan = format!("Out of bounds indexing at {filename}:{line}:{col}");
                 let array = self.visit_expr(array, Wrapper::Cow, f_ret_struct);
                 let index = self.visit_expr(index, Wrapper::Cow, f_ret_struct);
-                let index = quote!((#index).to_usize().unwrap());
+                let index = quote!((#index).to_usize().context(#codespan)?);
                 match place.mode {
                     Mode::Borrowed => match wrapper {
                         Wrapper::Var => {
