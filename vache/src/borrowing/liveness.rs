@@ -85,6 +85,7 @@ fn loan_liveness<'ctx>(
     f: &Fun<'_, 'ctx>,
     var_flow: &VarFlow<'ctx>,
     fun_flow: &HashMap<&'ctx str, FunFlow>,
+    ctx: &Context<'ctx>,
 ) -> LoanFlow<'ctx> {
     let out_of_scope: Cfg<LocTree<()>> = var_flow.map_ref(|_, flow| flow.ins.clone() - &flow.outs);
 
@@ -133,7 +134,7 @@ fn loan_liveness<'ctx>(
                     }
                 }
                 _ => {
-                    let flow = instr.flow(fun_flow);
+                    let flow = instr.flow(ctx.arena, fun_flow);
 
                     for (assigned, refs) in flow {
                         let (loans, flushed) = outs.borrow(&refs, label);
@@ -214,7 +215,7 @@ pub fn liveness<'ctx>(
         // Note: `loan_flow` is mutable because we flush its invalidations after
         let mut loan_flow = loop {
             // Now, compute loan analysis
-            let loan_flow = loan_liveness(f, var_flow, fun_flow);
+            let loan_flow = loan_liveness(f, var_flow, fun_flow, ctx);
 
             let mut updated = false;
             // Check last variable use and replace with a move

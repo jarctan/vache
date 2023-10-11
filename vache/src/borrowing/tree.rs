@@ -96,10 +96,15 @@ impl<'ctx, T> LocTree<'ctx, T> {
     pub fn get_node<'a>(&'a self, loc: impl Into<Loc<'ctx>>) -> Option<&'a LocTreeNode<'ctx, T>> {
         match loc.into() {
             VarL(ref var) => self.0.get(var.as_str()),
-            FieldL(strukt, field) => match self.get_node(*strukt)?.kind {
-                AtomL(_) => None,
-                CompoundL(ref fields) => fields.get(field),
-            },
+            FieldL(strukt, field) => {
+                let node = self.get_node(*strukt)?;
+                match node.kind {
+                    AtomL(_) => Some(node), /* Returning the node for the whole location instead
+                                              * of just the field is ok, */
+                    // since we don't mutate it
+                    CompoundL(ref fields) => fields.get(field),
+                }
+            }
         }
     }
 
