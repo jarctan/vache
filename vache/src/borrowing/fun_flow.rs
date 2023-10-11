@@ -8,7 +8,10 @@ use std::default::default;
 
 use itertools::Itertools;
 
-use crate::mir::{FunSig, Instr, InstrKind, Pointer, Reference};
+use crate::{
+    mir::{FunSig, Instr, InstrKind, Place, Pointer, RValue, Reference},
+    Arena,
+};
 
 /// Argument number.
 type ArgNb = usize;
@@ -115,10 +118,25 @@ impl<'mir, 'ctx> Instr<'mir, 'ctx> {
     /// to references these pointers will borrow from in that instruction.
     pub fn flow<'a>(
         &'a self,
+        arena: &'ctx Arena<'ctx>,
         fun_flow: &'a HashMap<&'ctx str, FunFlow>,
     ) -> HashMap<Pointer<'ctx>, Vec<&'a Reference<'mir, 'ctx>>> {
         match &self.kind {
             InstrKind::Noop => HashMap::new(),
+            // Special case for a structure, for which the flow can be more precise
+            InstrKind::Assign(lhs, RValue::Struct { name: _, fields }) => fields
+                .iter()
+                .map(|(field_name, field)| {
+                    (
+                        Pointer::new(
+                            arena,
+                            arena.alloc(Place::FieldP(lhs.as_ptr(), field_name)),
+                            lhs.span,
+                        ),
+                        vec![field],
+                    )
+                })
+                .collect(),
             InstrKind::Assign(lhs, rhs) => [(lhs.as_ptr(), rhs.references().collect_vec())]
                 .into_iter()
                 .collect(),
